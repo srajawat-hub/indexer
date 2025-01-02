@@ -17,8 +17,8 @@ use std::{str::FromStr, thread};
 use tokio::{runtime::Runtime, task::futures};
 pub mod solidity_structs;
 
-use solidity_structs::intent_lib_v2::IntentLibV2;
 use solidity_structs::token::Token;
+use solidity_structs::{intent_lib_v2::IntentLibV2, vault::IntentLib};
 use solidity_structs::{
     intent_processor::{
         IntentProcessorV2::{self},
@@ -39,10 +39,10 @@ use tokio::signal;
 
 #[tokio::main]
 async fn main() {
-    let rpc_urls = vec!["ws://127.0.0.1:8545", "ws://127.0.0.1:8545"];
+    let rpc_urls = vec!["ws://127.0.0.1:8545", "ws://127.0.0.1:8546"]; // arb vault
     let contract_addresses = vec![
-        "0x750b8C791080d89e2E9d0620C4CB4982CAEf9217",
-        "FAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB"
+        "0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB",
+        "0x22c423540918032B206Df38d86AFCB9B22eF1c0f",
     ];
 
     let mut handles = vec![];
@@ -73,7 +73,6 @@ async fn main() {
     // Wait for Ctrl+C signal to exit
     signal::ctrl_c().await.unwrap();
     println!("Shutting down...");
-
 }
 
 // Function to listen to events from a specific RPC and contract
@@ -94,6 +93,28 @@ async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::r
                     log.log_decode().unwrap().inner.data;
 
                 println!("Intent Solution submitted from {solver} for intentId {intentId}");
+            }
+            Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
+                let Vault::ReceivedMessageOnVault {
+                    origin,
+                    sender,
+                    message,
+                    provider,
+                } = log.log_decode().unwrap().inner.data;
+                // have to get intent_id here. process the message
+                println!("Received Message on Vault from id {origin} by {sender}, message = {message}, using provider = {provider}");
+            }
+            Some(&MockLN::OrderCreated::SIGNATURE_HASH) => {
+                let MockLN::OrderCreated {
+                    orderId,
+                    creator,
+                    tokenIn,
+                    tokenOut,
+                    amountIn,
+                    amountOut
+                } = log.log_decode().unwrap().inner.data;
+                // orderId is the intentId
+                println!("Order created on MockLN");
             }
             _ => {
                 println!("didn't match anything, {:?}", log);
