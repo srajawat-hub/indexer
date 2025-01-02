@@ -17,6 +17,7 @@ use tokio::runtime::Runtime;
 pub mod solidity_structs;
 
 use solidity_structs::token::Token;
+use solidity_structs::intent_lib_v2::IntentLibV2;
 use solidity_structs::{
     intent_processor::{
         IntentProcessorV2::{self},
@@ -73,21 +74,18 @@ async fn main() -> Result<(), Error> {
 async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log>) {
     while let Some(log) = stream.next().await {
         // Match on topic 0, the hash of the signature of the event.
-        // testing ws connection with token contract
         match log.topic0() {
-            Some(&Token::Approval::SIGNATURE_HASH) => {
-                let Token::Approval {
-                    owner,
-                    spender,
-                    value,
+            Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
+                let IntentLibV2::IntentSubmitted {
+                    intentId,
+                    owner
                 } = log.log_decode().unwrap().inner.data;
-                println!("Approval from {owner} to {spender} of value {value}");
+
+                println!("Intent submitted from {owner} with intentId {intentId}");
             }
-            Some(&Token::Transfer::SIGNATURE_HASH) => {
-                let Token::Transfer { from, to, value } = log.log_decode().unwrap().inner.data;
-                println!("Transfer from {from} to {to} of value {value}");
-            }
-            _ => (),
+            _ => {
+                println!("didn't match anything, {:?}", log);
+            },
         }
     }
 }
