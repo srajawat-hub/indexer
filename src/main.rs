@@ -80,8 +80,18 @@ async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::r
                     intentId,
                     owner
                 } = log.log_decode().unwrap().inner.data;
-
+                let transaction_hash = log.transaction_hash.unwrap();
+                let block_timestamp = log.block_timestamp.unwrap();
+                let block_number = log.block_number.unwrap();
                 println!("Intent submitted from {owner} with intentId {intentId}");
+            }
+            Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
+                let IntentLibV2::SolutionSubmitted {
+                    intentId,
+                    solver
+                } = log.log_decode().unwrap().inner.data;
+
+                println!("Intent Solution submitted from {solver} for intentId {intentId}");
             }
             _ => {
                 println!("didn't match anything, {:?}", log);
