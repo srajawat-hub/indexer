@@ -9,6 +9,7 @@ use alloy::{
     sol_types::SolEvent,
 };
 use futures_util::stream::StreamExt;
+use log::info;
 use std::{
     fmt::Error,
     sync::{Arc, Mutex},
@@ -39,6 +40,18 @@ use tokio::signal;
 
 #[tokio::main]
 async fn main() {
+
+    env_logger::builder().format(|buf, record| {
+        use std::io::Write;
+        writeln!(
+            buf,
+            "[{} - Thread: {:?}] {}",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            std::thread::current().id(),
+            record.args()
+        )
+    }).init();
+
     let rpc_urls = vec![
         "ws://192.241.245.190:18749", // L3
         "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", // arb
@@ -54,8 +67,9 @@ async fn main() {
     ];
 
     let mut handles = vec![];
+    let mut thread_count=0;
     for (rpc_url, contract_address) in rpc_urls.iter().zip(contract_addresses.iter()) {
-        // listen_to_events(stream).await;
+        // info!("Listening on {contract_address}");
         let rpc_url = rpc_url.to_string(); // Clone into an owned String
         let contract_address = contract_address.to_string(); // Clone into an owned String
 
@@ -70,6 +84,9 @@ async fn main() {
             let sub = provider.subscribe_logs(&filter).await.unwrap();
             let mut stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log> =
                 sub.into_stream();
+
+            let task_id = tokio::task::id();
+            info!("Starting {task_id}");
             listen_to_events(stream).await;
         });
 
@@ -77,6 +94,7 @@ async fn main() {
     }
 
     println!("All tasks started. Press Ctrl+C to exit.");
+    println!("total threads {:?}", handles.len());
 
     // Wait for Ctrl+C signal to exit
     signal::ctrl_c().await.unwrap();
@@ -91,21 +109,21 @@ async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::r
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
-                println!("IntentSubmitted log - {:?}", log);
+                println!("\nIntentSubmitted log - {:?}", log);
                 println!("Intent submitted from {owner} with intentId {intentId}");
                 let transaction_hash = log.transaction_hash.unwrap();
-                let block_timestamp = log.block_timestamp.unwrap();
+                // let block_timestamp = log.block_timestamp.unwrap();
                 let block_number = log.block_number.unwrap();
             }
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
-                println!("SolutionSubmitted log - {:?}", log);
+                println!("\nSolutionSubmitted log - {:?}", log);
                 let IntentLibV2::SolutionSubmitted { intentId, solver } =
                     log.log_decode().unwrap().inner.data;
 
                 println!("Intent Solution submitted from {solver} for intentId {intentId}");
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {
-                println!("AcknowledgementReceived log - {:?}", log);
+                println!("\nAcknowledgementReceived log - {:?}", log);
                 let InteropLibV2::AcknowledgementReceived {
                     intentId,
                     sender,
@@ -121,7 +139,7 @@ async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::r
                     message,
                     provider,
                 } = log.log_decode().unwrap().inner.data;
-                println!("ReceivedMessageOnVault log - {:?}", log);
+                println!("\nReceivedMessageOnVault log - {:?}", log);
                 // have to get intent_id here. process the message
                 println!("Received Message on Vault from id {origin} by {sender}, message = {message}, using provider = {provider}");
             }
@@ -134,7 +152,7 @@ async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::r
                     amountIn,
                     amountOut
                 } = log.log_decode().unwrap().inner.data;
-                println!("OrderCreated log - {:?}", log);
+                println!("\nOrderCreated log - {:?}", log);
                 // orderId is the intentId
                 println!("Order created on MockLN");
             }
@@ -145,12 +163,12 @@ async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::r
                     provider,
                     message
                 } = log.log_decode().unwrap().inner.data;
-                println!("MessageDispatchedFromVault log - {:?}", log);
+                println!("\nMessageDispatchedFromVault log - {:?}", log);
                 // have to get intentId here.
                 println!("Message dispatched from vault");
             }
             _ => {
-                println!("didn't match anything, {:?}", log);
+                println!("\ndidn't match anything, {:?}", log);
             }
         }
     }
