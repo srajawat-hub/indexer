@@ -40,7 +40,7 @@ impl BlockchainIndexer for EvmIndexer {
 
         let task_id = tokio::task::id();
         info!("Starting {task_id}");
-        event_processor::listen_to_events(stream).await;
+        event_processor::process_evm_events(stream).await;
         Ok(())
     }
 }

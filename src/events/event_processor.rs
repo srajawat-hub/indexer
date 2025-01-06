@@ -11,7 +11,7 @@ use crate::solidity_structs::{
 };
 
 // Function to listen to events from a specific RPC and contract
-pub async fn listen_to_events(mut stream: SubscriptionStream<Log>) {
+pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
     while let Some(log) = stream.next().await {
         // Match on topic 0, the hash of the signature of the event.
         match log.topic0() {
