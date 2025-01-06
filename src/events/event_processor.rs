@@ -1,7 +1,9 @@
+use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use alloy::rpc::types::Log;
 use futures_util::stream::StreamExt;
 
+use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2,
     intent_processor::IntentProcessorV2::{self},
@@ -26,9 +28,9 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
             }
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
                 println!("\nSolutionSubmitted log - {:?}", log);
-                let IntentLibV2::SolutionSubmitted { intentId, solver } =
+                let IntentLibV2::SolutionSubmitted { intentId, solver, solution } =
                     log.log_decode().unwrap().inner.data;
-
+                let solution_decoded = IntentTypesLib::SoliditySolution::abi_decode(solution, true);
                 println!("Intent Solution submitted from {solver} for intentId {intentId}");
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {

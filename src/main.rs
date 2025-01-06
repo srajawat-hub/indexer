@@ -5,6 +5,7 @@ pub mod solidity_structs;
 
 use tokio::signal;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
+use tokio_postgres::{NoTls, connect, };
 
 #[tokio::main]
 async fn main() {
@@ -19,6 +20,14 @@ async fn main() {
             record.args()
         )
     }).init();
+
+    // make a db connection
+    let (client, connection) = tokio_postgres::connect("host=localhost user=postgres password=postgres dbname=mydb", NoTls).await.unwrap();
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("DB Connection error {:?}", e);
+        }
+    });
 
     let indexers: Vec<Box<dyn BlockchainIndexer + Send +Sync>> = vec![
         Box::new(EvmIndexer::new(
