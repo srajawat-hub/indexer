@@ -39,6 +39,5 @@ Tracking (
     destination_domain
     gas_cost
     created_at
-    updated_at                                      -- when the stage of tracking updates
 )
 ```
