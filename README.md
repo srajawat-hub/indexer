@@ -27,6 +27,7 @@ order (
     timestamp TIMESTAMP NOT NULL
 );
 
+Tracking all transactions happening on IP, Vault, Mockln contract in an operation lifecycle (stake/transfer/swap)
 Tracking (
     id
     intent_id 
