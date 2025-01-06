@@ -3,23 +3,7 @@ mod indexers;
 mod events;
 pub mod solidity_structs;
 
-use alloy::{
-    hex::FromHex,
-    primitives::{address, Address},
-    providers::{Provider, ProviderBuilder, WsConnect},
-    rpc::types::{BlockNumberOrTag, Filter},
-    sol,
-    sol_types::SolEvent,
-};
-use futures_util::stream::StreamExt;
-use log::info;
-use std::{
-    fmt::Error,
-    sync::{Arc, Mutex},
-    str::FromStr, thread
-};
-use tokio::{runtime::Runtime, task::futures, signal};
-use async_trait::async_trait;
+use tokio::signal;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 
 #[tokio::main]
@@ -60,8 +44,6 @@ async fn main() {
     ];
 
     let mut handles = vec![];
-    let mut thread_count=0;
-
     for indexer in indexers {
         let handle = tokio::spawn(async move {
             if let Err(err) = indexer.listen_for_events().await {

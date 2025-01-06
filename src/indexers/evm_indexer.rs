@@ -1,12 +1,11 @@
 use super::BlockchainIndexer;
 use alloy::{
     hex::FromHex,
-    primitives::{address, Address},
+    primitives::Address,
     providers::{Provider, ProviderBuilder, WsConnect},
     rpc::types::{BlockNumberOrTag, Filter},
 };
 use async_trait::async_trait;
-use futures_util::stream::StreamExt;
 use log::info;
 use crate::events::event_processor;
 
@@ -35,7 +34,7 @@ impl BlockchainIndexer for EvmIndexer {
             .from_block(BlockNumberOrTag::Latest);
 
         let sub = provider.subscribe_logs(&filter).await.unwrap();
-        let mut stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log> =
+        let stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log> =
             sub.into_stream();
 
         let task_id = tokio::task::id();

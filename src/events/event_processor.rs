@@ -3,9 +3,9 @@ use alloy::rpc::types::Log;
 use futures_util::stream::StreamExt;
 
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, vault::IntentLib, intenterop_lib_v2::InteropLibV2,
-    intent_processor::{IntentProcessorV2::{self}, IntentTypesLib},
-    mocked_ln::{MockLN, IMockLN},
+    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2,
+    intent_processor::IntentProcessorV2::{self},
+    mocked_ln::MockLN,
     IntentPayloadStakeData,
     vault::Vault, SolidityAcknowledgementMetadata
 };
