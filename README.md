@@ -1,43 +1,76 @@
 ```
-intent_processor (
-    id SERIAL PRIMARY KEY,               -- Unique identifier for the event record
-    intent_id INT NOT NULL,              -- Common identifier for the transaction cycle
-    event_type VARCHAR(50) NOT NULL,     -- Event type (e.g., "IntentSubmitted", "SolutionSubmitted", "AcknowledgementReceived")
-    transaction_hash VARCHAR(255),       -- Transaction hash (can be from EVM or Solana, length adjusted)
-    origin_domain_id INT,                -- Optional field to link to the origin domain, if relevant
-    sender VARCHAR(255),                 -- The sender (address or identifier)
-    solver VARCHAR(255),                 -- For solution-submitted events
-    result BOOLEAN,                      -- For acknowledgement-received events, to store success/failure
-    error_message TEXT,                  -- Optional error message for failure scenarios
-    block_number INT,                    -- Block number where event was recorded
-    block_timestamp TIMESTAMP,           -- Timestamp of the event
-    UNIQUE (intent_id, event_type, block_number) -- Ensure unique combination per event type
+intent_submitted (
+    id BIGSERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL,
+    owner_address VARCHAR(66) NOT NULL,
+    transaction_hash VARCHAR(88) NOT NULL,
+    block_number BIGINT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
 );
-
-order (
+solution_submitted (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
-    creator_address VARCHAR(44) NOT NULL,
-    token_in VARCHAR(44) NOT NULL,
-    token_out VARCHAR(44) NOT NULL,
+    solver_address VARCHAR(44) NOT NULL,
+    solution TEXT NOT NULL,
+    transaction_hash VARCHAR(88) NOT NULL,
+    block_number BIGINT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
+);
+acknowledgement_received (
+    id BIGSERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    sender_address VARCHAR(44) NOT NULL,
+    result BOOLEAN NOT NULL,
+    error_message TEXT,
+    transaction_hash VARCHAR(88) NOT NULL,
+    block_number BIGINT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
+);
+received_message_on_vault (
+    id BIGSERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    origin_domain_id INTEGER NOT NULL,
+    sender_address VARCHAR(44) NOT NULL,
+    message TEXT NOT NULL,
+    provider INTEGER NOT NULL,
+    transaction_hash VARCHAR(88) NOT NULL,
+    block_number BIGINT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
+);
+order_created (
+    id BIGSERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    creator_address VARCHAR(66) NOT NULL,
+    token_in VARCHAR(66) NOT NULL,
+    token_out VARCHAR(66) NOT NULL,
     amount_in NUMERIC(38, 18) NOT NULL,
     amount_out NUMERIC(38, 18) NOT NULL,
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL
 );
-
-Tracking all transactions happening on IP, Vault, Mockln contract in an operation lifecycle (stake/transfer/swap)
-Tracking (
-    id
-    intent_id 
-    tx_hash
-    chain_id ( fk to chain table which has further information )
-    stage ( can be an ENUM )
-    interop_provider ( ENUM )
-    source_domain
-    destination_domain
-    gas_cost
-    created_at
-)
+message_dispatched_from_vault (
+    id BIGSERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    sender_address VARCHAR(66) NOT NULL,
+    destination_domain_id INTEGER NOT NULL,
+    provider INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    transaction_hash VARCHAR(88) NOT NULL,
+    block_number BIGINT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
+);
+intent_state (
+    id BIGSERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL,
+    version INTEGER NOT NULL,
+    transaction_hash VARCHAR(88) NOT NULL,
+    stage TEXT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
+);
 ```
+
+Index the raw events from each event on a separate table (see if any merges are possible)
+then create a separate state table with intent_id and txn hash. Track the state of intent_id with versions of progressions as more of the raw intents come in.
+
+update the schema for this flow
