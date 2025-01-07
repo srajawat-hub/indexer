@@ -1,5 +1,5 @@
 ```
-intent_submitted (
+intent (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL,
     owner_address VARCHAR(66) NOT NULL,
@@ -7,7 +7,7 @@ intent_submitted (
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL
 );
-solution_submitted (
+solution (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
     solver_address VARCHAR(44) NOT NULL,
@@ -16,7 +16,7 @@ solution_submitted (
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL
 );
-acknowledgement_received (
+acknowledgement (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
     sender_address VARCHAR(44) NOT NULL,
@@ -37,7 +37,7 @@ received_message_on_vault (
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL
 );
-order_created (
+order (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
     creator_address VARCHAR(66) NOT NULL,
