@@ -29,6 +29,7 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                 // let block_timestamp = log.block_timestamp.unwrap();
                 let block_number = log.block_number.unwrap();
             }
+            // might not need this event, because multiple solutions can be submitted for 1 intent, we only need the choosen one
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
                 info!("\nSolutionSubmitted log - {:?}", log);
                 let IntentLibV2::SolutionSubmitted { intentId, solver, .. } =
@@ -39,6 +40,11 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                 let solution_decoded = IntentTypesLib::SoliditySolution::abi_decode(solution_slice, true).unwrap();
                 debug!("Solution decoded {:?}", solution_decoded);
                 info!("Intent Solution submitted from {solver} for intentId {intentId}");
+            }
+            Some(&IntentLibV2::OrderCreated::SIGNATURE_HASH) => {
+                let IntentLibV2::OrderCreated {intentId, orderId, order} = log.log_decode().unwrap().inner.data;
+                info!("Received order for {intentId}, with order Id {orderId}");
+                debug!("order data {order}");
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {
                 debug!("\nAcknowledgementReceived log - {:?}", log);

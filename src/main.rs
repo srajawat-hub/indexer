@@ -8,6 +8,13 @@ use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use tokio_postgres::{NoTls, connect};
 use log::{debug, error, info, trace};
 
+fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send +Sync> {
+    Box::new(EvmIndexer::new(
+        url.to_string(),
+        address.to_string(),
+    ))
+}
+
 #[tokio::main]
 async fn main() {
 
@@ -31,26 +38,11 @@ async fn main() {
     });
 
     let indexers: Vec<Box<dyn BlockchainIndexer + Send +Sync>> = vec![
-        Box::new(EvmIndexer::new(
-            "ws://127.0.0.1:8545".to_string(),
-            "0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB".to_string(),
-        )),
-        Box::new(EvmIndexer::new(
-            "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
-            "0x22c423540918032B206Df38d86AFCB9B22eF1c0f".to_string(),
-        )),
-        Box::new(EvmIndexer::new(
-            "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
-            "0x42Ad426D1C9dA42648535DEE83D9fc73bAd9f274".to_string(),
-        )),
-        Box::new(EvmIndexer::new(
-            "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
-            "0x49E8FcC52698e78786ea1d929e1b3f1A7945Bccb".to_string(),
-        )),
-        Box::new(EvmIndexer::new(
-            "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
-            "0xB5F67202064848c1528AbdC9e9e49a776E08ecC3".to_string(),
-        ))
+        create_evm_indexer("ws://127.0.0.1:8545", "0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB"),
+        create_evm_indexer("wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0x22c423540918032B206Df38d86AFCB9B22eF1c0f"),
+        create_evm_indexer("wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0x49E8FcC52698e78786ea1d929e1b3f1A7945Bccb"),
+        create_evm_indexer("wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0x42Ad426D1C9dA42648535DEE83D9fc73bAd9f274"),
+        create_evm_indexer("wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0xB5F67202064848c1528AbdC9e9e49a776E08ecC3"),
     ];
 
     let mut handles = vec![];
