@@ -3,6 +3,7 @@ use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use alloy::rpc::types::Log;
 use futures_util::stream::StreamExt;
+use log::{debug, error, info};
 
 use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
@@ -22,32 +23,32 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
-                println!("\nIntentSubmitted log - {:?}", log);
-                println!("Intent submitted from {owner} with intentId {intentId}");
+                info!("\nIntentSubmitted log - {:?}", log);
+                info!("Intent submitted from {owner} with intentId {intentId}");
                 let transaction_hash = log.transaction_hash.unwrap();
                 // let block_timestamp = log.block_timestamp.unwrap();
                 let block_number = log.block_number.unwrap();
             }
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
-                println!("\nSolutionSubmitted log - {:?}", log);
+                info!("\nSolutionSubmitted log - {:?}", log);
                 let IntentLibV2::SolutionSubmitted { intentId, solver, .. } =
                     log.log_decode().unwrap().inner.data;
                 let solution_data = log.data().data.clone();
-                println!("solution log {:?}", solution_data);
+                debug!("solution log {:?}", solution_data);
                 let solution_slice = solution_data.as_ref();
                 let solution_decoded = IntentTypesLib::SoliditySolution::abi_decode(solution_slice, true).unwrap();
-                println!("Solution decoded {:?}", solution_decoded);
-                println!("Intent Solution submitted from {solver} for intentId {intentId}");
+                debug!("Solution decoded {:?}", solution_decoded);
+                info!("Intent Solution submitted from {solver} for intentId {intentId}");
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {
-                println!("\nAcknowledgementReceived log - {:?}", log);
+                debug!("\nAcknowledgementReceived log - {:?}", log);
                 let InteropLibV2::AcknowledgementReceived {
                     intentId,
                     sender,
                     result,
                     errorMessage
                 } = log.log_decode().unwrap().inner.data;
-                println!("AcknowledgementReceived for {intentId} from {sender} with result {result}");
+                info!("AcknowledgementReceived for {intentId} from {sender} with result {result}");
             }
             Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
                 let Vault::ReceivedMessageOnVault {
@@ -56,9 +57,9 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                     message,
                     provider,
                 } = log.log_decode().unwrap().inner.data;
-                println!("\nReceivedMessageOnVault log - {:?}", log);
+                debug!("\nReceivedMessageOnVault log - {:?}", log);
                 // have to get intent_id here. process the message
-                println!("Received Message on Vault from id {origin} by {sender}, message = {message}, using provider = {provider}");
+                info!("Received Message on Vault from id {origin} by {sender}, message = {message}, using provider = {provider}");
             }
             Some(&MockLN::OrderCreated::SIGNATURE_HASH) => {
                 let MockLN::OrderCreated {
@@ -69,9 +70,9 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                     amountIn,
                     amountOut
                 } = log.log_decode().unwrap().inner.data;
-                println!("\nOrderCreated log - {:?}", log);
+                debug!("\nOrderCreated log - {:?}", log);
                 // orderId is the intentId
-                println!("Order created on MockLN");
+                info!("Order created on MockLN");
             }
             Some(&Vault::MessageDispatchedFromVault::SIGNATURE_HASH) => {
                 let Vault::MessageDispatchedFromVault {
@@ -80,12 +81,12 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                     provider,
                     message
                 } = log.log_decode().unwrap().inner.data;
-                println!("\nMessageDispatchedFromVault log - {:?}", log);
+                debug!("\nMessageDispatchedFromVault log - {:?}", log);
                 // have to get intentId here.
-                println!("Message dispatched from vault");
+                info!("Message dispatched from vault");
             }
             _ => {
-                println!("\ndidn't match anything, {:?}", log);
+                info!("\ndidn't match anything, {:?}", log);
             }
         }
     }

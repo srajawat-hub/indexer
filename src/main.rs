@@ -5,7 +5,8 @@ pub mod solidity_structs;
 
 use tokio::signal;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
-use tokio_postgres::{NoTls, connect, };
+use tokio_postgres::{NoTls, connect};
+use log::{debug, error, info, trace};
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +26,7 @@ async fn main() {
     let (client, connection) = tokio_postgres::connect("host=localhost user=postgres password=postgres dbname=mydb", NoTls).await.unwrap();
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("DB Connection error {:?}", e);
+            error!("DB Connection error {:?}", e);
         }
     });
 
@@ -56,17 +57,17 @@ async fn main() {
     for indexer in indexers {
         let handle = tokio::spawn(async move {
             if let Err(err) = indexer.listen_for_events().await {
-                eprintln!("Error listening to events: {}", err);
+                error!("Error listening to events: {}", err);
             }
         });
 
         handles.push(handle);
     }
 
-    println!("All tasks started. Press Ctrl+C to exit.");
-    println!("total threads {:?}", handles.len());
+    info!("All tasks started. Press Ctrl+C to exit.");
+    info!("total threads {:?}", handles.len());
 
     // Wait for Ctrl+C signal to exit
     signal::ctrl_c().await.unwrap();
-    println!("Shutting down...");
+    info!("Shutting down...");
 }
