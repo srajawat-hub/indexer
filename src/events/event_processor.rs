@@ -1,3 +1,4 @@
+use alloy::primitives::Bytes;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use alloy::rpc::types::Log;
@@ -9,7 +10,8 @@ use crate::solidity_structs::{
     intent_processor::IntentProcessorV2::{self},
     mocked_ln::MockLN,
     IntentPayloadStakeData,
-    vault::Vault, SolidityAcknowledgementMetadata
+    vault::Vault, SolidityAcknowledgementMetadata,
+    SoliditySolution
 };
 
 // Function to listen to events from a specific RPC and contract
@@ -28,9 +30,13 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
             }
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
                 println!("\nSolutionSubmitted log - {:?}", log);
-                let IntentLibV2::SolutionSubmitted { intentId, solver, solution } =
+                let IntentLibV2::SolutionSubmitted { intentId, solver, .. } =
                     log.log_decode().unwrap().inner.data;
-                let solution_decoded = IntentTypesLib::SoliditySolution::abi_decode(solution, true);
+                let solution_data = log.data().data.clone();
+                println!("solution log {:?}", solution_data);
+                let solution_slice = solution_data.as_ref();
+                let solution_decoded = IntentTypesLib::SoliditySolution::abi_decode(solution_slice, true).unwrap();
+                println!("Solution decoded {:?}", solution_decoded);
                 println!("Intent Solution submitted from {solver} for intentId {intentId}");
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {

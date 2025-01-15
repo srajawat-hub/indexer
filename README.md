@@ -67,6 +67,7 @@ intent_state (
     transaction_hash VARCHAR(88) NOT NULL,
     stage TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL
+    gas_fees INTEGER // in eth
 );
 ```
 

@@ -31,7 +31,7 @@ async fn main() {
 
     let indexers: Vec<Box<dyn BlockchainIndexer + Send +Sync>> = vec![
         Box::new(EvmIndexer::new(
-            "ws://192.241.245.190:18749".to_string(),
+            "ws://127.0.0.1:8545".to_string(),
             "0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB".to_string(),
         )),
         Box::new(EvmIndexer::new(

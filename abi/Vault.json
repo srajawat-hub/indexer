@@ -81,6 +81,13 @@
     },
     {
         "type": "function",
+        "name": "acceptOwnership",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "allowInitializePath",
         "inputs": [
             {
@@ -117,6 +124,32 @@
     },
     {
         "type": "function",
+        "name": "changeRollupLzChainId",
+        "inputs": [
+            {
+                "name": "endpointId",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "changeSourceLzChainId",
+        "inputs": [
+            {
+                "name": "sourceEid",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "circuitBreakerState",
         "inputs": [],
         "outputs": [
@@ -127,6 +160,29 @@
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "claimStakingWithdrawal",
+        "inputs": [
+            {
+                "name": "gasLimit",
+                "type": "uint128",
+                "internalType": "uint128"
+            },
+            {
+                "name": "value",
+                "type": "uint128",
+                "internalType": "uint128"
+            },
+            {
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
     },
     {
         "type": "function",
@@ -291,6 +347,20 @@
     },
     {
         "type": "function",
+        "name": "emergencyPause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "emergencyUnpause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "endpoint",
         "inputs": [],
         "outputs": [
@@ -325,6 +395,79 @@
             }
         ],
         "stateMutability": "pure"
+    },
+    {
+        "type": "function",
+        "name": "getDepositFundsFee",
+        "inputs": [
+            {
+                "name": "depositContractAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "erc20TokenAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "userAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "gasLimit",
+                "type": "uint128",
+                "internalType": "uint128"
+            },
+            {
+                "name": "value",
+                "type": "uint128",
+                "internalType": "uint128"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getRegisterVaultFee",
+        "inputs": [
+            {
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "gasLimit",
+                "type": "uint128",
+                "internalType": "uint128"
+            },
+            {
+                "name": "value",
+                "type": "uint128",
+                "internalType": "uint128"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -505,7 +648,7 @@
                 "internalType": "address"
             },
             {
-                "name": "_intentProcessorLZAddress",
+                "name": "_intentProcessorAddress",
                 "type": "address",
                 "internalType": "address"
             },
@@ -525,7 +668,7 @@
     },
     {
         "type": "function",
-        "name": "intentProcessorLZAddress",
+        "name": "intentProcessorAddress",
         "inputs": [],
         "outputs": [
             {
@@ -711,6 +854,133 @@
     },
     {
         "type": "function",
+        "name": "onERC20Received",
+        "inputs": [
+            {
+                "name": "_orderId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_token",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_transferredAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "_fallbackAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_payload",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "callSucceeded",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "callResult",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "onERC20Received",
+        "inputs": [
+            {
+                "name": "_orderId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_token",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_transferredAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "_fallbackAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_payload",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "callSucceeded",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "callResult",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "onEtherReceived",
+        "inputs": [
+            {
+                "name": "_orderId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_fallbackAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_payload",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "callSucceeded",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "callResult",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
         "name": "onMockedLNERC20Received",
         "inputs": [
             {
@@ -823,16 +1093,67 @@
     },
     {
         "type": "function",
-        "name": "removeReceiptToken",
+        "name": "recoverETH",
         "inputs": [
             {
-                "name": "receiptTokenAddress",
+                "name": "to",
                 "type": "address",
                 "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "recoverTokens",
+        "inputs": [
+            {
+                "name": "tokenAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "to",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "registerVault",
+        "inputs": [
+            {
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "gasLimit",
+                "type": "uint128",
+                "internalType": "uint128"
+            },
+            {
+                "name": "value",
+                "type": "uint128",
+                "internalType": "uint128"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
     },
     {
         "type": "function",
@@ -897,10 +1218,36 @@
     },
     {
         "type": "function",
+        "name": "setCircuitBreakerState",
+        "inputs": [
+            {
+                "name": "_state",
+                "type": "uint8",
+                "internalType": "enum IntentLib.CircuitBreakerState"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "setDelegate",
         "inputs": [
             {
                 "name": "_delegate",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setPauser",
+        "inputs": [
+            {
+                "name": "_newPauser",
                 "type": "address",
                 "internalType": "address"
             }
@@ -960,10 +1307,67 @@
     },
     {
         "type": "function",
+        "name": "toggleVaultState",
+        "inputs": [
+            {
+                "name": "gasLimit",
+                "type": "uint128",
+                "internalType": "uint128"
+            },
+            {
+                "name": "value",
+                "type": "uint128",
+                "internalType": "uint128"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
         "name": "transferOwnership",
         "inputs": [
             {
                 "name": "newOwner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "updateHypDestinationChainId",
+        "inputs": [
+            {
+                "name": "_hypDestinationChainId",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "updateIp",
+        "inputs": [
+            {
+                "name": "ip",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "updateSm",
+        "inputs": [
+            {
+                "name": "sm",
                 "type": "address",
                 "internalType": "address"
             }
@@ -1014,6 +1418,19 @@
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "event",
+        "name": "CircuitBreakerStateChanged",
+        "inputs": [
+            {
+                "name": "state",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum IntentLib.CircuitBreakerState"
+            }
+        ],
+        "anonymous": false
     },
     {
         "type": "event",
@@ -1118,6 +1535,25 @@
     },
     {
         "type": "event",
+        "name": "OwnershipTransferStarted",
+        "inputs": [
+            {
+                "name": "currentOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "proposedOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "OwnershipTransferred",
         "inputs": [
             {
@@ -1128,6 +1564,25 @@
             },
             {
                 "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "PauserUpdated",
+        "inputs": [
+            {
+                "name": "oldPauser",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newPauser",
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
@@ -1274,6 +1729,44 @@
         "anonymous": false
     },
     {
+        "type": "event",
+        "name": "VaultInitialized",
+        "inputs": [
+            {
+                "name": "vaultAddress",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "owner",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "VaultStateToggled",
+        "inputs": [
+            {
+                "name": "isVaultActive",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            },
+            {
+                "name": "timestamp",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
         "type": "error",
         "name": "AccessControlBadConfirmation",
         "inputs": []
@@ -1302,6 +1795,27 @@
                 "name": "target",
                 "type": "address",
                 "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AlreadyProposedOwner",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AmountMismatch",
+        "inputs": [
+            {
+                "name": "received",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "expected",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ]
     },
@@ -1389,11 +1903,6 @@
     },
     {
         "type": "error",
-        "name": "InvalidLiquidityNetwork",
-        "inputs": []
-    },
-    {
-        "type": "error",
         "name": "InvalidOptionType",
         "inputs": [
             {
@@ -1410,7 +1919,7 @@
     },
     {
         "type": "error",
-        "name": "InvalidSolutionType",
+        "name": "InvalidState",
         "inputs": []
     },
     {
@@ -1474,6 +1983,11 @@
     },
     {
         "type": "error",
+        "name": "OnlyProposedOwner",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "OwnableInvalidOwner",
         "inputs": [
             {
@@ -1525,6 +2039,32 @@
                 "internalType": "address"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "TimeLockNotExpired",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "TokenMismatch",
+        "inputs": [
+            {
+                "name": "received",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "expected",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "TransferFailed",
+        "inputs": []
     },
     {
         "type": "error",

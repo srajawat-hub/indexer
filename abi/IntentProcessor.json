@@ -1,7 +1,194 @@
 [
     {
+        "type": "constructor",
+        "inputs": [
+            {
+                "name": "_lzEndpointAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
         "type": "function",
-        "name": "_createSwapOrder",
+        "name": "DEFAULT_ADMIN_ROLE",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "MAX_INTENT_EXPIRATION_TIME_IN_SEC",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "MAX_PENDING_INTENTS",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "UPGRADE_INTERFACE_VERSION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "addHypWarpRoute",
+        "inputs": [
+            {
+                "name": "hypDomainId",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "warpRouteAddress",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "allowInitializePath",
+        "inputs": [
+            {
+                "name": "origin",
+                "type": "tuple",
+                "internalType": "struct Origin",
+                "components": [
+                    {
+                        "name": "srcEid",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "sender",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "nonce",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    }
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "auctionManagerAddress",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "balanceManagerAddress",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "chains",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "identifier",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "vaultAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vaultAuthority",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "poolAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "isActive",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "executionEnvironment",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.ExecutionEnvironment"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "chooseWinner",
         "inputs": [
             {
                 "name": "intentId",
@@ -9,928 +196,10 @@
                 "internalType": "uint64"
             },
             {
-                "name": "intentOwner",
-                "type": "address",
-                "internalType": "address"
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
             },
-            {
-                "name": "swapIntent",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.IntentPayloadSwapData",
-                "components": [
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "worstExecutionOutTokenAmount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutTimestampInSeconds",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    }
-                ]
-            },
-            {
-                "name": "solverSolution",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolverSolution",
-                "components": [
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.SolutionTypeEnum",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    }
-                ]
-            },
-            {
-                "name": "destinationChain",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.Chain",
-                "components": [
-                    {
-                        "name": "identifier",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "vaultAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "vaultAuthority",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "poolAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "isActive",
-                        "type": "bool",
-                        "internalType": "bool"
-                    },
-                    {
-                        "name": "domainIds",
-                        "type": "tuple[]",
-                        "internalType": "struct IntentTypesLib.DomainId[]",
-                        "components": [
-                            {
-                                "name": "domainId",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            },
-                            {
-                                "name": "interopProvider",
-                                "type": "IntentTypesLib.InteropProvider",
-                                "internalType": "enum IntentTypesLib.InteropProvider"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "executionEnvironment",
-                        "type": "IntentTypesLib.ExecutionEnvironment",
-                        "internalType": "enum IntentTypesLib.ExecutionEnvironment"
-                    }
-                ]
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolidityOrder",
-                "components": [
-                    {
-                        "name": "intentId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "receiver",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityReceiver",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.ReceiverEnum",
-                                "internalType": "enum IntentTypesLib.ReceiverEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutUnixTimestampInSec",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.SolutionTypeEnum",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "hook",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "initiatorAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "additionalData",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "pure"
-    },
-    {
-        "type": "function",
-        "name": "createStakeOrder",
-        "inputs": [
-            {
-                "name": "intentId",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "intentOwner",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "stakeIntent",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.IntentPayloadStakeData",
-                "components": [
-                    {
-                        "name": "stakeAction",
-                        "type": "IntentTypesLib.StakeActionEnum",
-                        "internalType": "enum IntentTypesLib.StakeActionEnum"
-                    },
-                    {
-                        "name": "stakeProtocol",
-                        "type": "IntentTypesLib.StakeProtocolEnum",
-                        "internalType": "enum IntentTypesLib.StakeProtocolEnum"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "chainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutTimestampInSeconds",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "stakingPoolAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    }
-                ]
-            },
-            {
-                "name": "stakeSolution",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SoliditySolutionStakeSolutionData",
-                "components": [
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolverSolution",
-                        "components": [
-                            {
-                                "name": "solution",
-                                "type": "tuple",
-                                "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                                "components": [
-                                    {
-                                        "name": "enumVariant",
-                                        "type": "IntentTypesLib.SolutionTypeEnum",
-                                        "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                                    },
-                                    {
-                                        "name": "data",
-                                        "type": "bytes",
-                                        "internalType": "bytes"
-                                    }
-                                ]
-                            },
-                            {
-                                "name": "sourceChainId",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            },
-                            {
-                                "name": "tokenIn",
-                                "type": "bytes32",
-                                "internalType": "bytes32"
-                            },
-                            {
-                                "name": "amountIn",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            },
-                            {
-                                "name": "amountOut",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "name": "sourceChain",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.Chain",
-                "components": [
-                    {
-                        "name": "identifier",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "vaultAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "vaultAuthority",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "poolAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "isActive",
-                        "type": "bool",
-                        "internalType": "bool"
-                    },
-                    {
-                        "name": "domainIds",
-                        "type": "tuple[]",
-                        "internalType": "struct IntentTypesLib.DomainId[]",
-                        "components": [
-                            {
-                                "name": "domainId",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            },
-                            {
-                                "name": "interopProvider",
-                                "type": "IntentTypesLib.InteropProvider",
-                                "internalType": "enum IntentTypesLib.InteropProvider"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "executionEnvironment",
-                        "type": "IntentTypesLib.ExecutionEnvironment",
-                        "internalType": "enum IntentTypesLib.ExecutionEnvironment"
-                    }
-                ]
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolidityOrder",
-                "components": [
-                    {
-                        "name": "intentId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "receiver",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityReceiver",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.ReceiverEnum",
-                                "internalType": "enum IntentTypesLib.ReceiverEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutUnixTimestampInSec",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.SolutionTypeEnum",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "hook",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "initiatorAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "additionalData",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "pure"
-    },
-    {
-        "type": "function",
-        "name": "createTransferOrder",
-        "inputs": [
-            {
-                "name": "intentId",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "intentOwner",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "transferIntent",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.IntentPayloadTransferData",
-                "components": [
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destination",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityTransferDestination",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.TransferDestinationEnum",
-                                "internalType": "enum IntentTypesLib.TransferDestinationEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutTimestampInSeconds",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    }
-                ]
-            },
-            {
-                "name": "solverSolution",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolverSolution",
-                "components": [
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.SolutionTypeEnum",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    }
-                ]
-            },
-            {
-                "name": "destinationChain",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.Chain",
-                "components": [
-                    {
-                        "name": "identifier",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "vaultAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "vaultAuthority",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "poolAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "isActive",
-                        "type": "bool",
-                        "internalType": "bool"
-                    },
-                    {
-                        "name": "domainIds",
-                        "type": "tuple[]",
-                        "internalType": "struct IntentTypesLib.DomainId[]",
-                        "components": [
-                            {
-                                "name": "domainId",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            },
-                            {
-                                "name": "interopProvider",
-                                "type": "IntentTypesLib.InteropProvider",
-                                "internalType": "enum IntentTypesLib.InteropProvider"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "executionEnvironment",
-                        "type": "IntentTypesLib.ExecutionEnvironment",
-                        "internalType": "enum IntentTypesLib.ExecutionEnvironment"
-                    }
-                ]
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolidityOrder",
-                "components": [
-                    {
-                        "name": "intentId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "receiver",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityReceiver",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.ReceiverEnum",
-                                "internalType": "enum IntentTypesLib.ReceiverEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutUnixTimestampInSec",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.SolutionTypeEnum",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "hook",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "initiatorAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "additionalData",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "pure"
-    },
-    {
-        "type": "function",
-        "name": "createTransferReceiver",
-        "inputs": [
-            {
-                "name": "transferIntent",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.IntentPayloadTransferData",
-                "components": [
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destination",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityTransferDestination",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "IntentTypesLib.TransferDestinationEnum",
-                                "internalType": "enum IntentTypesLib.TransferDestinationEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutTimestampInSeconds",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    }
-                ]
-            },
-            {
-                "name": "destinationChain",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.Chain",
-                "components": [
-                    {
-                        "name": "identifier",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "vaultAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "vaultAuthority",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "poolAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "isActive",
-                        "type": "bool",
-                        "internalType": "bool"
-                    },
-                    {
-                        "name": "domainIds",
-                        "type": "tuple[]",
-                        "internalType": "struct IntentTypesLib.DomainId[]",
-                        "components": [
-                            {
-                                "name": "domainId",
-                                "type": "uint256",
-                                "internalType": "uint256"
-                            },
-                            {
-                                "name": "interopProvider",
-                                "type": "IntentTypesLib.InteropProvider",
-                                "internalType": "enum IntentTypesLib.InteropProvider"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "executionEnvironment",
-                        "type": "IntentTypesLib.ExecutionEnvironment",
-                        "internalType": "enum IntentTypesLib.ExecutionEnvironment"
-                    }
-                ]
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolidityReceiver",
-                "components": [
-                    {
-                        "name": "enumVariant",
-                        "type": "IntentTypesLib.ReceiverEnum",
-                        "internalType": "enum IntentTypesLib.ReceiverEnum"
-                    },
-                    {
-                        "name": "data",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "pure"
-    },
-    {
-        "type": "function",
-        "name": "generateLzOption",
-        "inputs": [
             {
                 "name": "gas_limit",
                 "type": "uint128",
@@ -942,6 +211,102 @@
                 "internalType": "uint128"
             }
         ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "composeMsgSender",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "endpoint",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract ILayerZeroEndpointV2"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "feeBasisPoints",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "feeCollector",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getDomainIds",
+        "inputs": [
+            {
+                "name": "chainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple[]",
+                "internalType": "struct IntentTypesLib.DomainId[]",
+                "components": [
+                    {
+                        "name": "domainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "interopProvider",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.InteropProvider"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getOrder",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
         "outputs": [
             {
                 "name": "",
@@ -949,43 +314,331 @@
                 "internalType": "bytes"
             }
         ],
-        "stateMutability": "pure"
+        "stateMutability": "view"
     },
     {
         "type": "function",
-        "name": "isMatchingBalance",
+        "name": "getRawIntent",
         "inputs": [
             {
-                "name": "balance",
+                "name": "intentId",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
                 "type": "tuple",
-                "internalType": "struct IntentTypesLib.UserBalance",
+                "internalType": "struct IntentTypesLib.SolidityRawIntent",
                 "components": [
                     {
-                        "name": "chainIdentifier",
+                        "name": "id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "intentOwner",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "creationUnixTimestampInSeconds",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "feesTaken",
                         "type": "uint256",
                         "internalType": "uint256"
                     },
                     {
-                        "name": "tokenAddress",
+                        "name": "intentPayload",
+                        "type": "tuple",
+                        "internalType": "struct IntentTypesLib.SolidityIntentPayload",
+                        "components": [
+                            {
+                                "name": "enumVariant",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.IntentPayloadEnum"
+                            },
+                            {
+                                "name": "data",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getRoleAdmin",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getUnsettledIntents",
+        "inputs": [
+            {
+                "name": "initiator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple[]",
+                "internalType": "struct IntentTypesLib.SolidityRawIntent[]",
+                "components": [
+                    {
+                        "name": "id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "intentOwner",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "creationUnixTimestampInSeconds",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "feesTaken",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "intentPayload",
+                        "type": "tuple",
+                        "internalType": "struct IntentTypesLib.SolidityIntentPayload",
+                        "components": [
+                            {
+                                "name": "enumVariant",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.IntentPayloadEnum"
+                            },
+                            {
+                                "name": "data",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getUnsettledOrdersByInitiator",
+        "inputs": [
+            {
+                "name": "initiator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple[]",
+                "internalType": "struct IntentTypesLib.SolidityOrder[]",
+                "components": [
+                    {
+                        "name": "intentId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "orderId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "amountIn",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "tokenIn",
                         "type": "bytes32",
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "amount",
+                        "name": "amountOut",
                         "type": "uint256",
                         "internalType": "uint256"
+                    },
+                    {
+                        "name": "tokenOut",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "receiver",
+                        "type": "tuple",
+                        "internalType": "struct IntentTypesLib.SolidityReceiver",
+                        "components": [
+                            {
+                                "name": "enumVariant",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.ReceiverEnum"
+                            },
+                            {
+                                "name": "data",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "sourceChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "destinationChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "solution",
+                        "type": "tuple",
+                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
+                        "components": [
+                            {
+                                "name": "enumVariant",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
+                            },
+                            {
+                                "name": "data",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "hook",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "initiatorAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "additionalData",
+                        "type": "bytes",
+                        "internalType": "bytes"
                     }
                 ]
-            },
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getWinningOrder",
+        "inputs": [
             {
-                "name": "chainIdentifier",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
             {
-                "name": "tokenAddress",
+                "name": "",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "grantRole",
+        "inputs": [
+            {
+                "name": "role",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "handle",
+        "inputs": [
+            {
+                "name": "_origin",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "_sender",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_message",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "hasRole",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
             }
         ],
         "outputs": [
@@ -995,21 +648,381 @@
                 "internalType": "bool"
             }
         ],
-        "stateMutability": "pure"
+        "stateMutability": "view"
     },
     {
         "type": "function",
-        "name": "validateIntent",
+        "name": "hypMailbox",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract IMailbox"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "hypWarpRouteAddress",
         "inputs": [
             {
-                "name": "intent",
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "initialize",
+        "inputs": [
+            {
+                "name": "args",
+                "type": "tuple",
+                "internalType": "struct IntentLibV2.IntentProcessorInitArgs",
+                "components": [
+                    {
+                        "name": "owner",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "lzEndpointAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "balanceManagerAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "hyperlaneMailboxAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "trustedForwarderAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "auctionManagerAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "feeCollector",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "feeBasisPoints",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "intentIdToWinningSolver",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "intentNonce",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "intents",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "intentOwner",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "creationUnixTimestampInSeconds",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "feesTaken",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "intentPayload",
                 "type": "tuple",
                 "internalType": "struct IntentTypesLib.SolidityIntentPayload",
                 "components": [
                     {
                         "name": "enumVariant",
-                        "type": "IntentTypesLib.IntentPayloadEnum",
+                        "type": "uint8",
                         "internalType": "enum IntentTypesLib.IntentPayloadEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "isTrustedForwarder",
+        "inputs": [
+            {
+                "name": "forwarder",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "lzReceive",
+        "inputs": [
+            {
+                "name": "_origin",
+                "type": "tuple",
+                "internalType": "struct Origin",
+                "components": [
+                    {
+                        "name": "srcEid",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "sender",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "nonce",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    }
+                ]
+            },
+            {
+                "name": "_guid",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_message",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "_executor",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_extraData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "lzquoteFee",
+        "inputs": [
+            {
+                "name": "_dstEndpointId",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "_message",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "_options",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "nextNonce",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "nonce",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "oAppVersion",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "senderVersion",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "receiverVersion",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "pure"
+    },
+    {
+        "type": "function",
+        "name": "orderNonce",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "orders",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "amountIn",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tokenIn",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amountOut",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tokenOut",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "receiver",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SolidityReceiver",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.ReceiverEnum"
                     },
                     {
                         "name": "data",
@@ -1019,32 +1032,837 @@
                 ]
             },
             {
-                "name": "balanceManager",
-                "type": "BalanceManager",
-                "internalType": "contract BalanceManager"
-            },
-            {
-                "name": "userBalanceAmount",
+                "name": "sourceChainId",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "sender",
+                "name": "destinationChainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "timeoutUnixTimestampInSec",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "solution",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SoliditySolutionType",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.SolutionTypeEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "hook",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "initiatorAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "additionalData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "ordersWithUnbondingPeriod",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "amountIn",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tokenIn",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amountOut",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tokenOut",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "receiver",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SolidityReceiver",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.ReceiverEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "sourceChainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "destinationChainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "timeoutUnixTimestampInSec",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "solution",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SoliditySolutionType",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.SolutionTypeEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "hook",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "initiatorAddress",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "additionalData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "owner",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "paused",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "peers",
+        "inputs": [
+            {
+                "name": "_eid",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "pendingIntentIdsByInitiator",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "head",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "length",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "proxiableUUID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "receiptTokenToToken",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "receiveMessage",
+        "inputs": [
+            {
+                "name": "message",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "renounceOwnership",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "renounceRole",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "callerConfirmation",
                 "type": "address",
                 "internalType": "address"
             }
         ],
         "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "revokeRole",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setAuctioneer",
+        "inputs": [
+            {
+                "name": "_auctioneer",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setDelegate",
+        "inputs": [
+            {
+                "name": "_delegate",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setPeer",
+        "inputs": [
+            {
+                "name": "_eid",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "_peer",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "submitIntent",
+        "inputs": [
+            {
+                "name": "intent",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SolidityIntentPayload",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.IntentPayloadEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "submitWinningSolutions",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "solutions",
+                "type": "tuple[]",
+                "internalType": "struct IntentTypesLib.SoliditySolution[]",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.SoliditySolutionEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "supportsInterface",
+        "inputs": [
+            {
+                "name": "interfaceId",
+                "type": "bytes4",
+                "internalType": "bytes4"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
         "stateMutability": "view"
     },
     {
+        "type": "function",
+        "name": "tradesByIntentId",
+        "inputs": [
+            {
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "enumVariant",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.SoliditySolutionEnum"
+            },
+            {
+                "name": "data",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "transferOwnership",
+        "inputs": [
+            {
+                "name": "newOwner",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "trustedForwarder",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "updateFeeBasisPoints",
+        "inputs": [
+            {
+                "name": "newFeeBasisPoints",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "updateHypMailbox",
+        "inputs": [
+            {
+                "name": "newMailbox",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "upgradeToAndCall",
+        "inputs": [
+            {
+                "name": "newImplementation",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "data",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "version",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "event",
+        "name": "AcknowledgementReceived",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "result",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            },
+            {
+                "name": "errorMessage",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ContractVersionUpdated",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint256",
+                "indexed": true,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "IntentSubmitted",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "owner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferred",
+        "inputs": [
+            {
+                "name": "previousOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Paused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "PeerSet",
+        "inputs": [
+            {
+                "name": "eid",
+                "type": "uint32",
+                "indexed": false,
+                "internalType": "uint32"
+            },
+            {
+                "name": "peer",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleAdminChanged",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "previousAdminRole",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "newAdminRole",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleGranted",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RoleRevoked",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SolutionSubmitted",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "solver",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Unpaused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Upgraded",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
         "type": "error",
-        "name": "E11",
+        "name": "AccessControlBadConfirmation",
         "inputs": []
     },
     {
         "type": "error",
-        "name": "E4",
+        "name": "AccessControlUnauthorizedAccount",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "neededRole",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AddressEmptyCode",
+        "inputs": [
+            {
+                "name": "target",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "E13",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E14",
         "inputs": []
     },
     {
@@ -1054,70 +1872,161 @@
     },
     {
         "type": "error",
-        "name": "E6",
+        "name": "ERC1967InvalidImplementation",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967NonPayable",
         "inputs": []
     },
     {
         "type": "error",
-        "name": "InsufficientBalance",
+        "name": "EnforcedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ExpectedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FailedCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidDelegate",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidEndpointCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "LzTokenUnavailable",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NoPeer",
         "inputs": [
             {
-                "name": "currentBalance",
+                "name": "eid",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotEnoughNative",
+        "inputs": [
+            {
+                "name": "msgValue",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OnlyEndpoint",
+        "inputs": [
+            {
+                "name": "addr",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "OnlyPeer",
+        "inputs": [
+            {
+                "name": "eid",
+                "type": "uint32",
+                "internalType": "uint32"
             },
             {
-                "name": "requiredAmount",
-                "type": "uint256",
-                "internalType": "uint256"
+                "name": "sender",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },
     {
         "type": "error",
-        "name": "InvalidAmount",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "InvalidOptionType",
+        "name": "OwnableInvalidOwner",
         "inputs": [
             {
-                "name": "optionType",
-                "type": "uint16",
-                "internalType": "uint16"
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
             }
         ]
     },
     {
         "type": "error",
-        "name": "InvalidTransferDestination",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "NoBalanceFound",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "SafeCastOverflowedUintDowncast",
+        "name": "OwnableUnauthorizedAccount",
         "inputs": [
             {
-                "name": "bits",
-                "type": "uint8",
-                "internalType": "uint8"
-            },
-            {
-                "name": "value",
-                "type": "uint256",
-                "internalType": "uint256"
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
             }
         ]
     },
     {
         "type": "error",
-        "name": "StakingNotSupported",
+        "name": "ReentrancyGuardReentrantCall",
         "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "SafeERC20FailedOperation",
+        "inputs": [
+            {
+                "name": "token",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnauthorizedCallContext",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnsupportedProxiableUUID",
+        "inputs": [
+            {
+                "name": "slot",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
     }
 ]
