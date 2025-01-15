@@ -1,93 +1,63 @@
 // src/main.rs
-
-use alloy::{
-    primitives::address,
-    providers::{Provider, ProviderBuilder, WsConnect},
-    rpc::types::{BlockNumberOrTag, Filter},
-    sol,
-    sol_types::SolEvent,
-};
-use futures_util::stream::StreamExt;
-use std::thread;
-use std::{
-    fmt::Error,
-    sync::{Arc, Mutex},
-};
-use tokio::runtime::Runtime;
+mod indexers;
+mod events;
 pub mod solidity_structs;
 
-use solidity_structs::token::Token;
-use solidity_structs::{
-    intent_processor::{
-        IntentProcessorV2::{self},
-        IntentTypesLib,
-    },
-    mocked_ln::MockLN,
-};
-use solidity_structs::{mocked_ln::IMockLN, IntentPayloadStakeData};
-use solidity_structs::{vault::Vault, SolidityAcknowledgementMetadata};
-use solidity_structs::{
-    IntentPayloadEnum, IntentPayloadSwapData, IntentPayloadTransferData,
-    IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum,
-    LiquidityNetworkEnum, LiquidityNetworkMockedLNData, SolidityLiquidityNetwork, SoliditySolution,
-    SoliditySolutionEnum, SoliditySolutionSwapSolutionData, SoliditySolutionTransferSolutionData,
-    SoliditySolutionType, SolutionTypeCrossChainData, SolutionTypeEnum, SolverSolution,
-};
+use tokio::signal;
+use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let rpc_urls = vec!["ws://127.0.0.1:8545"];
-    let contract_addresses = vec!["0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB"];
+async fn main() {
 
-    // let mut handles = vec![];
-    for (rpc_url, contract_address) in rpc_urls.iter().zip(contract_addresses.iter()) {
-        let ws = WsConnect::new(*rpc_url);
-        let provider = ProviderBuilder::new().on_ws(ws).await.unwrap();
-        let contract_addr = address!("FAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB");
-        let filter = Filter::new()
-            .address(contract_addr)
-            .from_block(BlockNumberOrTag::Latest);
+    env_logger::builder().format(|buf, record| {
+        use std::io::Write;
+        writeln!(
+            buf,
+            "[{} - Thread: {:?}] {}",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            std::thread::current().id(),
+            record.args()
+        )
+    }).init();
 
-        let sub = provider.subscribe_logs(&filter).await.unwrap();
-        let mut stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log> =
-            sub.into_stream();
+    let indexers: Vec<Box<dyn BlockchainIndexer + Send +Sync>> = vec![
+        Box::new(EvmIndexer::new(
+            "ws://192.241.245.190:18749".to_string(),
+            "0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB".to_string(),
+        )),
+        Box::new(EvmIndexer::new(
+            "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
+            "0x22c423540918032B206Df38d86AFCB9B22eF1c0f".to_string(),
+        )),
+        Box::new(EvmIndexer::new(
+            "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
+            "0x42Ad426D1C9dA42648535DEE83D9fc73bAd9f274".to_string(),
+        )),
+        Box::new(EvmIndexer::new(
+            "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
+            "0x49E8FcC52698e78786ea1d929e1b3f1A7945Bccb".to_string(),
+        )),
+        Box::new(EvmIndexer::new(
+            "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID".to_string(),
+            "0xB5F67202064848c1528AbdC9e9e49a776E08ecC3".to_string(),
+        ))
+    ];
 
-        listen_to_events(stream).await;
+    let mut handles = vec![];
+    for indexer in indexers {
+        let handle = tokio::spawn(async move {
+            if let Err(err) = indexer.listen_for_events().await {
+                eprintln!("Error listening to events: {}", err);
+            }
+        });
 
-        // let handle = tokio::spawn(async move {
-        //     println!("New process thread");
-        //     listen_to_events(stream).await;
-        // });
-
-        // handles.push(handle);
+        handles.push(handle);
     }
 
-    // // // Wait for all threads to finish
-    // for handle in handles {
-    //     tokio::join!(handle);
-    // }
-    Ok(())
-}
+    println!("All tasks started. Press Ctrl+C to exit.");
+    println!("total threads {:?}", handles.len());
 
-// Function to listen to events from a specific RPC and contract
-async fn listen_to_events(mut stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log>) {
-    while let Some(log) = stream.next().await {
-        // Match on topic 0, the hash of the signature of the event.
-        // testing ws connection with token contract
-        match log.topic0() {
-            Some(&Token::Approval::SIGNATURE_HASH) => {
-                let Token::Approval {
-                    owner,
-                    spender,
-                    value,
-                } = log.log_decode().unwrap().inner.data;
-                println!("Approval from {owner} to {spender} of value {value}");
-            }
-            Some(&Token::Transfer::SIGNATURE_HASH) => {
-                let Token::Transfer { from, to, value } = log.log_decode().unwrap().inner.data;
-                println!("Transfer from {from} to {to} of value {value}");
-            }
-            _ => (),
-        }
-    }
+    // Wait for Ctrl+C signal to exit
+    signal::ctrl_c().await.unwrap();
+    println!("Shutting down...");
 }

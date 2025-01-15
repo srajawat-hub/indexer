@@ -1,0 +1,189 @@
+[
+    {
+        "type": "function",
+        "name": "validateSolution",
+        "inputs": [
+            {
+                "name": "solution",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SoliditySolution",
+                "components": [
+                    {
+                        "name": "enumVariant",
+                        "type": "IntentTypesLib.SoliditySolutionEnum",
+                        "internalType": "enum IntentTypesLib.SoliditySolutionEnum"
+                    },
+                    {
+                        "name": "data",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "pure"
+    },
+    {
+        "type": "event",
+        "name": "IntentSubmitted",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "owner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SolutionSubmitted",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "solver",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SolversWhitelisted",
+        "inputs": [
+            {
+                "name": "solvers",
+                "type": "address[]",
+                "indexed": false,
+                "internalType": "address[]"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "UserBalanceUpdated",
+        "inputs": [
+            {
+                "name": "user",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "chainId",
+                "type": "uint256",
+                "indexed": true,
+                "internalType": "uint256"
+            },
+            {
+                "name": "tokenAddress",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "newAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "E1",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E10",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E11",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E12",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E13",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E14",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E2",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E3",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E4",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E5",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E6",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E7",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E8",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E9",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "SolverAlreadyWhitelisted",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ZeroAddress",
+        "inputs": []
+    }
+]

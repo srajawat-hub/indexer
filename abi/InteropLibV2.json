@@ -1,0 +1,111 @@
+[
+    {
+        "type": "function",
+        "name": "getDestinationDomainId",
+        "inputs": [
+            {
+                "name": "provider",
+                "type": "IntentTypesLib.InteropProvider",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "destinationChain",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.Chain",
+                "components": [
+                    {
+                        "name": "identifier",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "vaultAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "vaultAuthority",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "poolAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "isActive",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "domainIds",
+                        "type": "tuple[]",
+                        "internalType": "struct IntentTypesLib.DomainId[]",
+                        "components": [
+                            {
+                                "name": "domainId",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "interopProvider",
+                                "type": "IntentTypesLib.InteropProvider",
+                                "internalType": "enum IntentTypesLib.InteropProvider"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "executionEnvironment",
+                        "type": "IntentTypesLib.ExecutionEnvironment",
+                        "internalType": "enum IntentTypesLib.ExecutionEnvironment"
+                    }
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "stateMutability": "pure"
+    },
+    {
+        "type": "event",
+        "name": "AcknowledgementReceived",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "result",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            },
+            {
+                "name": "errorMessage",
+                "type": "string",
+                "indexed": false,
+                "internalType": "string"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "E4",
+        "inputs": []
+    }
+]
