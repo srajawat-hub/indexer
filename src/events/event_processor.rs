@@ -4,6 +4,8 @@ use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use alloy::rpc::types::Log;
 use futures_util::stream::StreamExt;
 use log::{debug, error, info};
+use tokio_postgres::{Client, NoTls, connect};
+
 
 use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
@@ -17,17 +19,27 @@ use crate::solidity_structs::{
 
 // Function to listen to events from a specific RPC and contract
 pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
+    // db connection
+    let (client, connection) = tokio_postgres::connect("host=localhost user=postgres password=postgres dbname=mydb", NoTls).await.unwrap();
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            error!("DB Connection error {:?}", e);
+        }
+    });
+
     while let Some(log) = stream.next().await {
         // Match on topic 0, the hash of the signature of the event.
         match log.topic0() {
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
-                info!("\nIntentSubmitted log - {:?}", log);
-                info!("Intent submitted from {owner} with intentId {intentId}");
+                println!("\nIntentSubmitted log - {:?}", log);
+                println!("Intent submitted from {owner} with intentId {intentId}");
                 let transaction_hash = log.transaction_hash.unwrap();
                 // let block_timestamp = log.block_timestamp.unwrap();
                 let block_number = log.block_number.unwrap();
+
+                // insert stuff into db
             }
             // might not need this event, because multiple solutions can be submitted for 1 intent, we only need the choosen one
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {

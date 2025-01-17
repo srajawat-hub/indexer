@@ -29,16 +29,16 @@ async fn main() {
         )
     }).init();
 
-    // make a db connection
-    let (client, connection) = tokio_postgres::connect("host=localhost user=postgres password=postgres dbname=mydb", NoTls).await.unwrap();
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!("DB Connection error {:?}", e);
-        }
-    });
+    // // make a db connection
+    // let (client, connection) = tokio_postgres::connect("host=localhost user=postgres password=postgres dbname=mydb", NoTls).await.unwrap();
+    // tokio::spawn(async move {
+    //     if let Err(e) = connection.await {
+    //         error!("DB Connection error {:?}", e);
+    //     }
+    // });
 
     let indexers: Vec<Box<dyn BlockchainIndexer + Send +Sync>> = vec![
-        create_evm_indexer("ws://127.0.0.1:8545", "0xFAB814c2A68F54971A12Cf6990Ea3Df2EF14c3FB"),
+        create_evm_indexer("ws://192.241.245.190:18749", "0xD50EFb5eA641E7BcaCB1600b464cC1f45ea91588"),
         create_evm_indexer("wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0x22c423540918032B206Df38d86AFCB9B22eF1c0f"),
         create_evm_indexer("wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0x49E8FcC52698e78786ea1d929e1b3f1A7945Bccb"),
         create_evm_indexer("wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID", "0x42Ad426D1C9dA42648535DEE83D9fc73bAd9f274"),

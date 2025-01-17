@@ -64,24 +64,6 @@
     },
     {
         "type": "function",
-        "name": "addHypWarpRoute",
-        "inputs": [
-            {
-                "name": "hypDomainId",
-                "type": "uint32",
-                "internalType": "uint32"
-            },
-            {
-                "name": "warpRouteAddress",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "allowInitializePath",
         "inputs": [
             {
@@ -453,121 +435,6 @@
     },
     {
         "type": "function",
-        "name": "getUnsettledOrdersByInitiator",
-        "inputs": [
-            {
-                "name": "initiator",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IntentTypesLib.SolidityOrder[]",
-                "components": [
-                    {
-                        "name": "intentId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "orderId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "receiver",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityReceiver",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "uint8",
-                                "internalType": "enum IntentTypesLib.ReceiverEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutUnixTimestampInSec",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "uint8",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "hook",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    },
-                    {
-                        "name": "initiatorAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "additionalData",
-                        "type": "bytes",
-                        "internalType": "bytes"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "getWinningOrder",
         "inputs": [
             {
@@ -659,25 +526,6 @@
                 "name": "",
                 "type": "address",
                 "internalType": "contract IMailbox"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "hypWarpRouteAddress",
-        "inputs": [
-            {
-                "name": "",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "stateMutability": "view"
@@ -1521,6 +1369,19 @@
     },
     {
         "type": "function",
+        "name": "updateBM",
+        "inputs": [
+            {
+                "name": "_bm",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "updateFeeBasisPoints",
         "inputs": [
             {
@@ -1648,6 +1509,31 @@
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OrderCreated",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "order",
+                "type": "bytes",
+                "indexed": false,
+                "internalType": "bytes"
             }
         ],
         "anonymous": false
