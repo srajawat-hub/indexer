@@ -11,7 +11,6 @@ solution (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
     solver_address VARCHAR(44) NOT NULL,
-    solution TEXT NOT NULL,
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL
@@ -37,7 +36,7 @@ received_message_on_vault (
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL
 );
-order (
+order_created (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
     creator_address VARCHAR(66) NOT NULL,
