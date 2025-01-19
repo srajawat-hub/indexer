@@ -1,62 +1,206 @@
+use std::str::FromStr;
+use std::sync::Arc;
+
 use alloy::primitives::Bytes;
+use alloy::rpc::types::Log;
+use alloy::signers::k256::elliptic_curve::bigint;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
-use alloy::rpc::types::Log;
+use chrono::Utc;
 use futures_util::stream::StreamExt;
 use log::{debug, error, info};
-use tokio_postgres::{Client, NoTls, connect};
-
+use rust_decimal::Decimal;
+use tokio_postgres::{connect, Client, NoTls};
 
 use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2,
+    intent_lib_v2::IntentLibV2,
     intent_processor::IntentProcessorV2::{self},
+    intenterop_lib_v2::InteropLibV2,
     mocked_ln::MockLN,
-    IntentPayloadStakeData,
-    vault::Vault, SolidityAcknowledgementMetadata,
-    SoliditySolution
+    vault::Vault,
+    IntentPayloadStakeData, SolidityAcknowledgementMetadata, SoliditySolution,
+};
+use crate::solidity_structs::{
+    IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
+    SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
 };
 
-// Function to listen to events from a specific RPC and contract
-pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
-    // db connection
-    let (client, connection) = tokio_postgres::connect("host=localhost user=postgres password=postgres dbname=mydb", NoTls).await.unwrap();
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!("DB Connection error {:?}", e);
-        }
-    });
+enum IntentVersions {
+    IntentSubmitted,
+    SolutionSubmitted,
+    OrderCreated,
+    ReceivedMessageOnVault,
+    MessageDispatchedFromVault,
+    AcknowledgementReceived
+}
 
+pub async fn update_intent_state(
+    query: &str,
+    intent_id: &i64,
+    version: i64,
+    stage: &str,
+    transaction_hash: String,
+    client: &Arc<Client>,
+) {
+    let gas_fees = 1 as i64;
+    let timestamp = std::time::SystemTime::now();
+    let intent_state_response = client
+        .execute(
+            query,
+            &[
+                &intent_id,
+                &version,
+                &transaction_hash,
+                &stage,
+                &timestamp,
+                &gas_fees,
+            ],
+        )
+        .await
+        .unwrap();
+}
+
+// Function to listen to events from a specific RPC and contract
+pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc<Client>) {
     while let Some(log) = stream.next().await {
-        // Match on topic 0, the hash of the signature of the event.
         match log.topic0() {
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
                 println!("\nIntentSubmitted log - {:?}", log);
                 println!("Intent submitted from {owner} with intentId {intentId}");
-                let transaction_hash = log.transaction_hash.unwrap();
-                // let block_timestamp = log.block_timestamp.unwrap();
-                let block_number = log.block_number.unwrap();
 
-                // insert stuff into db
+                let intent_transaction_hash = log.transaction_hash.unwrap();
+                let intent_block_number = log.block_number.unwrap();
+                let intent_id = intentId as i64;
+                let owner_address = owner.to_string();
+                let transaction_hash = intent_transaction_hash.to_string();
+                let block_number = intent_block_number as i64;
+                let current_timestamp = std::time::SystemTime::now();
+                let timestamp = current_timestamp;
+
+                let query = "INSERT INTO intent VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &intent_id,
+                            &owner_address,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!("Row inserted response {:?}", response);
+
+                let intent_state_update_query =
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                update_intent_state(
+                    intent_state_update_query,
+                    &intent_id,
+                    IntentVersions::IntentSubmitted as i64,
+                    "Initialized",
+                    transaction_hash,
+                    &client,
+                );
             }
-            // might not need this event, because multiple solutions can be submitted for 1 intent, we only need the choosen one
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
                 info!("\nSolutionSubmitted log - {:?}", log);
-                let IntentLibV2::SolutionSubmitted { intentId, solver, .. } =
+                let IntentLibV2::SolutionSubmitted { intentId, solver } =
                     log.log_decode().unwrap().inner.data;
-                let solution_data = log.data().data.clone();
-                debug!("solution log {:?}", solution_data);
-                let solution_slice = solution_data.as_ref();
-                let solution_decoded = IntentTypesLib::SoliditySolution::abi_decode(solution_slice, true).unwrap();
-                debug!("Solution decoded {:?}", solution_decoded);
-                info!("Intent Solution submitted from {solver} for intentId {intentId}");
+
+                let solution_transaction_hash = log.transaction_hash.unwrap();
+                let intent_block_number = log.block_number.unwrap();
+                let intent_id = intentId as i64;
+                let solver_address = solver.to_string();
+                let transaction_hash = solution_transaction_hash.to_string();
+                let block_number = intent_block_number as i64;
+                let timestamp = std::time::SystemTime::now();
+
+                let query = "INSERT INTO solution VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &intent_id,
+                            &solver_address,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!("Row inserted response {:?}", response);
+
+                let intent_state_update_query =
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                update_intent_state(
+                    intent_state_update_query,
+                    &intent_id,
+                    IntentVersions::SolutionSubmitted as i64,
+                    "SolutionSubmitted",
+                    transaction_hash,
+                    &client,
+                );
             }
             Some(&IntentLibV2::OrderCreated::SIGNATURE_HASH) => {
-                let IntentLibV2::OrderCreated {intentId, orderId, order} = log.log_decode().unwrap().inner.data;
-                info!("Received order for {intentId}, with order Id {orderId}");
+                let IntentLibV2::OrderCreated {
+                    intentId,
+                    orderId,
+                    order,
+                } = log.log_decode().unwrap().inner.data;
+                info!("\nReceived order for {intentId}, with order Id {orderId}");
                 debug!("order data {order}");
+                let order_slice = order.as_ref();
+                let order_struct = SolidityOrder::abi_decode(order_slice, true).unwrap();
+
+                let intent_id = order_struct.intentId as i64;
+                let creator_address = order_struct.initiatorAddress.to_string();
+                let token_in = order_struct.tokenIn.to_string();
+                let token_out = order_struct.tokenOut.to_string();
+                let amount_in = order_struct.amountIn.to_string();
+                let amount_out = order_struct.amountOut.to_string();
+                let transaction_hash = log.transaction_hash.unwrap().to_string();
+                let block_number = log.block_number.unwrap() as i64;
+
+                let current_timestamp = std::time::SystemTime::now();
+                let timestamp = current_timestamp;
+
+                let query: &str =
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &intent_id,
+                            &creator_address,
+                            &token_in,
+                            &token_out,
+                            &amount_in,
+                            &amount_out,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!("Storing order response {:?}", response);
+
+                let intent_state_update_query =
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                update_intent_state(
+                    intent_state_update_query,
+                    &intent_id,
+                    IntentVersions::OrderCreated as i64,
+                    "Order Created",
+                    transaction_hash,
+                    &client,
+                );
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {
                 debug!("\nAcknowledgementReceived log - {:?}", log);
@@ -64,9 +208,47 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                     intentId,
                     sender,
                     result,
-                    errorMessage
+                    errorMessage,
                 } = log.log_decode().unwrap().inner.data;
                 info!("AcknowledgementReceived for {intentId} from {sender} with result {result}");
+
+                let transaction_hash = log.transaction_hash.unwrap().to_string();
+                let block_number = log.block_number.unwrap() as i64;
+                let intent_id = intentId as i64;
+                let sender_address = sender.to_string();
+                let result = result;
+                let error_message = errorMessage;
+                let timestamp = std::time::SystemTime::now();
+
+                let query =
+                    "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &intent_id,
+                            &sender_address,
+                            &result,
+                            &error_message,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!("Row inserted response {:?}", response);
+
+                let intent_state_update_query =
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                update_intent_state(
+                    intent_state_update_query,
+                    &intent_id,
+                    IntentVersions::AcknowledgementReceived as i64,
+                    "Acknowledgement Received",
+                    transaction_hash,
+                    &client,
+                );
             }
             Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
                 let Vault::ReceivedMessageOnVault {
@@ -78,30 +260,115 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>) {
                 debug!("\nReceivedMessageOnVault log - {:?}", log);
                 // have to get intent_id here. process the message
                 info!("Received Message on Vault from id {origin} by {sender}, message = {message}, using provider = {provider}");
-            }
-            Some(&MockLN::OrderCreated::SIGNATURE_HASH) => {
-                let MockLN::OrderCreated {
-                    orderId,
-                    creator,
-                    tokenIn,
-                    tokenOut,
-                    amountIn,
-                    amountOut
-                } = log.log_decode().unwrap().inner.data;
-                debug!("\nOrderCreated log - {:?}", log);
-                // orderId is the intentId
-                info!("Order created on MockLN");
+
+                let message_slice = message.as_ref();
+                let decoded_message =
+                    SolidityVaultBoundMessage::abi_decode(message_slice, true).unwrap();
+                let decoded_message_data = VaultBoundMessagePlaceOrderData::abi_decode(
+                    decoded_message.data.as_ref(),
+                    true,
+                )
+                .unwrap();
+
+                let transaction_hash = log.transaction_hash.unwrap().to_string();
+                let block_number = log.block_number.unwrap() as i64;
+                let intent_id = decoded_message_data.order.intentId as i64;
+                let origin_domain_id = decoded_message_data.order.sourceChainId.to_string();
+                let sender_address = decoded_message_data.order.initiatorAddress.to_string();
+                let provider = provider as i8;
+                let message = message.to_string();
+                let timestamp = std::time::SystemTime::now();
+
+                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &intent_id,
+                            &origin_domain_id,
+                            &sender_address,
+                            &message,
+                            &provider,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!("Row inserted response {:?}", response);
+
+                let intent_state_update_query =
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                update_intent_state(
+                    intent_state_update_query,
+                    &intent_id,
+                    IntentVersions::ReceivedMessageOnVault as i64,
+                    "Message Received on Vault",
+                    transaction_hash,
+                    &client,
+                );
             }
             Some(&Vault::MessageDispatchedFromVault::SIGNATURE_HASH) => {
                 let Vault::MessageDispatchedFromVault {
                     sender,
                     destinationDomain,
                     provider,
-                    message
+                    message,
                 } = log.log_decode().unwrap().inner.data;
                 debug!("\nMessageDispatchedFromVault log - {:?}", log);
                 // have to get intentId here.
                 info!("Message dispatched from vault");
+
+                let decoded_message =
+                    SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true)
+                        .unwrap();
+                let decoded_message_data =
+                    IntentProcessorBoundMessageAcknowledgementData::abi_decode(
+                        decoded_message.data.as_ref(),
+                        true,
+                    )
+                    .unwrap();
+
+                let intent_id = decoded_message_data.intentId as i64;
+                let sender_address = log.address().to_string();
+                let destination_domain_id = destinationDomain as i64;
+                let provider = provider as i8;
+                let message = message.to_string();
+                let transaction_hash = log.transaction_hash.unwrap().to_string();
+                let block_number = log.block_number.unwrap() as i64;
+                let timestamp = std::time::SystemTime::now();
+
+                let query =
+                    "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &intent_id,
+                            &sender_address,
+                            &destination_domain_id,
+                            &provider,
+                            &message,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!("Row inserted response {:?}", response);
+
+                let intent_state_update_query =
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                update_intent_state(
+                    intent_state_update_query,
+                    &intent_id,
+                    IntentVersions::MessageDispatchedFromVault as i64,
+                    "Acknowledgement Received",
+                    transaction_hash,
+                    &client,
+                );
             }
             _ => {
                 info!("\ndidn't match anything, {:?}", log);
