@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::BlockchainIndexer;
 use alloy::{
     hex::FromHex,
@@ -7,6 +9,7 @@ use alloy::{
 };
 use async_trait::async_trait;
 use log::info;
+use tokio_postgres::Client;
 use crate::events::event_processor;
 
 pub struct EvmIndexer {
@@ -25,7 +28,7 @@ impl EvmIndexer {
 
 #[async_trait]
 impl BlockchainIndexer for EvmIndexer {
-    async fn listen_for_events(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn listen_for_events(&self, client: Arc<Client>) -> Result<(), Box<dyn std::error::Error>> {
         let ws = WsConnect::new(self.rpc_url.clone());
         let provider = ProviderBuilder::new().on_ws(ws).await.unwrap();
         let contract_addr = Address::from_hex(self.contract_address.clone()).unwrap();
@@ -39,7 +42,7 @@ impl BlockchainIndexer for EvmIndexer {
 
         let task_id = tokio::task::id();
         info!("Starting {task_id}");
-        event_processor::process_evm_events(stream).await;
+        event_processor::process_evm_events(stream, client).await;
         Ok(())
     }
 }

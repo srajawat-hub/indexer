@@ -308,23 +308,6 @@ sol! {
     }
 
     #[derive(Debug)]
-    struct SolidityOrder {
-        uint64 intentId;
-        uint256 amountIn;
-        bytes32 tokenIn;
-        uint256 amountOut;
-        bytes32 tokenOut;
-        SolidityReceiver receiver;
-        uint256 sourceChainId;
-        uint256 destinationChainId;
-        uint64 timeoutUnixTimestampInSec;
-        SoliditySolutionType solution;
-        bytes hook;
-        address initiatorAddress;
-        bytes additionalData;
-    }
-
-    #[derive(Debug)]
     enum SolutionTypeEnum {
         LocalTransfer,
         LocalSwap,
@@ -442,4 +425,29 @@ sol! {
         bool isVaultActive;
         uint256 chainId;
     }
+
+    #[derive(Debug)]
+    struct SolidityOrder {
+        uint64 intentId;
+        uint64 orderId;
+        uint256 amountIn;
+        bytes32 tokenIn;
+        uint256 amountOut;
+        bytes32 tokenOut;
+        SolidityReceiver receiver;
+        /// The source chain id is the identifier of the chain
+        /// in our contract. This is used to send the message
+        /// to the correct chain.
+        ///
+        /// This field is not used by the vaults.
+        uint256 sourceChainId;
+        /// Used to update the user balance on successful acknowledgement
+        uint256 destinationChainId;
+        uint64 timeoutUnixTimestampInSec;
+        SoliditySolutionType solution;
+        bytes hook;
+        address initiatorAddress;
+        bytes additionalData;
+    }
+
 }

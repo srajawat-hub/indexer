@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use super::BlockchainIndexer;
 use async_trait::async_trait;
 use log::info;
+use tokio_postgres::Client;
 
 pub struct SolanaIndexer {
     rpc_url: String,
@@ -16,7 +19,7 @@ impl SolanaIndexer {
 
 #[async_trait]
 impl BlockchainIndexer for SolanaIndexer {
-    async fn listen_for_events(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn listen_for_events(&self, client: Arc<Client>) -> Result<(), Box<dyn std::error::Error>> {
         // Placeholder logic for listening to Solana program events
         info!(
             "Listening to events for Solana program {} on RPC {}",
