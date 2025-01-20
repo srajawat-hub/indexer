@@ -56,14 +56,14 @@ impl ToString for IntentStage {
 }
 
 pub async fn update_intent_state(
-    query: &str,
     intent_id: &i64,
     version: i32,
     stage: &str,
     transaction_hash: String,
     client: &Arc<Client>,
 ) {
-    // let gas_fees = 1 as i64;
+    // let gas_fees = 1 as i64; // updating gas token
+    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT, DEFAULT)";
     let timestamp = std::time::SystemTime::now();
     let intent_state_response = client
         .execute(
@@ -117,10 +117,7 @@ pub async fn process_evm_events(
                     response
                 );
 
-                let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
-                    intent_state_update_query,
                     &intent_id,
                     IntentVersions::IntentSubmitted as i32,
                     &IntentStage::Initialized.to_string(),
@@ -162,10 +159,7 @@ pub async fn process_evm_events(
                     response
                 );
 
-                let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
-                    intent_state_update_query,
                     &intent_id,
                     IntentVersions::SolutionSubmitted as i32,
                     &IntentStage::Processing.to_string(),
@@ -221,10 +215,7 @@ pub async fn process_evm_events(
                     .unwrap();
                 info!("IntentLibV2::OrderCreated inserted response {:?}", response);
 
-                let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
-                    intent_state_update_query,
                     &intent_id,
                     IntentVersions::OrderCreated as i32,
                     &IntentStage::Processing.to_string(),
@@ -268,12 +259,12 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!("InteropLibV2::AcknowledgementReceived inserted response {:?}", response);
+                info!(
+                    "InteropLibV2::AcknowledgementReceived inserted response {:?}",
+                    response
+                );
 
-                let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
-                    intent_state_update_query,
                     &intent_id,
                     IntentVersions::AcknowledgementReceived as i32,
                     &IntentStage::Done.to_string(),
@@ -325,17 +316,17 @@ pub async fn process_evm_events(
                             &block_number,
                             &timestamp,
                             &chain_id,
-                            &order_id
+                            &order_id,
                         ],
                     )
                     .await
                     .unwrap();
-                info!("Vault::ReceivedMessageOnVault inserted response {:?}", response);
+                info!(
+                    "Vault::ReceivedMessageOnVault inserted response {:?}",
+                    response
+                );
 
-                let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
-                    intent_state_update_query,
                     &intent_id,
                     IntentVersions::ReceivedMessageOnVault as i32,
                     &IntentStage::Processing.to_string(),
@@ -392,12 +383,12 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!("Vault::MessageDispatchedFromVault inserted response {:?}", response);
+                info!(
+                    "Vault::MessageDispatchedFromVault inserted response {:?}",
+                    response
+                );
 
-                let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
-                    intent_state_update_query,
                     &intent_id,
                     IntentVersions::MessageDispatchedFromVault as i32,
                     &IntentStage::Processing.to_string(),
