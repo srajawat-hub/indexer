@@ -78,7 +78,6 @@ pub async fn update_intent_state(
             0 as i64
         }
     };
-    // let gas_used = transaction_receipt
     let txn_hash_str = transaction_hash.to_string();
     let intent_state_response = client
         .execute(
@@ -214,12 +213,14 @@ pub async fn process_evm_events(
                 let amount_out = order_struct.amountOut.to_string();
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
+                let source_chain_id = order_struct.sourceChainId.to_string();
+                let destination_chain_id = order_struct.destinationChainId.to_string();
 
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
                 let response = client
                     .execute(
                         query,
@@ -234,6 +235,8 @@ pub async fn process_evm_events(
                             &block_number,
                             &timestamp,
                             &order_id,
+                            &source_chain_id,
+                            &destination_chain_id
                         ],
                     )
                     .await

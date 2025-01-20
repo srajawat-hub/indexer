@@ -41,7 +41,6 @@ received_message_on_vault (
 order_created (
     id BIGSERIAL PRIMARY KEY,
     intent_id BIGINT NOT NULL,
-    order_id BIGINT NOT NULL,
     creator_address VARCHAR(66) NOT NULL,
     token_in VARCHAR(66) NOT NULL,
     token_out VARCHAR(66) NOT NULL,
@@ -49,7 +48,10 @@ order_created (
     amount_out NUMERIC(38, 18) NOT NULL,
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
-    timestamp TIMESTAMP NOT NULL
+    timestamp TIMESTAMP NOT NULL,
+    order_id BIGINT NOT NULL,
+    source_chain_id TEXT NOT NULL,
+    destination_chain_id TEXT NOT NULL
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,

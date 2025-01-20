@@ -117,11 +117,11 @@ async fn main() {
     // Start the API server
     let api_server = HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(Arc::clone(&db_server_client))) // Pass the database client
-            .route("/intents/{intent_id}", web::get().to(fetch_intents)) // Define the route
+            .app_data(web::Data::new(Arc::clone(&db_server_client)))
+            .route("/intents/{intent_id}", web::get().to(fetch_intents))
     })
     .bind("127.0.0.1:8080")
-    .unwrap() // Run on localhost:8080
+    .unwrap()
     .run()
     .await;
 
