@@ -77,12 +77,12 @@ async fn main() {
         .parse::<String>()
         .unwrap();
 
-    // let connect_statement = format!(
-    //     "host={} user={} password={} dbname={}",
-    //     db_host, db_user, db_password, db_name
-    // );
+    let connect_statement = format!(
+        "host={} user={} password={} dbname={}",
+        db_host, db_user, db_password, db_name
+    );
 
-    let connect_statement = std::env::var("DB_CONNECTION_STRING").expect("DB_CONNECTION_STRING must be set").parse::<String>().unwrap();
+    // let connect_statement = std::env::var("DB_CONNECTION_STRING").expect("DB_CONNECTION_STRING must be set").parse::<String>().unwrap();
     let (client, connection) = tokio_postgres::connect(&connect_statement, NoTls)
         .await
         .unwrap();
@@ -151,6 +151,8 @@ struct OrderData {
     token_out: String,
     amount_in: String,
     amount_out: String,
+    source_chain_id: String,
+    destination_chain_id: String
 }
 
 // Handler to fetch data from the database
@@ -188,6 +190,8 @@ async fn fetch_intents(
                                 token_out: order.get("token_out"),
                                 amount_in: order.get("amount_in"),
                                 amount_out: order.get("amount_out"),
+                                source_chain_id: order.get("source_chain_id"),
+                                destination_chain_id: order.get("destination_chain_id")
                             };
                             order_struct_data
                         })
