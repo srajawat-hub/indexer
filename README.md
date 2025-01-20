@@ -70,6 +70,7 @@ intent_state (
     stage TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL
     gas_fees BIGINT // in eth
+    gas_token TEXT
 );
 ```
 
