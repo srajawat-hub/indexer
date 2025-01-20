@@ -3,13 +3,13 @@ mod events;
 mod indexers;
 pub mod solidity_structs;
 
-use futures_util::future;
-use std::future::Future;
-use std::sync::Arc;
-
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use dotenv::dotenv;
+use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
+use std::sync::Arc;
+use std::{fmt::format, future::Future};
 use tokio::signal;
 use tokio_postgres::{connect, NoTls};
 
@@ -19,6 +19,8 @@ fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + S
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
     env_logger::builder()
         .format(|buf, record| {
             use std::io::Write;
@@ -33,8 +35,28 @@ async fn main() {
         .init();
 
     // // make a db connection
+    let db_host = std::env::var("DB_HOST")
+        .expect("DB_HOST must be set")
+        .parse::<String>().unwrap();
+
+    let db_user = std::env::var("DB_USER")
+    .expect("DB_USER must be set")
+    .parse::<String>().unwrap();
+
+    let db_password = std::env::var("DB_PASSWORD")
+    .expect("DB_PASSWORD must be set")
+    .parse::<String>().unwrap();
+
+    let db_name = std::env::var("DB_NAME")
+    .expect("DB_NAME must be set")
+    .parse::<String>().unwrap();
+
+    let connect_statement = format!(
+        "host={} user={} password={} dbname={}",
+        db_host, db_user, db_password, db_name
+    );
     let (client, connection) = tokio_postgres::connect(
-        "host=localhost user=postgres password=postgres dbname=mydb",
+        &connect_statement,
         NoTls,
     )
     .await
@@ -106,6 +128,7 @@ async fn main() {
 struct IntentResponse {
     intent_id: i64,
     transaction_hash: String,
+    version: i32,
     stage: String,
     owner_address: String,
     block_number: i64,
@@ -119,7 +142,7 @@ struct OrderData {
     token_in: String,
     token_out: String,
     amount_in: String,
-    amount_out: String
+    amount_out: String,
 }
 
 // Handler to fetch data from the database
@@ -155,10 +178,9 @@ async fn fetch_intents(
                                 token_in: order.get("token_in"),
                                 token_out: order.get("token_out"),
                                 amount_in: order.get("amount_in"),
-                                amount_out: order.get("amount_out")
+                                amount_out: order.get("amount_out"),
                             };
                             order_struct_data
-                            // (id, intent_id, transaction_hash)
                         })
                         .collect();
                     Some(data)
@@ -169,6 +191,7 @@ async fn fetch_intents(
             let data = IntentResponse {
                 intent_id: row.get("intent_id"),
                 transaction_hash: row.get("transaction_hash"),
+                version: row.get("version"),
                 stage: stage.to_string(),
                 owner_address: row.get("owner_address"),
                 block_number: row.get("block_number"),
