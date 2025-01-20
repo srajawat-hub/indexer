@@ -35,7 +35,8 @@ received_message_on_vault (
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
-    chain_id BIGINT NOT NULL
+    chain_id BIGINT NOT NULL,
+    order_id BIGINT NOT NULL
 );
 order_created (
     id BIGSERIAL PRIMARY KEY,

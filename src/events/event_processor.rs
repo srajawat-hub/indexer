@@ -304,13 +304,14 @@ pub async fn process_evm_events(
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
                 let intent_id = decoded_message_data.order.intentId as i64;
+                let order_id = decoded_message_data.order.orderId as i64;
                 let origin_domain_id = origin as i32;
                 let sender_address = decoded_message_data.order.initiatorAddress.to_string();
                 let provider = provider as i32;
                 let message = message.to_string();
                 let timestamp = std::time::SystemTime::now();
 
-                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
                 let response = client
                     .execute(
                         query,
@@ -324,6 +325,7 @@ pub async fn process_evm_events(
                             &block_number,
                             &timestamp,
                             &chain_id,
+                            &order_id
                         ],
                     )
                     .await
