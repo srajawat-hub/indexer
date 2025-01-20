@@ -27,7 +27,7 @@ acknowledgement (
 );
 received_message_on_vault (
     id BIGSERIAL PRIMARY KEY,
-    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    intent_id BIGINT NOT NULL,
     origin_domain_id INTEGER NOT NULL,
     sender_address VARCHAR(44) NOT NULL,
     message TEXT NOT NULL,
@@ -38,7 +38,8 @@ received_message_on_vault (
 );
 order_created (
     id BIGSERIAL PRIMARY KEY,
-    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    intent_id BIGINT NOT NULL,
+    order_id BIGINT NOT NULL,
     creator_address VARCHAR(66) NOT NULL,
     token_in VARCHAR(66) NOT NULL,
     token_out VARCHAR(66) NOT NULL,
@@ -50,7 +51,7 @@ order_created (
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,
-    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    intent_id BIGINT NOT NULL,
     sender_address VARCHAR(66) NOT NULL,
     destination_domain_id INTEGER NOT NULL,
     provider INTEGER NOT NULL,
@@ -66,7 +67,7 @@ intent_state (
     transaction_hash VARCHAR(88) NOT NULL,
     stage TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL
-    gas_fees INTEGER // in eth
+    gas_fees BIGINT // in eth
 );
 ```
 

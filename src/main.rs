@@ -53,19 +53,19 @@ async fn main() {
         ),
         create_evm_indexer(
             "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0x22c423540918032B206Df38d86AFCB9B22eF1c0f",
+            "0x8e3658985a9fE3d038925952101382792c57B70F",
         ),
         create_evm_indexer(
             "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0x49E8FcC52698e78786ea1d929e1b3f1A7945Bccb",
+            "0x09D3b27BC29ada4D9F17d797BC7010672C51f37D",
         ),
         create_evm_indexer(
             "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0x42Ad426D1C9dA42648535DEE83D9fc73bAd9f274",
+            "0xd6A3eB183eDCe33c44426Ab8cF94F1612b4C2102",
         ),
         create_evm_indexer(
             "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0xB5F67202064848c1528AbdC9e9e49a776E08ecC3",
+            "0x5D4337dE92AFE95Bf2218c86255ea87855561d6E",
         ),
     ];
 

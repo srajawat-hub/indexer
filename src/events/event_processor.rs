@@ -32,18 +32,40 @@ enum IntentVersions {
     OrderCreated,
     ReceivedMessageOnVault,
     MessageDispatchedFromVault,
-    AcknowledgementReceived
+    AcknowledgementReceived,
+    Error
 }
+
+#[derive(Debug)]
+enum IntentStage {
+    Initialized,
+    Processing,
+    Done,
+    Failed
+}
+
+impl ToString for IntentStage {
+    fn to_string(&self) -> String {
+        match self {
+            IntentStage::Initialized => "Initialized".to_string(),
+            IntentStage::Processing => "Processing".to_string(),
+            IntentStage::Done => "Done".to_string(),
+            IntentStage::Failed => "Failed".to_string(),
+        }
+    }
+}
+
+
 
 pub async fn update_intent_state(
     query: &str,
     intent_id: &i64,
-    version: i64,
+    version: i32,
     stage: &str,
     transaction_hash: String,
     client: &Arc<Client>,
 ) {
-    let gas_fees = 1 as i64;
+    // let gas_fees = 1 as i64;
     let timestamp = std::time::SystemTime::now();
     let intent_state_response = client
         .execute(
@@ -53,8 +75,7 @@ pub async fn update_intent_state(
                 &version,
                 &transaction_hash,
                 &stage,
-                &timestamp,
-                &gas_fees,
+                &timestamp
             ],
         )
         .await
@@ -97,15 +118,15 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 info!("Row inserted response {:?}", response);
 
                 let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
                     intent_state_update_query,
                     &intent_id,
-                    IntentVersions::IntentSubmitted as i64,
-                    "Initialized",
+                    IntentVersions::IntentSubmitted as i32,
+                    &IntentStage::Initialized.to_string(),
                     transaction_hash,
                     &client,
-                );
+                ).await;
             }
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
                 info!("\nSolutionSubmitted log - {:?}", log);
@@ -137,15 +158,15 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 info!("Row inserted response {:?}", response);
 
                 let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
                     intent_state_update_query,
                     &intent_id,
-                    IntentVersions::SolutionSubmitted as i64,
-                    "SolutionSubmitted",
+                    IntentVersions::SolutionSubmitted as i32,
+                    &IntentStage::Processing.to_string(),
                     transaction_hash,
                     &client,
-                );
+                ).await;
             }
             Some(&IntentLibV2::OrderCreated::SIGNATURE_HASH) => {
                 let IntentLibV2::OrderCreated {
@@ -159,6 +180,7 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 let order_struct = SolidityOrder::abi_decode(order_slice, true).unwrap();
 
                 let intent_id = order_struct.intentId as i64;
+                let order_id = orderId as i64;
                 let creator_address = order_struct.initiatorAddress.to_string();
                 let token_in = order_struct.tokenIn.to_string();
                 let token_out = order_struct.tokenOut.to_string();
@@ -171,7 +193,7 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 let timestamp = current_timestamp;
 
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
                 let response = client
                     .execute(
                         query,
@@ -185,6 +207,7 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                             &transaction_hash,
                             &block_number,
                             &timestamp,
+                            &order_id
                         ],
                     )
                     .await
@@ -192,15 +215,15 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 info!("Storing order response {:?}", response);
 
                 let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
                     intent_state_update_query,
                     &intent_id,
-                    IntentVersions::OrderCreated as i64,
-                    "Order Created",
+                    IntentVersions::OrderCreated as i32,
+                    &IntentStage::Processing.to_string(),
                     transaction_hash,
                     &client,
-                );
+                ).await;
             }
             Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {
                 debug!("\nAcknowledgementReceived log - {:?}", log);
@@ -240,15 +263,15 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 info!("Row inserted response {:?}", response);
 
                 let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
                     intent_state_update_query,
                     &intent_id,
-                    IntentVersions::AcknowledgementReceived as i64,
-                    "Acknowledgement Received",
+                    IntentVersions::AcknowledgementReceived as i32,
+                    &IntentStage::Done.to_string(),
                     transaction_hash,
                     &client,
-                );
+                ).await;
             }
             Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
                 let Vault::ReceivedMessageOnVault {
@@ -273,9 +296,9 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
                 let intent_id = decoded_message_data.order.intentId as i64;
-                let origin_domain_id = decoded_message_data.order.sourceChainId.to_string();
+                let origin_domain_id = origin as i32;
                 let sender_address = decoded_message_data.order.initiatorAddress.to_string();
-                let provider = provider as i8;
+                let provider = provider as i32;
                 let message = message.to_string();
                 let timestamp = std::time::SystemTime::now();
 
@@ -299,15 +322,15 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 info!("Row inserted response {:?}", response);
 
                 let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
                     intent_state_update_query,
                     &intent_id,
-                    IntentVersions::ReceivedMessageOnVault as i64,
-                    "Message Received on Vault",
+                    IntentVersions::ReceivedMessageOnVault as i32,
+                    &IntentStage::Processing.to_string(),
                     transaction_hash,
                     &client,
-                );
+                ).await;
             }
             Some(&Vault::MessageDispatchedFromVault::SIGNATURE_HASH) => {
                 let Vault::MessageDispatchedFromVault {
@@ -332,15 +355,15 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
 
                 let intent_id = decoded_message_data.intentId as i64;
                 let sender_address = log.address().to_string();
-                let destination_domain_id = destinationDomain as i64;
-                let provider = provider as i8;
+                let destination_domain_id = destinationDomain as i32;
+                let provider = provider as i32;
                 let message = message.to_string();
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
                 let timestamp = std::time::SystemTime::now();
 
                 let query =
-                    "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                    "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
                 let response = client
                     .execute(
                         query,
@@ -360,18 +383,18 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 info!("Row inserted response {:?}", response);
 
                 let intent_state_update_query =
-                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT)";
                 update_intent_state(
                     intent_state_update_query,
                     &intent_id,
-                    IntentVersions::MessageDispatchedFromVault as i64,
-                    "Acknowledgement Received",
+                    IntentVersions::MessageDispatchedFromVault as i32,
+                    &IntentStage::Processing.to_string(),
                     transaction_hash,
                     &client,
-                );
+                ).await;
             }
             _ => {
-                info!("\ndidn't match anything, {:?}", log);
+                info!("\ndidn't match any event, {:?}", log);
             }
         }
     }
