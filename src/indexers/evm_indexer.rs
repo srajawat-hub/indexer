@@ -39,14 +39,30 @@ impl BlockchainIndexer for EvmIndexer {
             71461164656 => {
                 // ip
                 let query = "SELECT * FROM intent ORDER BY id DESC LIMIT 1";
-                let response = client.query(query, &[]).await.unwrap();
-                let block_number: i64 = response[0].get("block_number");
+                let block_number = match client.query(query, &[]).await {
+                    Ok(row) => {
+                        if (row.len() > 0) {
+                            row[0].get("block_number")
+                        } else {
+                            provider.get_block_number().await.unwrap() as i64
+                        }
+                    },
+                    Err(e) => {
+                        provider.get_block_number().await.unwrap() as i64
+                    }
+                };
                 block_number as u64
             }
             _ => { // vaults
                 let query = "SELECT * FROM received_message_on_vault ORDER BY id DESC WHERE chain_id = $1 LIMIT 1";
                 let block_number: i64 = match client.query(query, &[&chain_id]).await {
-                    Ok(row) => row[0].get("block_number"),
+                    Ok(row) => {
+                        if (row.len() > 0) {
+                            row[0].get("block_number")
+                        } else {
+                            provider.get_block_number().await.unwrap() as i64
+                        }
+                    },
                     Err(e) => {
                         provider.get_block_number().await.unwrap() as i64
                     }

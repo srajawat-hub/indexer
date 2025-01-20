@@ -77,10 +77,12 @@ async fn main() {
         .parse::<String>()
         .unwrap();
 
-    let connect_statement = format!(
-        "host={} user={} password={} dbname={}",
-        db_host, db_user, db_password, db_name
-    );
+    // let connect_statement = format!(
+    //     "host={} user={} password={} dbname={}",
+    //     db_host, db_user, db_password, db_name
+    // );
+
+    let connect_statement = std::env::var("DB_CONNECTION_STRING").expect("DB_CONNECTION_STRING must be set").parse::<String>().unwrap();
     let (client, connection) = tokio_postgres::connect(&connect_statement, NoTls)
         .await
         .unwrap();
@@ -160,6 +162,7 @@ async fn fetch_intents(
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
     let query_orders = "SELECT * FROM order_created WHERE intent_id = $1";
+    let query_message_on_vaults = "SELECT * FROM received_message_on_vault WHERE intent_id = $1";
 
     match client.query_one(query_intents, &[intent_id.as_ref()]).await {
         Ok(rows) => {

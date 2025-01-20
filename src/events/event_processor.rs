@@ -68,7 +68,7 @@ pub async fn update_intent_state(
     let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT)";
     let timestamp = std::time::SystemTime::now();
 
-    let gas_used = match provider.get_transaction_receipt(transaction_hash).await {
+    let gas_used: i64 = match provider.get_transaction_receipt(transaction_hash).await {
         Ok(receipt) => {
             let txn = receipt.unwrap();
             let gas_used = txn.gas_used as i64;

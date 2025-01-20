@@ -9,7 +9,7 @@ intent (
 );
 solution (
     id BIGSERIAL PRIMARY KEY,
-    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    intent_id BIGINT NOT NULL,
     solver_address VARCHAR(44) NOT NULL,
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
@@ -17,7 +17,7 @@ solution (
 );
 acknowledgement (
     id BIGSERIAL PRIMARY KEY,
-    intent_id BIGINT NOT NULL REFERENCES intent_submitted(intent_id),
+    intent_id BIGINT NOT NULL,
     sender_address VARCHAR(44) NOT NULL,
     result BOOLEAN NOT NULL,
     error_message TEXT,
@@ -71,7 +71,7 @@ intent_state (
     transaction_hash VARCHAR(88) NOT NULL,
     stage TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL
-    gas_fees BIGINT // in eth
+    gas_fees BIGINT
     gas_token TEXT
 );
 ```
