@@ -83,12 +83,13 @@ pub async fn update_intent_state(
 }
 
 // Function to listen to events from a specific RPC and contract
-pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc<Client>) {
+pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc<Client>, chain_id: i64) {
     while let Some(log) = stream.next().await {
         match log.topic0() {
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
+                
                 println!("\nIntentSubmitted log - {:?}", log);
                 println!("Intent submitted from {owner} with intentId {intentId}");
 
@@ -302,7 +303,7 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                 let message = message.to_string();
                 let timestamp = std::time::SystemTime::now();
 
-                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
                 let response = client
                     .execute(
                         query,
@@ -315,6 +316,7 @@ pub async fn process_evm_events(mut stream: SubscriptionStream<Log>, client: Arc
                             &transaction_hash,
                             &block_number,
                             &timestamp,
+                            &chain_id
                         ],
                     )
                     .await
