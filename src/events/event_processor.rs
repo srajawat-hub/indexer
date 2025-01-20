@@ -1,7 +1,8 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use alloy::primitives::Bytes;
+use alloy::primitives::{Bytes, FixedBytes};
+use alloy::providers::Provider;
 use alloy::rpc::types::Log;
 use alloy::signers::k256::elliptic_curve::bigint;
 use alloy::sol_types::SolValue;
@@ -59,16 +60,37 @@ pub async fn update_intent_state(
     intent_id: &i64,
     version: i32,
     stage: &str,
-    transaction_hash: String,
+    transaction_hash: FixedBytes<32>,
     client: &Arc<Client>,
+    provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
 ) {
     // let gas_fees = 1 as i64; // updating gas token
-    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, DEFAULT, DEFAULT)";
+    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT)";
     let timestamp = std::time::SystemTime::now();
+
+    let gas_used = match provider.get_transaction_receipt(transaction_hash).await {
+        Ok(receipt) => {
+            let txn = receipt.unwrap();
+            let gas_used = txn.gas_used as i64;
+            gas_used
+        }
+        Err(e) => {
+            0 as i64
+        }
+    };
+    // let gas_used = transaction_receipt
+    let txn_hash_str = transaction_hash.to_string();
     let intent_state_response = client
         .execute(
             query,
-            &[&intent_id, &version, &transaction_hash, &stage, &timestamp],
+            &[
+                &intent_id,
+                &version,
+                &txn_hash_str,
+                &stage,
+                &timestamp,
+                &gas_used,
+            ],
         )
         .await
         .unwrap();
@@ -80,13 +102,14 @@ pub async fn process_evm_events(
     mut stream: SubscriptionStream<Log>,
     client: Arc<Client>,
     chain_id: i64,
+    chain_provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
 ) {
     while let Some(log) = stream.next().await {
         match log.topic0() {
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
-
+                info!("check log {:?}", log);
                 info!("IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
 
                 let intent_transaction_hash = log.transaction_hash.unwrap();
@@ -121,8 +144,9 @@ pub async fn process_evm_events(
                     &intent_id,
                     IntentVersions::IntentSubmitted as i32,
                     &IntentStage::Initialized.to_string(),
-                    transaction_hash,
+                    log.transaction_hash.unwrap(),
                     &client,
+                    chain_provider.clone(),
                 )
                 .await;
             }
@@ -163,8 +187,9 @@ pub async fn process_evm_events(
                     &intent_id,
                     IntentVersions::SolutionSubmitted as i32,
                     &IntentStage::Processing.to_string(),
-                    transaction_hash,
+                    log.transaction_hash.unwrap(),
                     &client,
+                    chain_provider.clone(),
                 )
                 .await;
             }
@@ -219,8 +244,9 @@ pub async fn process_evm_events(
                     &intent_id,
                     IntentVersions::OrderCreated as i32,
                     &IntentStage::Processing.to_string(),
-                    transaction_hash,
+                    log.transaction_hash.unwrap(),
                     &client,
+                    chain_provider.clone(),
                 )
                 .await;
             }
@@ -268,8 +294,9 @@ pub async fn process_evm_events(
                     &intent_id,
                     IntentVersions::AcknowledgementReceived as i32,
                     &IntentStage::Done.to_string(),
-                    transaction_hash,
+                    log.transaction_hash.unwrap(),
                     &client,
+                    chain_provider.clone(),
                 )
                 .await;
             }
@@ -330,8 +357,9 @@ pub async fn process_evm_events(
                     &intent_id,
                     IntentVersions::ReceivedMessageOnVault as i32,
                     &IntentStage::Processing.to_string(),
-                    transaction_hash,
+                    log.transaction_hash.unwrap(),
                     &client,
+                    chain_provider.clone(),
                 )
                 .await;
             }
@@ -392,8 +420,9 @@ pub async fn process_evm_events(
                     &intent_id,
                     IntentVersions::MessageDispatchedFromVault as i32,
                     &IntentStage::Processing.to_string(),
-                    transaction_hash,
+                    log.transaction_hash.unwrap(),
                     &client,
+                    chain_provider.clone(),
                 )
                 .await;
             }

@@ -31,8 +31,8 @@ impl BlockchainIndexer for EvmIndexer {
     async fn listen_for_events(&self, client: Arc<Client>) -> Result<(), Box<dyn std::error::Error>> {
         // fetch the latest block number from the db and start from there.
         let ws = WsConnect::new(self.rpc_url.clone());
-        let provider = ProviderBuilder::new().on_ws(ws).await.unwrap();
-
+        let provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend> = ProviderBuilder::new().on_ws(ws).await.unwrap();
+        
         let chain_id = provider.get_chain_id().await.unwrap() as i64;
 
         let latest_block_number = match chain_id {
@@ -66,7 +66,7 @@ impl BlockchainIndexer for EvmIndexer {
 
         let task_id = tokio::task::id();
         info!("Starting {task_id}");
-        event_processor::process_evm_events(stream, client, chain_id).await;
+        event_processor::process_evm_events(stream, client, chain_id, provider).await;
         Ok(())
     }
 }
