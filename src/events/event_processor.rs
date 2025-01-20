@@ -133,7 +133,7 @@ pub async fn process_evm_events(
                 let IntentLibV2::SolutionSubmitted { intentId, solver } =
                     log.log_decode().unwrap().inner.data;
 
-                info!("IntentLibV2::SolutionSubmitted from {owner} with intentId {intentId}");
+                info!("IntentLibV2::SolutionSubmitted from {solver} with intentId {intentId}");
 
                 let solution_transaction_hash = log.transaction_hash.unwrap();
                 let intent_block_number = log.block_number.unwrap();

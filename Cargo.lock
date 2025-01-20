@@ -2314,6 +2314,7 @@ dependencies = [
  "hex",
  "log",
  "rust_decimal",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-postgres",

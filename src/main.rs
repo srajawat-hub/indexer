@@ -3,6 +3,8 @@ mod events;
 mod indexers;
 pub mod solidity_structs;
 
+use futures_util::future;
+use std::future::Future;
 use std::sync::Arc;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
@@ -85,34 +87,93 @@ async fn main() {
     info!("total threads {:?}", handles.len());
 
     // Start the API server
-    // let api_server = HttpServer::new(move || {
-    //     App::new()
-    //         .app_data(web::Data::new(Arc::clone(&db_server_client))) // Pass the database client
-    //         .route("/data", web::get().to(fetch_data)) // Define the route
-    // })
-    // .bind("127.0.0.1:8080")
-    // .unwrap() // Run on localhost:8080
-    // .run();
-    // .await;
+    let api_server = HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(Arc::clone(&db_server_client))) // Pass the database client
+            .route("/intents/{intent_id}", web::get().to(fetch_intents)) // Define the route
+    })
+    .bind("127.0.0.1:8080")
+    .unwrap() // Run on localhost:8080
+    .run()
+    .await;
 
     // Wait for Ctrl+C signal to exit
     signal::ctrl_c().await.unwrap();
     info!("Shutting down...");
 }
 
+#[derive(serde::Serialize)]
+struct IntentResponse {
+    intent_id: i64,
+    transaction_hash: String,
+    stage: String,
+    owner_address: String,
+    block_number: i64,
+    order_data: Option<Vec<OrderData>>,
+}
+
+#[derive(serde::Serialize)]
+struct OrderData {
+    order_id: i64,
+    transaction_hash: String,
+    token_in: String,
+    token_out: String,
+    amount_in: String,
+    amount_out: String
+}
+
 // Handler to fetch data from the database
-async fn fetch_data(client: web::Data<Arc<tokio_postgres::Client>>) -> impl Responder {
-    match client.query("SELECT * FROM your_table", &[]).await {
+async fn fetch_intents(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    intent_id: web::Path<i64>,
+) -> impl Responder {
+    let query_intents = "SELECT * FROM intent WHERE intent_id = $1";
+    let query_intent_state =
+        "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
+    let query_orders = "SELECT * FROM order_created WHERE intent_id = $1";
+
+    match client.query_one(query_intents, &[intent_id.as_ref()]).await {
         Ok(rows) => {
-            let data: Vec<_> = rows
-                .iter()
-                .map(|row| {
-                    // Assuming your_table has columns id and name
-                    let id: i32 = row.get(0);
-                    let name: String = row.get(1);
-                    (id, name)
-                })
-                .collect();
+            let row = rows.clone();
+            let intent_id: i64 = row.get("intent_id");
+            let intent_state = client
+                .query(query_intent_state, &[&intent_id])
+                .await
+                .unwrap();
+            let stage: String = intent_state[0].get("stage");
+
+            let order_data = match client.query(query_orders, &[&intent_id]).await {
+                Ok(orders) => {
+                    let data: Vec<_> = orders
+                        .iter()
+                        .map(|order| {
+                            let order_id: i64 = order.get("order_id");
+                            let transaction_hash: String = order.get("transaction_hash");
+                            let order_struct_data = OrderData {
+                                order_id,
+                                transaction_hash,
+                                token_in: order.get("token_in"),
+                                token_out: order.get("token_out"),
+                                amount_in: order.get("amount_in"),
+                                amount_out: order.get("amount_out")
+                            };
+                            order_struct_data
+                            // (id, intent_id, transaction_hash)
+                        })
+                        .collect();
+                    Some(data)
+                }
+                Err(e) => None,
+            };
+
+            let data = IntentResponse {
+                intent_id: row.get("intent_id"),
+                transaction_hash: row.get("transaction_hash"),
+                stage: stage.to_string(),
+                owner_address: row.get("owner_address"),
+                block_number: row.get("block_number"),
+                order_data: order_data,
+            };
 
             HttpResponse::Ok().json(data) // Return JSON response
         }
