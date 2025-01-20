@@ -8,10 +8,32 @@ use dotenv::dotenv;
 use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
+use serde::Deserialize;
+use std::fs;
 use std::sync::Arc;
 use std::{fmt::format, future::Future};
 use tokio::signal;
 use tokio_postgres::{connect, NoTls};
+
+#[derive(Deserialize)]
+struct IndexerConfig {
+    url: String,
+    contract: String,
+}
+
+#[derive(Deserialize)]
+struct Config {
+    indexers: Vec<IndexerConfig>,
+}
+
+impl Config {
+    fn from_file(file_path: &str) -> Self {
+        let content = fs::read_to_string(file_path)
+            .expect("Failed to read configuration file");
+        toml::from_str(&content)
+            .expect("Failed to parse configuration file")
+    }
+}
 
 fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(EvmIndexer::new(url.to_string(), address.to_string()))
@@ -37,30 +59,31 @@ async fn main() {
     // // make a db connection
     let db_host = std::env::var("DB_HOST")
         .expect("DB_HOST must be set")
-        .parse::<String>().unwrap();
+        .parse::<String>()
+        .unwrap();
 
     let db_user = std::env::var("DB_USER")
-    .expect("DB_USER must be set")
-    .parse::<String>().unwrap();
+        .expect("DB_USER must be set")
+        .parse::<String>()
+        .unwrap();
 
     let db_password = std::env::var("DB_PASSWORD")
-    .expect("DB_PASSWORD must be set")
-    .parse::<String>().unwrap();
+        .expect("DB_PASSWORD must be set")
+        .parse::<String>()
+        .unwrap();
 
     let db_name = std::env::var("DB_NAME")
-    .expect("DB_NAME must be set")
-    .parse::<String>().unwrap();
+        .expect("DB_NAME must be set")
+        .parse::<String>()
+        .unwrap();
 
     let connect_statement = format!(
         "host={} user={} password={} dbname={}",
         db_host, db_user, db_password, db_name
     );
-    let (client, connection) = tokio_postgres::connect(
-        &connect_statement,
-        NoTls,
-    )
-    .await
-    .unwrap();
+    let (client, connection) = tokio_postgres::connect(&connect_statement, NoTls)
+        .await
+        .unwrap();
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             error!("DB Connection error {:?}", e);
@@ -70,28 +93,11 @@ async fn main() {
     let db_client = Arc::new(client);
     let db_server_client = Arc::clone(&db_client);
 
-    let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = vec![
-        create_evm_indexer(
-            "ws://192.241.245.190:18749",
-            "0xD50EFb5eA641E7BcaCB1600b464cC1f45ea91588",
-        ),
-        create_evm_indexer(
-            "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0x8e3658985a9fE3d038925952101382792c57B70F",
-        ),
-        create_evm_indexer(
-            "wss://arb-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0x09D3b27BC29ada4D9F17d797BC7010672C51f37D",
-        ),
-        create_evm_indexer(
-            "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0xd6A3eB183eDCe33c44426Ab8cF94F1612b4C2102",
-        ),
-        create_evm_indexer(
-            "wss://opt-sepolia.g.alchemy.com/v2/IiJTnNrz1Bp1PTE2vZf8T-ZWAXZ39pID",
-            "0x5D4337dE92AFE95Bf2218c86255ea87855561d6E",
-        ),
-    ];
+    let config = Config::from_file("config.toml");
+
+    let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config.indexers.into_iter()
+        .map(|conf| create_evm_indexer(&conf.url, &conf.contract))
+        .collect();
 
     let mut handles = vec![];
     for indexer in indexers {
