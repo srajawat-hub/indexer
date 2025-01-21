@@ -1,26 +1,16 @@
-use std::str::FromStr;
 use std::sync::Arc;
 
-use alloy::primitives::{Bytes, FixedBytes};
+use alloy::primitives::FixedBytes;
 use alloy::providers::Provider;
 use alloy::rpc::types::Log;
-use alloy::signers::k256::elliptic_curve::bigint;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
-use chrono::Utc;
 use futures_util::stream::StreamExt;
-use log::{debug, error, info};
-use rust_decimal::Decimal;
-use tokio_postgres::{connect, Client, NoTls};
+use log::{debug, info};
+use tokio_postgres::Client;
 
-use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2,
-    intent_processor::IntentProcessorV2::{self},
-    intenterop_lib_v2::InteropLibV2,
-    mocked_ln::MockLN,
-    vault::Vault,
-    IntentPayloadStakeData, SolidityAcknowledgementMetadata, SoliditySolution,
+    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2, vault::Vault,
 };
 use crate::solidity_structs::{
     IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
@@ -74,10 +64,10 @@ pub async fn update_intent_state(
             let gas_used = txn.gas_used as i64;
             gas_used
         }
-        Err(e) => 0 as i64,
+        Err(_e) => 0 as i64,
     };
     let txn_hash_str = transaction_hash.to_string();
-    let intent_state_response = client
+    let _intent_state_response = client
         .execute(
             query,
             &[

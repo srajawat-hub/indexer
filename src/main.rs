@@ -5,20 +5,21 @@ pub mod solidity_structs;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
-use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
-use log::{debug, error, info, trace};
+use log::{error, info};
 use serde::Deserialize;
 use std::fs;
 use std::sync::Arc;
-use std::{fmt::format, future::Future};
 use tokio::signal;
-use tokio_postgres::{connect, NoTls};
+use tokio_postgres::NoTls;
 
 #[derive(Deserialize)]
 struct IndexerConfig {
     url: String,
     contract: String,
+    #[serde(default)]
+    chain_id: i64,
+    execution_environment: String,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +36,19 @@ impl Config {
 
 fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(EvmIndexer::new(url.to_string(), address.to_string()))
+}
+
+fn create_solana_indexer(
+    url: &str,
+    program_id: &str,
+    chain_id: &i64,
+) -> Box<dyn BlockchainIndexer + Send + Sync> {
+    Box::new(SolanaIndexer::new(
+        url.to_string(),
+        url.to_string(),
+        *chain_id,
+        program_id.to_string(),
+    ))
 }
 
 #[tokio::main]
@@ -98,7 +112,18 @@ async fn main() {
     let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
         .indexers
         .into_iter()
-        .map(|conf| create_evm_indexer(&conf.url, &conf.contract))
+        .map(|conf| {
+            if conf.execution_environment == "EVM" {
+                create_evm_indexer(&conf.url, &conf.contract)
+            } else if conf.execution_environment == "SVM" {
+                create_solana_indexer(&conf.url, &conf.contract, &conf.chain_id)
+            } else {
+                panic!(
+                    "Invalid execution environment: {}",
+                    conf.execution_environment
+                );
+            }
+        })
         .collect();
 
     let mut handles = vec![];
@@ -117,7 +142,7 @@ async fn main() {
     info!("total threads {:?}", handles.len());
 
     // Start the API server
-    let api_server = HttpServer::new(move || {
+    let _api_server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(Arc::clone(&db_server_client)))
             .route("/intents/{intent_id}", web::get().to(fetch_intents))
@@ -164,7 +189,7 @@ async fn fetch_intents(
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
     let query_orders = "SELECT * FROM order_created WHERE intent_id = $1";
-    let query_message_on_vaults = "SELECT * FROM received_message_on_vault WHERE intent_id = $1";
+    let _query_message_on_vaults = "SELECT * FROM received_message_on_vault WHERE intent_id = $1";
 
     match client.query_one(query_intents, &[intent_id.as_ref()]).await {
         Ok(rows) => {
@@ -198,7 +223,7 @@ async fn fetch_intents(
                         .collect();
                     Some(data)
                 }
-                Err(e) => None,
+                Err(_e) => None,
             };
 
             let data = IntentResponse {
@@ -208,7 +233,7 @@ async fn fetch_intents(
                 stage: stage.to_string(),
                 owner_address: row.get("owner_address"),
                 block_number: row.get("block_number"),
-                order_data: order_data,
+                order_data,
             };
 
             HttpResponse::Ok().json(data) // Return JSON response
