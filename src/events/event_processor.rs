@@ -27,7 +27,7 @@ use crate::solidity_structs::{
     SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
 };
 
-enum IntentVersions {
+pub enum IntentVersions {
     IntentSubmitted,
     SolutionSubmitted,
     OrderCreated,
@@ -38,7 +38,7 @@ enum IntentVersions {
 }
 
 #[derive(Debug)]
-enum IntentStage {
+pub enum IntentStage {
     Initialized,
     Processing,
     Done,
