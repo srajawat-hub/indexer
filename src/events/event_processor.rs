@@ -74,9 +74,7 @@ pub async fn update_intent_state(
             let gas_used = txn.gas_used as i64;
             gas_used
         }
-        Err(e) => {
-            0 as i64
-        }
+        Err(e) => 0 as i64,
     };
     let txn_hash_str = transaction_hash.to_string();
     let intent_state_response = client
@@ -236,7 +234,7 @@ pub async fn process_evm_events(
                             &timestamp,
                             &order_id,
                             &source_chain_id,
-                            &destination_chain_id
+                            &destination_chain_id,
                         ],
                     )
                     .await

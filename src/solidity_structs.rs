@@ -70,7 +70,6 @@ pub mod intenterop_lib_v2 {
     );
 }
 
-
 // Define our intent payload enum using Alloy's sol! macro
 sol! {
     #[derive(Debug)]

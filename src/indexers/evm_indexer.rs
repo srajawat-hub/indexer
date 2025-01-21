@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::BlockchainIndexer;
+use crate::events::event_processor;
 use alloy::{
     hex::FromHex,
     primitives::Address,
@@ -10,7 +11,6 @@ use alloy::{
 use async_trait::async_trait;
 use log::info;
 use tokio_postgres::Client;
-use crate::events::event_processor;
 
 pub struct EvmIndexer {
     rpc_url: String,
@@ -28,11 +28,15 @@ impl EvmIndexer {
 
 #[async_trait]
 impl BlockchainIndexer for EvmIndexer {
-    async fn listen_for_events(&self, client: Arc<Client>) -> Result<(), Box<dyn std::error::Error>> {
+    async fn listen_for_events(
+        &self,
+        client: Arc<Client>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // fetch the latest block number from the db and start from there.
         let ws = WsConnect::new(self.rpc_url.clone());
-        let provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend> = ProviderBuilder::new().on_ws(ws).await.unwrap();
-        
+        let provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend> =
+            ProviderBuilder::new().on_ws(ws).await.unwrap();
+
         let chain_id = provider.get_chain_id().await.unwrap() as i64;
 
         let latest_block_number = match chain_id {
@@ -46,14 +50,13 @@ impl BlockchainIndexer for EvmIndexer {
                         } else {
                             provider.get_block_number().await.unwrap() as i64
                         }
-                    },
-                    Err(e) => {
-                        provider.get_block_number().await.unwrap() as i64
                     }
+                    Err(e) => provider.get_block_number().await.unwrap() as i64,
                 };
                 block_number as u64
             }
-            _ => { // vaults
+            _ => {
+                // vaults
                 let query = "SELECT * FROM received_message_on_vault ORDER BY id DESC WHERE chain_id = $1 LIMIT 1";
                 let block_number: i64 = match client.query(query, &[&chain_id]).await {
                     Ok(row) => {
@@ -62,10 +65,8 @@ impl BlockchainIndexer for EvmIndexer {
                         } else {
                             provider.get_block_number().await.unwrap() as i64
                         }
-                    },
-                    Err(e) => {
-                        provider.get_block_number().await.unwrap() as i64
                     }
+                    Err(e) => provider.get_block_number().await.unwrap() as i64,
                 };
                 block_number as u64
             }
@@ -77,8 +78,7 @@ impl BlockchainIndexer for EvmIndexer {
             .from_block(BlockNumberOrTag::Number(latest_block_number)); // make this from the last known block number
 
         let sub = provider.subscribe_logs(&filter).await.unwrap();
-        let stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log> =
-            sub.into_stream();
+        let stream: alloy::pubsub::SubscriptionStream<alloy::rpc::types::Log> = sub.into_stream();
 
         let task_id = tokio::task::id();
         info!("Starting {task_id}");

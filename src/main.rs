@@ -28,10 +28,8 @@ struct Config {
 
 impl Config {
     fn from_file(file_path: &str) -> Self {
-        let content = fs::read_to_string(file_path)
-            .expect("Failed to read configuration file");
-        toml::from_str(&content)
-            .expect("Failed to parse configuration file")
+        let content = fs::read_to_string(file_path).expect("Failed to read configuration file");
+        toml::from_str(&content).expect("Failed to parse configuration file")
     }
 }
 
@@ -97,7 +95,9 @@ async fn main() {
 
     let config = Config::from_file("config.toml");
 
-    let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config.indexers.into_iter()
+    let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
+        .indexers
+        .into_iter()
         .map(|conf| create_evm_indexer(&conf.url, &conf.contract))
         .collect();
 
@@ -152,7 +152,7 @@ struct OrderData {
     amount_in: String,
     amount_out: String,
     source_chain_id: String,
-    destination_chain_id: String
+    destination_chain_id: String,
 }
 
 // Handler to fetch data from the database
@@ -191,7 +191,7 @@ async fn fetch_intents(
                                 amount_in: order.get("amount_in"),
                                 amount_out: order.get("amount_out"),
                                 source_chain_id: order.get("source_chain_id"),
-                                destination_chain_id: order.get("destination_chain_id")
+                                destination_chain_id: order.get("destination_chain_id"),
                             };
                             order_struct_data
                         })
