@@ -169,13 +169,28 @@
                         "name": "creationTime",
                         "type": "uint256",
                         "internalType": "uint256"
+                    },
+                    {
+                        "name": "filler",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "claimer",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "multiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
                     }
                 ]
             },
             {
-                "name": "provider",
-                "type": "uint8",
-                "internalType": "enum IntentTypesLib.InteropProvider"
+                "name": "isMultiLeg",
+                "type": "bool",
+                "internalType": "bool"
             }
         ],
         "outputs": [],
@@ -211,32 +226,22 @@
                 "internalType": "uint64"
             },
             {
-                "name": "tokenIn",
+                "name": "token",
                 "type": "bytes32",
                 "internalType": "bytes32"
             },
             {
-                "name": "tokenOut",
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "filler",
                 "type": "bytes32",
                 "internalType": "bytes32"
-            },
-            {
-                "name": "amountIn",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "amountOut",
-                "type": "uint256",
-                "internalType": "uint256"
             },
             {
                 "name": "destinationChainId",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "sourceChainId",
                 "type": "uint256",
                 "internalType": "uint256"
             },
@@ -246,9 +251,9 @@
                 "internalType": "bytes32"
             },
             {
-                "name": "creationTime",
-                "type": "uint256",
-                "internalType": "uint256"
+                "name": "isMultiLeg",
+                "type": "bool",
+                "internalType": "bool"
             }
         ],
         "stateMutability": "view"
@@ -292,7 +297,7 @@
             {
                 "name": "",
                 "type": "tuple[]",
-                "internalType": "struct IMockLN.MockLNOrder[]",
+                "internalType": "struct IMockLN.ClaimableOrder[]",
                 "components": [
                     {
                         "name": "orderId",
@@ -300,44 +305,19 @@
                         "internalType": "uint64"
                     },
                     {
-                        "name": "tokenIn",
+                        "name": "token",
                         "type": "bytes32",
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "tokenOut",
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "claimer",
                         "type": "bytes32",
                         "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "receiverAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "creationTime",
-                        "type": "uint256",
-                        "internalType": "uint256"
                     }
                 ]
             }
@@ -363,7 +343,7 @@
             {
                 "name": "",
                 "type": "tuple[]",
-                "internalType": "struct IMockLN.MockLNOrder[]",
+                "internalType": "struct IMockLN.ClaimableOrder[]",
                 "components": [
                     {
                         "name": "orderId",
@@ -371,44 +351,19 @@
                         "internalType": "uint64"
                     },
                     {
-                        "name": "tokenIn",
+                        "name": "token",
                         "type": "bytes32",
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "tokenOut",
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "claimer",
                         "type": "bytes32",
                         "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "receiverAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "creationTime",
-                        "type": "uint256",
-                        "internalType": "uint256"
                     }
                 ]
             }
@@ -423,7 +378,7 @@
             {
                 "name": "",
                 "type": "tuple[]",
-                "internalType": "struct IMockLN.MockLNOrder[]",
+                "internalType": "struct IMockLN.FillableOrder[]",
                 "components": [
                     {
                         "name": "orderId",
@@ -431,32 +386,22 @@
                         "internalType": "uint64"
                     },
                     {
-                        "name": "tokenIn",
+                        "name": "token",
                         "type": "bytes32",
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "tokenOut",
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "filler",
                         "type": "bytes32",
                         "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
                     },
                     {
                         "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "sourceChainId",
                         "type": "uint256",
                         "internalType": "uint256"
                     },
@@ -466,9 +411,9 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "creationTime",
-                        "type": "uint256",
-                        "internalType": "uint256"
+                        "name": "isMultiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
                     }
                 ]
             }
@@ -494,7 +439,7 @@
             {
                 "name": "",
                 "type": "tuple[]",
-                "internalType": "struct IMockLN.MockLNOrder[]",
+                "internalType": "struct IMockLN.FillableOrder[]",
                 "components": [
                     {
                         "name": "orderId",
@@ -502,32 +447,22 @@
                         "internalType": "uint64"
                     },
                     {
-                        "name": "tokenIn",
+                        "name": "token",
                         "type": "bytes32",
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "tokenOut",
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "filler",
                         "type": "bytes32",
                         "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
                     },
                     {
                         "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "sourceChainId",
                         "type": "uint256",
                         "internalType": "uint256"
                     },
@@ -537,9 +472,9 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "creationTime",
-                        "type": "uint256",
-                        "internalType": "uint256"
+                        "name": "isMultiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
                     }
                 ]
             }
@@ -599,6 +534,21 @@
                         "name": "creationTime",
                         "type": "uint256",
                         "internalType": "uint256"
+                    },
+                    {
+                        "name": "filler",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "claimer",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "multiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
                     }
                 ]
             }
@@ -857,44 +807,19 @@
                 "internalType": "uint64"
             },
             {
-                "name": "tokenIn",
+                "name": "token",
                 "type": "bytes32",
                 "internalType": "bytes32"
             },
             {
-                "name": "tokenOut",
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "claimer",
                 "type": "bytes32",
                 "internalType": "bytes32"
-            },
-            {
-                "name": "amountIn",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "amountOut",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "destinationChainId",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "sourceChainId",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "receiverAddress",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "creationTime",
-                "type": "uint256",
-                "internalType": "uint256"
             }
         ],
         "stateMutability": "view"

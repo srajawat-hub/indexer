@@ -45,6 +45,31 @@
     },
     {
         "type": "event",
+        "name": "OrderCreated",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "order",
+                "type": "bytes",
+                "indexed": false,
+                "internalType": "bytes"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "SolutionSubmitted",
         "inputs": [
             {
@@ -134,6 +159,11 @@
     {
         "type": "error",
         "name": "E14",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "E15",
         "inputs": []
     },
     {

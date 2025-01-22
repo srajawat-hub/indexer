@@ -1,11 +1,13 @@
 pub mod evm_indexer;
 pub mod solana_indexer;
 
+use std::sync::Arc;
+use tokio_postgres::Client;
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait BlockchainIndexer {
-    async fn listen_for_events(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn listen_for_events(&self, client: Arc<Client>) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 pub use evm_indexer::EvmIndexer;
