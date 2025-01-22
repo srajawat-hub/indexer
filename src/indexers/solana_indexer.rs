@@ -30,7 +30,7 @@ use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTra
 use std::fmt::Debug;
 use tokio_postgres::Client;
 
-const MAX_LIMIT: u64 = 1;
+const MAX_LIMIT: u64 = 20;
 
 pub struct SolanaIndexer {
     rpc_url: String,
@@ -97,7 +97,13 @@ impl SolanaIndexer {
         let rpc_client = RpcClient::new(self.rpc_url.clone());
         let mut total_transactions = 0;
         let mut current_slot = rpc_client.get_slot().await.unwrap();
+        let mut fetched_previous_slots = true;
+        if current_slot < previously_fetched_slot {
+            fetched_previous_slots = false;
+        }
+        let mut latest_tx = None;
         loop {
+            sleep(Duration::from_secs(1)).await;
             info!(
                 "THis is last searched slot {:?} and last searched hash {:?}",
                 current_slot, last_searched_hash_val
@@ -109,7 +115,7 @@ impl SolanaIndexer {
                         // Start searching from this hash
                         before: last_searched_hash_val,
                         // Stops the search by checking the slot
-                        until: None,
+                        until: latest_tx,
                         limit: Some(MAX_LIMIT as usize),
                         ..GetConfirmedSignaturesForAddress2Config::default()
                     },
@@ -118,12 +124,13 @@ impl SolanaIndexer {
                 .unwrap();
             if sigs.is_empty() {
                 info!("Breaking because sigs length is 0");
-                return Ok(());
+                current_slot = rpc_client.get_slot().await.unwrap();
+                continue;
             }
-            // if last_searched_hash_val.is_none() {
-            //     last_searched_hash_val = Some(sigs.first().unwrap().signature.to_string().clone());
-            //     info!("latest hash is none {:?}", last_searched_hash_val);
-            // }
+            if last_searched_hash_val.is_none() {
+                latest_tx = Some(Signature::from_str(&sigs.first().unwrap().signature).unwrap());
+                info!("latest hash is {:?}", latest_tx);
+            }
             info!("Got signatures");
             let signatures_length = sigs.len();
             total_transactions += signatures_length;
@@ -396,10 +403,11 @@ impl SolanaIndexer {
                 "Total: {} , Latest hash: {:?}",
                 total_transactions, last_searched_hash_val
             );
-            if current_slot < (previously_fetched_slot - 10) {
+            if current_slot < (previously_fetched_slot - 10) || fetched_previous_slots {
                 // If the current slot is less than the previously fetched slot, then we have fetched all the transactions
                 last_searched_hash_val = None;
                 current_slot = rpc_client.get_slot().await.unwrap();
+                fetched_previous_slots = true;
             } else {
                 // Fetches the last signatures from the batch of signatures which are fetched. Used for getting
                 // the signatures before the signature below.
@@ -407,7 +415,6 @@ impl SolanaIndexer {
                 current_slot = last_sig.slot;
             }
         }
-        Ok(())
     }
 }
 
