@@ -1,8 +1,16 @@
-use std::{str::FromStr, sync::Arc};
+use std::{
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use crate::{
     events::event_processor::{IntentStage, IntentVersions},
-    solidity_structs::{SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData},
+    solidity_structs::{
+        IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData,
+        SolidityIntentProcessorBoundMessage, SolidityVaultBoundMessage,
+        VaultBoundMessagePlaceOrderData,
+    },
 };
 
 use super::BlockchainIndexer;
@@ -10,7 +18,7 @@ use alloy::dyn_abi::SolType;
 use async_trait::async_trait;
 use base64::Engine as Base64Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use chrono::Local;
+use chrono::{Local, NaiveDateTime, Utc};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use solana_client::{
@@ -22,7 +30,7 @@ use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTra
 use std::fmt::Debug;
 use tokio_postgres::Client;
 
-const MAX_LIMIT: u64 = 100;
+const MAX_LIMIT: u64 = 1;
 
 pub struct SolanaIndexer {
     rpc_url: String,
@@ -36,10 +44,13 @@ pub async fn update_intent_state(
     version: i32,
     stage: &str,
     transaction_hash: String,
+    order_id: &i64,
+    chain_id: &i64,
+    initiator_address: String,
     client: &Arc<Client>,
 ) {
     // let gas_fees = 1 as i64; // updating gas token
-    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT)";
+    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
     let timestamp = std::time::SystemTime::now();
 
     let txn_hash_str = transaction_hash.to_string();
@@ -53,6 +64,10 @@ pub async fn update_intent_state(
                 &stage,
                 &timestamp,
                 &0i64,
+                &"SOL".to_string(),
+                &order_id,
+                &chain_id,
+                &initiator_address,
             ],
         )
         .await
@@ -77,11 +92,12 @@ impl SolanaIndexer {
         database_client: Arc<Client>,
         previously_fetched_slot: u64,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut current_slot = 0;
+        info!("Fetching historical transactions");
         let mut last_searched_hash_val: Option<Signature> = None;
         let rpc_client = RpcClient::new(self.rpc_url.clone());
         let mut total_transactions = 0;
-        while current_slot > (previously_fetched_slot - 10) {
+        let mut current_slot = rpc_client.get_slot().await.unwrap();
+        loop {
             info!(
                 "THis is last searched slot {:?} and last searched hash {:?}",
                 current_slot, last_searched_hash_val
@@ -134,15 +150,37 @@ impl SolanaIndexer {
             // Since the rpc payload can be a array of objects, we can perform multiple
             // requests in a single RPC calls which is much much faster.
             let transactions: std::result::Result<Vec<Response>, reqwest::Error> =
-                reqwest::blocking::Client::new()
+                reqwest::Client::new()
                     .post(rpc_client.url())
                     .json(&body)
-                    .send()?
-                    .json();
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await;
 
-            let transactions = transactions?;
+            let transactions = match transactions {
+                Ok(tx) => tx,
+                Err(e) => {
+                    error!("Error fetching transactions due to {:?}", e);
+                    let response_in_text = reqwest::Client::new()
+                        .post(rpc_client.url())
+                        .json(&body)
+                        .send()
+                        .await
+                        .unwrap()
+                        .text()
+                        .await;
+                    info!("Response in text {:?}", response_in_text);
+                    return Ok(());
+                }
+            };
             info!("Got transactions");
             for (index, tx) in transactions.iter().enumerate() {
+                if let Some(err) = tx.result.transaction.meta.clone().unwrap().err {
+                    info!("Error in transaction {:?}", err);
+                    continue;
+                }
                 let logs = match tx.result.transaction.meta.clone().unwrap().log_messages {
                     solana_transaction_status::option_serializer::OptionSerializer::Some(e) => e,
                     _ => Vec::new(),
@@ -153,9 +191,9 @@ impl SolanaIndexer {
                 } else {
                     Local::now().timestamp()
                 };
+                let system_time = SystemTime::UNIX_EPOCH + Duration::from_millis(timestamp as u64);
                 let block_height = tx.result.slot as i64;
                 let signatures = &tx.result.transaction.transaction;
-                // let decoded_tx =
                 let tx_decoded = match signatures {
                     solana_transaction_status::EncodedTransaction::Binary(data, _) => {
                         let decoded = base64::decode(data).expect("Invalid base64");
@@ -179,64 +217,6 @@ impl SolanaIndexer {
                 let block_number = sigs[index].slot as i64;
                 for event in events {
                     match event {
-                        Event::MessageDispatchedFromVault(event) => {
-                            let MessageDispatchedFromVaultEvent {
-                                user_address,
-                                destination_domain,
-                                interop_provider,
-                                message,
-                            } = event;
-                            info!(target: "solana_indexer", "Vault::MessageDispatchedFromVault received from {user_address:?} to destination {destination_domain}");
-                            let message_slice = message.as_ref();
-                            let decoded_message =
-                                SolidityVaultBoundMessage::abi_decode(message_slice, true).unwrap();
-                            let decoded_message_data = VaultBoundMessagePlaceOrderData::abi_decode(
-                                decoded_message.data.as_ref(),
-                                true,
-                            )
-                            .unwrap();
-
-                            let intent_id = decoded_message_data.order.intentId as i64;
-                            let order_id = decoded_message_data.order.orderId as i64;
-                            let origin_domain_id = destination_domain as i32;
-                            let sender_address =
-                                decoded_message_data.order.initiatorAddress.to_string();
-                            let provider = interop_provider as i32;
-                            let tx_hash = sigs[index].signature.clone();
-
-                            let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
-                            let response = database_client
-                                .execute(
-                                    query,
-                                    &[
-                                        &intent_id,
-                                        &origin_domain_id,
-                                        &sender_address,
-                                        &message,
-                                        &provider,
-                                        &tx_hash,
-                                        &block_height,
-                                        &timestamp,
-                                        &self.chain_id,
-                                        &order_id,
-                                    ],
-                                )
-                                .await
-                                .unwrap();
-                            info!(
-                                "Vault::ReceivedMessageOnVault inserted response {:?}",
-                                response
-                            );
-
-                            update_intent_state(
-                                &intent_id,
-                                IntentVersions::ReceivedMessageOnVault as i32,
-                                &IntentStage::Processing.to_string(),
-                                tx_hash,
-                                &database_client,
-                            )
-                            .await;
-                        }
                         Event::ReceivedMessageOnVault(event) => {
                             let ReceivedMessageOnVaultEvent {
                                 sender,
@@ -244,21 +224,32 @@ impl SolanaIndexer {
                                 interop_provider,
                                 message,
                             } = event;
-                            info!(target: "solana_indexer", "Vault::ReceivedMessageOnVault by {sender:?}, message = {message:?}, using provider = {interop_provider:?}");
-                            let message_slice = message.as_ref();
-                            let decoded_message =
-                                SolidityVaultBoundMessage::abi_decode(message_slice, true).unwrap();
-                            let decoded_message_data = VaultBoundMessagePlaceOrderData::abi_decode(
-                                decoded_message.data.as_ref(),
-                                true,
-                            )
-                            .unwrap();
+                            info!(target: "solana_indexer", "Vault::ReceivedMessageOnVault received from {sender:?} to source {source_domain}");
 
-                            let intent_id = decoded_message_data.order.intentId as i64;
-                            let order_id = decoded_message_data.order.orderId as i64;
+                            let order_id =
+                                (u64::from_be_bytes(message[24..32].try_into().unwrap())) as i64;
+
+                            let query =
+                                "SELECT * FROM received_message_on_vault WHERE order_id = $1";
+                            let response =
+                                database_client.query(query, &[&order_id]).await.unwrap();
+                            if response.len() > 0 {
+                                continue;
+                            }
+
+                            let query = "SELECT * FROM order_created WHERE order_id = $1";
+                            let response =
+                                database_client.query(query, &[&order_id]).await.unwrap();
+
+                            let (intent_id, sender_address) = match response.len() {
+                                0 => (0i64, "".to_string()),
+                                _ => (
+                                    response[0].get("intent_id"),
+                                    response[0].get("creator_address"),
+                                ),
+                            };
+
                             let origin_domain_id = source_domain as i32;
-                            let sender_address =
-                                decoded_message_data.order.initiatorAddress.to_string();
                             let provider = interop_provider as i32;
                             let tx_hash = sigs[index].signature.clone();
 
@@ -270,12 +261,111 @@ impl SolanaIndexer {
                                         &intent_id,
                                         &origin_domain_id,
                                         &sender_address,
-                                        &message,
+                                        &hex::encode(message),
                                         &provider,
                                         &tx_hash,
-                                        &block_number,
-                                        &timestamp,
+                                        &block_height,
+                                        &system_time,
                                         &self.chain_id,
+                                        &order_id,
+                                    ],
+                                )
+                                .await
+                                .unwrap();
+                            info!(
+                                "Vault::ReceivedMessageOnVault inserted response {:?}",
+                                response
+                            );
+
+                            update_intent_state(
+                                &i64::from(intent_id),
+                                IntentVersions::ReceivedMessageOnVault as i32,
+                                &IntentStage::Processing.to_string(),
+                                tx_hash,
+                                &order_id,
+                                &self.chain_id,
+                                sender_address,
+                                &database_client,
+                            )
+                            .await;
+                        }
+                        Event::MessageDispatchedFromVault(event) => {
+                            let MessageDispatchedFromVaultEvent {
+                                user_address,
+                                destination_domain,
+                                interop_provider,
+                                message,
+                            } = event;
+                            info!(target: "solana_indexer", "Vault::MessageDispatchedFromVault by {user_address:?}, message = {message:?}, using provider = {interop_provider:?}");
+                            let message_slice = message.as_ref();
+                            if message.is_empty() {
+                                continue;
+                            }
+                            let decoded_message = SolidityIntentProcessorBoundMessage::abi_decode(
+                                message_slice,
+                                true,
+                            )
+                            .unwrap();
+                            let decoded_message_data =
+                                IntentProcessorBoundMessageAcknowledgementData::abi_decode(
+                                    decoded_message.data.as_ref(),
+                                    true,
+                                );
+                            let decoded_message_data = if let Ok(decoded_message_data) =
+                                decoded_message_data
+                            {
+                                decoded_message_data
+                            } else {
+                                let decoded_message_data =
+                                    IntentProcessorBoundMessageDepositData::abi_decode(
+                                        decoded_message.data.as_ref(),
+                                        true,
+                                    );
+                                error!("Error decoding message data: {:?}", decoded_message_data);
+                                continue;
+                            };
+
+                            let order_id = decoded_message_data.intentId as i64;
+                            let origin_domain_id = destination_domain as i32;
+                            let provider = interop_provider as i32;
+                            let tx_hash = sigs[index].signature.clone();
+
+                            let query =
+                                "SELECT * FROM message_dispatched_from_vault WHERE order_id = $1";
+                            let response =
+                                database_client.query(query, &[&order_id]).await.unwrap();
+                            if response.len() > 0 {
+                                continue;
+                            }
+
+                            // fetch intent_id
+                            let intent_id_query =
+                                "SELECT intent_id FROM order_created WHERE order_id = $1";
+                            let intent_id_response = database_client
+                                .query(intent_id_query, &[&order_id])
+                                .await
+                                .unwrap();
+                            let (intent_id, creator_address) = match intent_id_response.len() {
+                                0 => (0i64, "".to_string()),
+                                _ => (
+                                    response[0].get("intent_id"),
+                                    response[0].get("creator_address"),
+                                ),
+                            };
+
+                            let query = "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                            let response = database_client
+                                .execute(
+                                    query,
+                                    &[
+                                        &intent_id,
+                                        &hex::encode(creator_address.clone()),
+                                        &origin_domain_id,
+                                        &provider,
+                                        &hex::encode(message),
+                                        &transaction_hash,
+                                        &block_number,
+                                        &system_time,
                                         &order_id,
                                     ],
                                 )
@@ -291,6 +381,9 @@ impl SolanaIndexer {
                                 IntentVersions::ReceivedMessageOnVault as i32,
                                 &IntentStage::Processing.to_string(),
                                 tx_hash,
+                                &order_id,
+                                &self.chain_id,
+                                hex::encode(creator_address),
                                 &database_client,
                             )
                             .await;
@@ -303,10 +396,16 @@ impl SolanaIndexer {
                 "Total: {} , Latest hash: {:?}",
                 total_transactions, last_searched_hash_val
             );
-            // Fetches the last signatures from the batch of signatures which are fetched. Used for getting
-            // the signatures before the signature below.
-            last_searched_hash_val = Some(Signature::from_str(&last_sig.signature)?);
-            current_slot = last_sig.slot;
+            if current_slot < (previously_fetched_slot - 10) {
+                // If the current slot is less than the previously fetched slot, then we have fetched all the transactions
+                last_searched_hash_val = None;
+                current_slot = rpc_client.get_slot().await.unwrap();
+            } else {
+                // Fetches the last signatures from the batch of signatures which are fetched. Used for getting
+                // the signatures before the signature below.
+                last_searched_hash_val = Some(Signature::from_str(&last_sig.signature)?);
+                current_slot = last_sig.slot;
+            }
         }
         Ok(())
     }
@@ -339,9 +438,11 @@ impl BlockchainIndexer for SolanaIndexer {
             let block_number = latest_block_number as u64;
             // Fetch historical transactions backwards from the latest block number
             // Open a new thread to fetch historical transactions
-            self.fetch_historical_transactions(client, block_number)
+            self.fetch_historical_transactions(client.clone(), block_number)
                 .await?;
         }
+        self.fetch_historical_transactions(client, 355876827)
+            .await?;
 
         // Placeholder logic for listening to Solana program events
         info!(
@@ -350,12 +451,6 @@ impl BlockchainIndexer for SolanaIndexer {
         );
 
         // Subscribe to logs
-
-        // Simulating a stream of Solana events (replace with real logic using Solana SDK)
-        let simulated_events = vec!["Event1", "Event2", "Event3"];
-        for event in simulated_events {
-            info!("Solana event: {}", event);
-        }
 
         Ok(())
     }

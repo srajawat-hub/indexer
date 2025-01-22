@@ -444,14 +444,8 @@ sol! {
         uint256 destinationChainId;
         uint64 timeoutUnixTimestampInSec;
         SoliditySolutionType solution;
-<<<<<<< HEAD
-        bytes hook;
-        address initiatorAddress;
-        bytes additionalData;
-=======
         address initiatorAddress;
         bool multiLeg;
->>>>>>> b22ee3aed091a47956037da1062bdffc61440d07
     }
 
 }

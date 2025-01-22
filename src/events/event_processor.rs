@@ -10,19 +10,6 @@ use futures_util::stream::StreamExt;
 use log::{debug, info};
 use tokio_postgres::Client;
 
-use alloy::primitives::{Bytes, FixedBytes};
-use alloy::providers::Provider;
-use alloy::rpc::types::Log;
-use alloy::signers::k256::elliptic_curve::bigint;
-use alloy::sol_types::SolValue;
-use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
-use chrono::Utc;
-use futures_util::stream::StreamExt;
-use log::{debug, error, info};
-use rust_decimal::Decimal;
-use tokio_postgres::{connect, Client, NoTls};
-
-use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2,
     intent_processor::IntentProcessorV2::{self},
@@ -36,7 +23,7 @@ use crate::solidity_structs::{
     SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
 };
 
-enum IntentVersions {
+pub enum IntentVersions {
     IntentSubmitted,
     SolutionSubmitted,
     OrderCreated,
@@ -47,7 +34,7 @@ enum IntentVersions {
 }
 
 #[derive(Debug)]
-enum IntentStage {
+pub enum IntentStage {
     Initialized,
     Processing,
     Done,
