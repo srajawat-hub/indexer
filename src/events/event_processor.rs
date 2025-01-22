@@ -237,12 +237,13 @@ pub async fn process_evm_events(
                 let source_chain_id = order_struct.sourceChainId.to_string();
                 let destination_chain_id = order_struct.destinationChainId.to_string();
                 let multi_leg = order_struct.multiLeg;
+                let order_payload: String = order.to_string();
 
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)";
                 let response = client
                     .execute(
                         query,
@@ -259,7 +260,8 @@ pub async fn process_evm_events(
                             &order_id,
                             &source_chain_id,
                             &destination_chain_id,
-                            &multi_leg
+                            &multi_leg,
+                            &order_payload
                         ],
                     )
                     .await

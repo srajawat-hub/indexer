@@ -135,7 +135,6 @@ struct TransactionData {
 #[derive(serde::Serialize, Debug)]
 struct OrderTransactionData {
     chainId: String,
-    chainName: Option<String>, // we don't have this
     tokenIn: String,
     tokenOut: String,
     txHash: String,
@@ -143,7 +142,7 @@ struct OrderTransactionData {
     ticket: Option<String>,
     amountIn: String,
     amountOut: String,
-    status: Option<String>, // might be tricky
+    order_payload: Option<String>
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -243,14 +242,13 @@ async fn fetch_intents(
                                     destination_transaction_data = Some(OrderTransactionData {
                                         amountIn: orders[0].get("amount_in"),
                                         amountOut: orders[0].get("amount_out"),
-                                        status: None,
                                         chainId: orders[0].get("source_chain_id"), // is the the IP chain id or vault?
-                                        chainName: None,
                                         txHash: orders[0].get("transaction_hash"),
                                         tokenIn: orders[0].get("token_in"),
                                         tokenOut: orders[0].get("token_out"),
                                         ticket: None,
                                         explorerLink: None,
+                                        order_payload: Some(orders[0].get("order_payload"))
                                     });
                                     source_transaction_data = None;
 
@@ -264,7 +262,6 @@ async fn fetch_intents(
                                         amount_in: None,
                                         amount_out: orders[0].get("amount_out"),
                                         initiator_address: sender_address,
-                                        // receiver_address:
                                         solver_address: solver_address,
                                         ack_result: match &ack_row {
                                             Some(ack) => {
@@ -297,14 +294,13 @@ async fn fetch_intents(
                                     source_transaction_data = Some(OrderTransactionData {
                                         amountIn: orders[0].get("amount_in"),
                                         amountOut: orders[0].get("amount_out"),
-                                        status: None,
                                         chainId: orders[0].get("source_chain_id"), // is the the IP chain id or vault?
-                                        chainName: None,
                                         txHash: orders[0].get("transaction_hash"),
                                         tokenIn: orders[0].get("token_in"),
                                         tokenOut: orders[0].get("token_out"),
                                         ticket: None,
                                         explorerLink: None,
+                                        order_payload: Some(orders[0].get("order_payload"))
                                     });
                                     initial_data = Some(InitialData {
                                         id: intent_row.get("id"),
@@ -316,7 +312,6 @@ async fn fetch_intents(
                                         amount_in: orders[0].get("amount_in"),
                                         amount_out: None,
                                         initiator_address: sender_address,
-                                        // receiver_address:
                                         solver_address: solver_address,
                                         ack_result: match &ack_row {
                                             Some(ack) => {
@@ -350,27 +345,25 @@ async fn fetch_intents(
                             source_transaction_data = Some(OrderTransactionData {
                                 amountIn: orders[0].get("amount_in"),
                                 amountOut: orders[0].get("amount_out"),
-                                status: None,
                                 chainId: orders[0].get("source_chain_id"), // is the the IP chain id or vault?
-                                chainName: None,
                                 txHash: orders[0].get("transaction_hash"),
                                 tokenIn: orders[0].get("token_in"),
                                 tokenOut: orders[0].get("token_out"),
                                 ticket: None,
                                 explorerLink: None,
+                                order_payload: Some(orders[0].get("order_payload"))
                             });
 
                             destination_transaction_data = Some(OrderTransactionData {
                                 amountIn: orders[1].get("amount_in"),
                                 amountOut: orders[1].get("amount_out"),
-                                status: None,
                                 chainId: orders[1].get("source_chain_id"),
-                                chainName: None,
                                 txHash: orders[1].get("transaction_hash"),
                                 tokenIn: orders[1].get("token_in"),
                                 tokenOut: orders[1].get("token_out"),
                                 ticket: None,
                                 explorerLink: None,
+                                order_payload: Some(orders[1].get("order_payload"))
                             });
 
                             initial_data = Some(InitialData {
@@ -424,7 +417,6 @@ async fn fetch_intents(
                                 amount_in: None,
                                 amount_out: None,
                                 initiator_address: sender_address,
-                                // receiver_address:
                                 solver_address: solver_address,
                                 ack_result: match &ack_row {
                                     Some(ack) => {
