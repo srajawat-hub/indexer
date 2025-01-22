@@ -44,7 +44,7 @@ USER indexer
 # COPY .env /usr/local/bin/.env
 
 # Set the binary as the entrypoint
-ENTRYPOINT ["/indexer"]
+ENTRYPOINT ["/usr/local/bin/indexer"]
 
 # Expose port 8085
 EXPOSE 8085
