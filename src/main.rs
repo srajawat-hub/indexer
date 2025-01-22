@@ -72,7 +72,8 @@ async fn main() {
     let db_client = Arc::new(client);
     let db_server_client = Arc::clone(&db_client);
 
-    let config = Config::from_file("config.toml");
+    let config_path = std::env::var("CONFIG_PATH").expect("CONFIG_PATH environment variable not set");
+    let config = Config::from_file(&config_path);
 
     let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
         .indexers
