@@ -105,7 +105,7 @@ async fn main() {
             web::get().to(fetch_transaction_history),
         )
     })
-    .bind("127.0.0.1:8080")
+    .bind("0.0.0.0:8085")
     .unwrap()
     .run()
     .await;
@@ -115,28 +115,6 @@ async fn main() {
     info!("Shutting down...");
 }
 
-#[derive(serde::Serialize)]
-struct IntentResponse {
-    intent_id: i64,
-    transaction_hash: String,
-    version: i32,
-    stage: String,
-    owner_address: String,
-    block_number: i64,
-    order_data: Option<Vec<OrderData>>,
-}
-
-#[derive(serde::Serialize)]
-struct OrderData {
-    order_id: i64,
-    transaction_hash: String,
-    token_in: String,
-    token_out: String,
-    amount_in: String,
-    amount_out: String,
-    source_chain_id: String,
-    destination_chain_id: String,
-}
 
 #[derive(serde::Serialize, Debug)]
 struct TransactionData {
