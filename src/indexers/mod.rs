@@ -3,6 +3,8 @@ pub mod solana_indexer;
 
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::sync::Arc;
+use tokio_postgres::Client;
 use tokio_postgres::Client;
 
 #[async_trait]

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::BlockchainIndexer;
 use crate::events::event_processor;
+use crate::events::event_processor;
 use alloy::{
     hex::FromHex,
     primitives::Address,

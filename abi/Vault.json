@@ -1244,6 +1244,19 @@
     },
     {
         "type": "function",
+        "name": "setMockLN",
+        "inputs": [
+            {
+                "name": "_mockLN",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "setPauser",
         "inputs": [
             {

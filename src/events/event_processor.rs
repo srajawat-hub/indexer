@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use alloy::primitives::FixedBytes;
@@ -9,15 +10,33 @@ use futures_util::stream::StreamExt;
 use log::{debug, info};
 use tokio_postgres::Client;
 
+use alloy::primitives::{Bytes, FixedBytes};
+use alloy::providers::Provider;
+use alloy::rpc::types::Log;
+use alloy::signers::k256::elliptic_curve::bigint;
+use alloy::sol_types::SolValue;
+use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
+use chrono::Utc;
+use futures_util::stream::StreamExt;
+use log::{debug, error, info};
+use rust_decimal::Decimal;
+use tokio_postgres::{connect, Client, NoTls};
+
+use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2, vault::Vault,
+    intent_lib_v2::IntentLibV2,
+    intent_processor::IntentProcessorV2::{self},
+    intenterop_lib_v2::InteropLibV2,
+    mocked_ln::MockLN,
+    vault::Vault,
+    IntentPayloadStakeData, SolidityAcknowledgementMetadata, SoliditySolution,
 };
 use crate::solidity_structs::{
     IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
     SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
 };
 
-pub enum IntentVersions {
+enum IntentVersions {
     IntentSubmitted,
     SolutionSubmitted,
     OrderCreated,
@@ -28,7 +47,7 @@ pub enum IntentVersions {
 }
 
 #[derive(Debug)]
-pub enum IntentStage {
+enum IntentStage {
     Initialized,
     Processing,
     Done,
@@ -53,9 +72,13 @@ pub async fn update_intent_state(
     transaction_hash: FixedBytes<32>,
     client: &Arc<Client>,
     provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
+    order_id: &i64,
+    chain_id: i64,
+    initiator_address: String,
 ) {
     // let gas_fees = 1 as i64; // updating gas token
-    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT)";
+    let query =
+        "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9)";
     let timestamp = std::time::SystemTime::now();
 
     let gas_used: i64 = match provider.get_transaction_receipt(transaction_hash).await {
@@ -64,10 +87,10 @@ pub async fn update_intent_state(
             let gas_used = txn.gas_used as i64;
             gas_used
         }
-        Err(_e) => 0 as i64,
+        Err(e) => 0 as i64,
     };
     let txn_hash_str = transaction_hash.to_string();
-    let _intent_state_response = client
+    let intent_state_response = client
         .execute(
             query,
             &[
@@ -77,11 +100,21 @@ pub async fn update_intent_state(
                 &stage,
                 &timestamp,
                 &gas_used,
+                &order_id,
+                &chain_id,
+                &initiator_address,
             ],
         )
         .await
         .unwrap();
     info!("Intent State Updated for intent id: {intent_id} to version: {version}");
+}
+
+pub async fn fetch_intent_initiator(intent_id: i64, client: &Arc<Client>) -> String {
+    let query = "SELECT owner_address FROM intent WHERE intent_id = $1";
+    let response = client.query_one(query, &[&intent_id]).await.unwrap();
+    let initiator_address: String = response.get("owner_address");
+    initiator_address
 }
 
 // Function to listen to events from a specific RPC and contract
@@ -96,7 +129,6 @@ pub async fn process_evm_events(
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner } =
                     log.log_decode().unwrap().inner.data;
-                info!("check log {:?}", log);
                 info!("IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
 
                 let intent_transaction_hash = log.transaction_hash.unwrap();
@@ -127,6 +159,8 @@ pub async fn process_evm_events(
                     response
                 );
 
+                let order_id: i64 = 0;
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::IntentSubmitted as i32,
@@ -134,6 +168,9 @@ pub async fn process_evm_events(
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
+                    &order_id,
+                    chain_id,
+                    owner_address,
                 )
                 .await;
             }
@@ -170,6 +207,9 @@ pub async fn process_evm_events(
                     response
                 );
 
+                let order_id: i64 = 0;
+                let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::SolutionSubmitted as i32,
@@ -177,6 +217,9 @@ pub async fn process_evm_events(
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
+                    &order_id,
+                    chain_id,
+                    initiator_address,
                 )
                 .await;
             }
@@ -193,7 +236,7 @@ pub async fn process_evm_events(
                 let order_struct = SolidityOrder::abi_decode(order_slice, true).unwrap();
 
                 let intent_id = order_struct.intentId as i64;
-                let order_id = orderId as i64;
+                let order_id = order_struct.orderId as i64;
                 let creator_address = order_struct.initiatorAddress.to_string();
                 let token_in = order_struct.tokenIn.to_string();
                 let token_out = order_struct.tokenOut.to_string();
@@ -203,12 +246,13 @@ pub async fn process_evm_events(
                 let block_number = log.block_number.unwrap() as i64;
                 let source_chain_id = order_struct.sourceChainId.to_string();
                 let destination_chain_id = order_struct.destinationChainId.to_string();
+                let multi_leg = order_struct.multiLeg;
 
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
                 let response = client
                     .execute(
                         query,
@@ -225,11 +269,14 @@ pub async fn process_evm_events(
                             &order_id,
                             &source_chain_id,
                             &destination_chain_id,
+                            &multi_leg,
                         ],
                     )
                     .await
                     .unwrap();
                 info!("IntentLibV2::OrderCreated inserted response {:?}", response);
+
+                let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
 
                 update_intent_state(
                     &intent_id,
@@ -238,6 +285,9 @@ pub async fn process_evm_events(
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
+                    &order_id,
+                    chain_id,
+                    initiator_address,
                 )
                 .await;
             }
@@ -249,18 +299,26 @@ pub async fn process_evm_events(
                     result,
                     errorMessage,
                 } = log.log_decode().unwrap().inner.data;
-                info!("InteropLibV2::AcknowledgementReceived for {intentId} from {sender} with result {result}");
+                info!("InteropLibV2::AcknowledgementReceived for orderId - {intentId} from {sender} with result {result}");
 
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
-                let intent_id = intentId as i64;
+                let order_id = intentId as i64; // its the order id
                 let sender_address = sender.to_string();
                 let result = result;
                 let error_message = errorMessage;
                 let timestamp = std::time::SystemTime::now();
 
+                // fetching intent id
+                let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
+                let intent_id_response = client
+                    .query_one(intent_id_query, &[&order_id])
+                    .await
+                    .unwrap();
+                let intent_id: i64 = intent_id_response.get("intent_id");
+
                 let query =
-                    "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7)";
+                    "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
                 let response = client
                     .execute(
                         query,
@@ -272,6 +330,7 @@ pub async fn process_evm_events(
                             &transaction_hash,
                             &block_number,
                             &timestamp,
+                            &order_id,
                         ],
                     )
                     .await
@@ -281,6 +340,8 @@ pub async fn process_evm_events(
                     response
                 );
 
+                let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::AcknowledgementReceived as i32,
@@ -288,6 +349,9 @@ pub async fn process_evm_events(
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
+                    &order_id,
+                    chain_id,
+                    initiator_address,
                 )
                 .await;
             }
@@ -344,6 +408,8 @@ pub async fn process_evm_events(
                     response
                 );
 
+                let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::ReceivedMessageOnVault as i32,
@@ -351,6 +417,9 @@ pub async fn process_evm_events(
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
+                    &order_id,
+                    chain_id,
+                    initiator_address,
                 )
                 .await;
             }
@@ -375,7 +444,7 @@ pub async fn process_evm_events(
                     )
                     .unwrap();
 
-                let intent_id = decoded_message_data.intentId as i64;
+                let order_id = decoded_message_data.intentId as i64;
                 let sender_address = log.address().to_string();
                 let destination_domain_id = destinationDomain as i32;
                 let provider = provider as i32;
@@ -384,8 +453,16 @@ pub async fn process_evm_events(
                 let block_number = log.block_number.unwrap() as i64;
                 let timestamp = std::time::SystemTime::now();
 
+                // fetch intent_id
+                let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
+                let intent_id_response = client
+                    .query_one(intent_id_query, &[&order_id])
+                    .await
+                    .unwrap();
+                let intent_id: i64 = intent_id_response.get("intent_id");
+
                 let query =
-                    "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                    "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
                 let response = client
                     .execute(
                         query,
@@ -398,6 +475,7 @@ pub async fn process_evm_events(
                             &transaction_hash,
                             &block_number,
                             &timestamp,
+                            &order_id,
                         ],
                     )
                     .await
@@ -407,6 +485,8 @@ pub async fn process_evm_events(
                     response
                 );
 
+                let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::MessageDispatchedFromVault as i32,
@@ -414,6 +494,9 @@ pub async fn process_evm_events(
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
+                    &order_id,
+                    chain_id,
+                    initiator_address,
                 )
                 .await;
             }

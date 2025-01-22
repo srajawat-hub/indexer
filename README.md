@@ -23,7 +23,12 @@ acknowledgement (
     error_message TEXT,
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
+<<<<<<< HEAD
     timestamp TIMESTAMP NOT NULL
+=======
+    timestamp TIMESTAMP NOT NULL,
+    order_id BIGINT NOT NULL
+>>>>>>> b22ee3aed091a47956037da1062bdffc61440d07
 );
 received_message_on_vault (
     id BIGSERIAL PRIMARY KEY,
@@ -44,14 +49,24 @@ order_created (
     creator_address VARCHAR(66) NOT NULL,
     token_in VARCHAR(66) NOT NULL,
     token_out VARCHAR(66) NOT NULL,
+<<<<<<< HEAD
     amount_in NUMERIC(38, 18) NOT NULL,
     amount_out NUMERIC(38, 18) NOT NULL,
+=======
+    amount_in TEXT NOT NULL,
+    amount_out TEXT NOT NULL,
+>>>>>>> b22ee3aed091a47956037da1062bdffc61440d07
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     order_id BIGINT NOT NULL,
     source_chain_id TEXT NOT NULL,
+<<<<<<< HEAD
     destination_chain_id TEXT NOT NULL
+=======
+    destination_chain_id TEXT NOT NULL,
+    multi_leg BOOL NOT NULL DEFAULT false
+>>>>>>> b22ee3aed091a47956037da1062bdffc61440d07
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,
@@ -62,7 +77,12 @@ message_dispatched_from_vault (
     message TEXT NOT NULL,
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
+<<<<<<< HEAD
     timestamp TIMESTAMP NOT NULL
+=======
+    timestamp TIMESTAMP NOT NULL,
+    order_id BIGINT NOT NULL,
+>>>>>>> b22ee3aed091a47956037da1062bdffc61440d07
 );
 intent_state (
     id BIGSERIAL PRIMARY KEY,
@@ -70,6 +90,7 @@ intent_state (
     version INTEGER NOT NULL,
     transaction_hash VARCHAR(88) NOT NULL,
     stage TEXT NOT NULL,
+<<<<<<< HEAD
     timestamp TIMESTAMP NOT NULL
     gas_fees BIGINT
     gas_token TEXT
@@ -80,3 +101,13 @@ Index the raw events from each event on a separate table (see if any merges are 
 then create a separate state table with intent_id and txn hash. Track the state of intent_id with versions of progressions as more of the raw intents come in.
 
 update the schema for this flow
+=======
+    timestamp TIMESTAMP NOT NULL,
+    gas_fees BIGINT,
+    gas_token TEXT,
+    order_id BIGINT,
+    chain_id BIGING NOT NULL,
+    initiator_address VARCHAR(66) NOT NULL
+);
+```
+>>>>>>> b22ee3aed091a47956037da1062bdffc61440d07
