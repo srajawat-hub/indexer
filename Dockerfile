@@ -27,10 +27,9 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /indexer
 
 # Copy the binary from builder
-COPY --from=builder /usr/src/indexer/target/release/indexer .
+COPY --from=builder /usr/src/indexer/target/release/indexer /usr/local/bin/indexer
 
 ENV RUST_LOG=info
 
