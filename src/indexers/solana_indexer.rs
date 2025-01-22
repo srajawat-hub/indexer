@@ -1,6 +1,7 @@
 use std::{
     str::FromStr,
     sync::Arc,
+    thread::sleep,
     time::{Duration, SystemTime},
 };
 
@@ -103,7 +104,7 @@ impl SolanaIndexer {
         }
         let mut latest_tx = None;
         loop {
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1));
             info!(
                 "THis is last searched slot {:?} and last searched hash {:?}",
                 current_slot, last_searched_hash_val
