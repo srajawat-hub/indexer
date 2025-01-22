@@ -2,7 +2,7 @@
 FROM rust:1.82-slim-bullseye as builder
 
 # Create a new empty shell project
-WORKDIR /usr/src/indexer
+WORKDIR /usr/src/app
 COPY . .
 
 # Install OpenSSL - required for HTTPS requests
@@ -27,8 +27,12 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
 # Copy the binary from builder
-COPY --from=builder /usr/src/indexer/target/release/indexer /usr/local/bin/indexer
+COPY --from=builder /usr/src/app/target/release/indexer .
+
+ENV RUST_LOG=info
 
 # Create a non-root user
 RUN useradd -ms /bin/bash indexer
@@ -40,7 +44,7 @@ USER indexer
 # COPY .env /usr/local/bin/.env
 
 # Set the binary as the entrypoint
-ENTRYPOINT ["/usr/local/bin/indexer"]
+ENTRYPOINT ["/usr/local/bin/app"]
 
 # Expose port 8085
 EXPOSE 8085
