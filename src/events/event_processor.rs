@@ -1,33 +1,23 @@
-use std::str::FromStr;
 use std::sync::Arc;
 
-use alloy::primitives::{Bytes, FixedBytes};
+use alloy::primitives::FixedBytes;
 use alloy::providers::Provider;
 use alloy::rpc::types::Log;
-use alloy::signers::k256::elliptic_curve::bigint;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
-use chrono::Utc;
 use futures_util::stream::StreamExt;
-use log::{debug, error, info};
-use rust_decimal::Decimal;
-use tokio_postgres::{connect, Client, NoTls};
+use log::{debug, info};
+use tokio_postgres::Client;
 
-use crate::solidity_structs::intent_lib_v2::IntentTypesLib;
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2,
-    intent_processor::IntentProcessorV2::{self},
-    intenterop_lib_v2::InteropLibV2,
-    mocked_ln::MockLN,
-    vault::Vault,
-    IntentPayloadStakeData, SolidityAcknowledgementMetadata, SoliditySolution,
+    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2, vault::Vault,
 };
 use crate::solidity_structs::{
     IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
     SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
 };
 
-enum IntentVersions {
+pub enum IntentVersions {
     IntentSubmitted,
     SolutionSubmitted,
     OrderCreated,
@@ -38,7 +28,7 @@ enum IntentVersions {
 }
 
 #[derive(Debug)]
-enum IntentStage {
+pub enum IntentStage {
     Initialized,
     Processing,
     Done,
@@ -65,10 +55,11 @@ pub async fn update_intent_state(
     provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
     order_id: &i64,
     chain_id: i64,
-    initiator_address: String
+    initiator_address: String,
 ) {
     // let gas_fees = 1 as i64; // updating gas token
-    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9)";
+    let query =
+        "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9)";
     let timestamp = std::time::SystemTime::now();
 
     let gas_used: i64 = match provider.get_transaction_receipt(transaction_hash).await {
@@ -77,10 +68,10 @@ pub async fn update_intent_state(
             let gas_used = txn.gas_used as i64;
             gas_used
         }
-        Err(e) => 0 as i64,
+        Err(_e) => 0 as i64,
     };
     let txn_hash_str = transaction_hash.to_string();
-    let intent_state_response = client
+    let _intent_state_response = client
         .execute(
             query,
             &[
@@ -92,7 +83,7 @@ pub async fn update_intent_state(
                 &gas_used,
                 &order_id,
                 &chain_id,
-                &initiator_address
+                &initiator_address,
             ],
         )
         .await
@@ -160,7 +151,7 @@ pub async fn process_evm_events(
                     chain_provider.clone(),
                     &order_id,
                     chain_id,
-                    owner_address
+                    owner_address,
                 )
                 .await;
             }
@@ -209,7 +200,7 @@ pub async fn process_evm_events(
                     chain_provider.clone(),
                     &order_id,
                     chain_id,
-                    initiator_address
+                    initiator_address,
                 )
                 .await;
             }
@@ -261,7 +252,7 @@ pub async fn process_evm_events(
                             &source_chain_id,
                             &destination_chain_id,
                             &multi_leg,
-                            &order_payload
+                            &order_payload,
                         ],
                     )
                     .await
@@ -279,7 +270,7 @@ pub async fn process_evm_events(
                     chain_provider.clone(),
                     &order_id,
                     chain_id,
-                    initiator_address
+                    initiator_address,
                 )
                 .await;
             }
@@ -296,7 +287,7 @@ pub async fn process_evm_events(
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
                 let order_id = intentId as i64; // its the order id
-                let sender_address = sender.to_string(); 
+                let sender_address = sender.to_string();
                 let result = result;
                 let error_message = errorMessage;
                 let timestamp = std::time::SystemTime::now();
@@ -343,7 +334,7 @@ pub async fn process_evm_events(
                     chain_provider.clone(),
                     &order_id,
                     chain_id,
-                    initiator_address
+                    initiator_address,
                 )
                 .await;
             }
@@ -411,7 +402,7 @@ pub async fn process_evm_events(
                     chain_provider.clone(),
                     &order_id,
                     chain_id,
-                    initiator_address
+                    initiator_address,
                 )
                 .await;
             }
@@ -433,8 +424,13 @@ pub async fn process_evm_events(
                     IntentProcessorBoundMessageAcknowledgementData::abi_decode(
                         decoded_message.data.as_ref(),
                         true,
-                    )
-                    .unwrap();
+                    );
+                let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
+                    decoded_message_data
+                } else {
+                    debug!("Error decoding message data");
+                    continue;
+                };
 
                 let order_id = decoded_message_data.intentId as i64;
                 let sender_address = log.address().to_string();
@@ -488,7 +484,7 @@ pub async fn process_evm_events(
                     chain_provider.clone(),
                     &order_id,
                     chain_id,
-                    initiator_address
+                    initiator_address,
                 )
                 .await;
             }

@@ -639,6 +639,148 @@
         "outputs": [
             {
                 "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getUnsettledIntents",
+        "inputs": [
+            {
+                "name": "initiator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple[]",
+                "internalType": "struct IntentTypesLib.SolidityRawIntent[]",
+                "components": [
+                    {
+                        "name": "id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "intentOwner",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "creationUnixTimestampInSeconds",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "feesTaken",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "intentPayload",
+                        "type": "tuple",
+                        "internalType": "struct IntentTypesLib.SolidityIntentPayload",
+                        "components": [
+                            {
+                                "name": "enumVariant",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.IntentPayloadEnum"
+                            },
+                            {
+                                "name": "data",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getWinningOrder",
+        "inputs": [
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "grantRole",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "handle",
+        "inputs": [
+            {
+                "name": "_origin",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "_sender",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_message",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "hasRole",
+        "inputs": [
+            {
+                "name": "role",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
                 "type": "bool",
                 "internalType": "bool"
             }

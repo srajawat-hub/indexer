@@ -13,7 +13,7 @@ pub fn get_block_explorer_link(chain_id: String, tx_hash: Option<String>) -> Opt
                 4294967295 => Some(format!("https://solscan.io/tx/{}?cluster=devnet", hash)), // Solana devnet
                 _ => None, // Return None for unsupported chain IDs
             }
-        },
-        None => None
+        }
+        None => None,
     }
 }

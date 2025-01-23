@@ -1,8 +1,8 @@
 // src/main.rs
 mod events;
 mod indexers;
-mod utils;
 pub mod solidity_structs;
+mod utils;
 
 use actix_web::cookie::time::PrimitiveDateTime;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
@@ -22,6 +22,9 @@ use tokio_postgres::{connect, NoTls};
 struct IndexerConfig {
     url: String,
     contract: String,
+    #[serde(default)]
+    chain_id: i64,
+    execution_environment: String,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +41,19 @@ impl Config {
 
 fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(EvmIndexer::new(url.to_string(), address.to_string()))
+}
+
+fn create_solana_indexer(
+    url: &str,
+    program_id: &str,
+    chain_id: &i64,
+) -> Box<dyn BlockchainIndexer + Send + Sync> {
+    Box::new(SolanaIndexer::new(
+        url.to_string(),
+        url.to_string(),
+        *chain_id,
+        program_id.to_string(),
+    ))
 }
 
 #[tokio::main]
@@ -73,13 +89,24 @@ async fn main() {
     let db_client = Arc::new(client);
     let db_server_client = Arc::clone(&db_client);
 
-    let config_path = std::env::var("CONFIG_PATH").expect("CONFIG_PATH environment variable not set");
+    let config_path = std::env::var("CONFIG_PATH").unwrap_or("config.toml".to_string());
     let config = Config::from_file(&config_path);
 
     let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
         .indexers
         .into_iter()
-        .map(|conf| create_evm_indexer(&conf.url, &conf.contract))
+        .map(|conf| {
+            if conf.execution_environment == "EVM" {
+                create_evm_indexer(&conf.url, &conf.contract)
+            } else if conf.execution_environment == "SVM" {
+                create_solana_indexer(&conf.url, &conf.contract, &conf.chain_id)
+            } else {
+                panic!(
+                    "Invalid execution environment: {}",
+                    conf.execution_environment
+                );
+            }
+        })
         .collect();
 
     let mut handles = vec![];
@@ -102,10 +129,10 @@ async fn main() {
         App::new()
             .app_data(web::Data::new(Arc::clone(&db_server_client)))
             .route("/intents/{intent_id}", web::get().to(fetch_intents))
-        .route(
-            "/intents/history/{initiator_address}",
-            web::get().to(fetch_transaction_history),
-        )
+            .route(
+                "/intents/history/{initiator_address}",
+                web::get().to(fetch_transaction_history),
+            )
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -116,7 +143,6 @@ async fn main() {
     signal::ctrl_c().await.unwrap();
     info!("Shutting down...");
 }
-
 
 #[derive(serde::Serialize, Debug)]
 struct TransactionData {
@@ -142,7 +168,7 @@ struct OrderTransactionData {
     explorerLink: Option<String>,
     amountIn: String,
     amountOut: String,
-    order_payload: Option<String>
+    order_payload: Option<String>,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -174,7 +200,8 @@ async fn fetch_intents(
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
     let query_orders = "SELECT * FROM order_created WHERE intent_id = $1"; // we will get 2 orders for 1 intent id
-    let query_message_on_vaults = "SELECT transaction_hash FROM received_message_on_vault WHERE order_id = $1"; // we will get 2 rows for 1 intent id, 1 for src_chain, next for dest_chain
+    let query_message_on_vaults =
+        "SELECT transaction_hash FROM received_message_on_vault WHERE order_id = $1"; // we will get 2 rows for 1 intent id, 1 for src_chain, next for dest_chain
     let query_solution = "SELECT * FROM solution WHERE intent_id = $1";
     let query_ack = "SELECT * FROM acknowledgement WHERE intent_id = $1";
 
@@ -237,12 +264,15 @@ async fn fetch_intents(
                             let token_out: String = orders[0].get("token_out");
                             let chain_id: String = orders[0].get("source_chain_id");
                             let order_id: i64 = orders[0].get("order_id");
-                            let vault_txn_hash: Option<String> = match client.query_one(query_message_on_vaults, &[&order_id]).await {
+                            let vault_txn_hash: Option<String> = match client
+                                .query_one(query_message_on_vaults, &[&order_id])
+                                .await
+                            {
                                 Ok(vault_order) => {
                                     let txn_hash: String = vault_order.get("transaction_hash");
                                     Some(txn_hash)
-                                },
-                                Err(_) => None
+                                }
+                                Err(_) => None,
                             };
 
                             match token_out {
@@ -254,8 +284,11 @@ async fn fetch_intents(
                                         txHash: vault_txn_hash.clone(),
                                         tokenIn: orders[0].get("token_in"),
                                         tokenOut: orders[0].get("token_out"),
-                                        explorerLink: utils::get_block_explorer_link(chain_id, vault_txn_hash),
-                                        order_payload: Some(orders[0].get("order_payload"))
+                                        explorerLink: utils::get_block_explorer_link(
+                                            chain_id,
+                                            vault_txn_hash,
+                                        ),
+                                        order_payload: Some(orders[0].get("order_payload")),
                                     });
                                     source_transaction_data = None;
 
@@ -305,8 +338,11 @@ async fn fetch_intents(
                                         txHash: vault_txn_hash.clone(),
                                         tokenIn: orders[0].get("token_in"),
                                         tokenOut: orders[0].get("token_out"),
-                                        explorerLink: utils::get_block_explorer_link(chain_id, vault_txn_hash),
-                                        order_payload: Some(orders[0].get("order_payload"))
+                                        explorerLink: utils::get_block_explorer_link(
+                                            chain_id,
+                                            vault_txn_hash,
+                                        ),
+                                        order_payload: Some(orders[0].get("order_payload")),
                                     });
                                     initial_data = Some(InitialData {
                                         id: intent_row.get("id"),
@@ -350,22 +386,28 @@ async fn fetch_intents(
                         2 => {
                             let src_chain_id: String = orders[0].get("source_chain_id");
                             let src_order_id: i64 = orders[0].get("order_id");
-                            let src_vault_txn_hash: Option<String> = match client.query_one(query_message_on_vaults, &[&src_order_id]).await {
+                            let src_vault_txn_hash: Option<String> = match client
+                                .query_one(query_message_on_vaults, &[&src_order_id])
+                                .await
+                            {
                                 Ok(vault_order) => {
                                     let txn_hash: String = vault_order.get("transaction_hash");
                                     Some(txn_hash)
-                                },
-                                Err(_) => None
+                                }
+                                Err(_) => None,
                             };
 
                             let dst_chain_id: String = orders[1].get("source_chain_id");
                             let dst_order_id: i64 = orders[1].get("order_id");
-                            let dst_vault_txn_hash: Option<String> = match client.query_one(query_message_on_vaults, &[&dst_order_id]).await {
+                            let dst_vault_txn_hash: Option<String> = match client
+                                .query_one(query_message_on_vaults, &[&dst_order_id])
+                                .await
+                            {
                                 Ok(vault_order) => {
                                     let txn_hash: String = vault_order.get("transaction_hash");
                                     Some(txn_hash)
-                                },
-                                Err(_) => None
+                                }
+                                Err(_) => None,
                             };
 
                             source_transaction_data = Some(OrderTransactionData {
@@ -375,8 +417,11 @@ async fn fetch_intents(
                                 txHash: src_vault_txn_hash.clone(),
                                 tokenIn: orders[0].get("token_in"),
                                 tokenOut: orders[0].get("token_out"),
-                                explorerLink: utils::get_block_explorer_link(src_chain_id, src_vault_txn_hash),
-                                order_payload: Some(orders[0].get("order_payload"))
+                                explorerLink: utils::get_block_explorer_link(
+                                    src_chain_id,
+                                    src_vault_txn_hash,
+                                ),
+                                order_payload: Some(orders[0].get("order_payload")),
                             });
 
                             destination_transaction_data = Some(OrderTransactionData {
@@ -386,8 +431,11 @@ async fn fetch_intents(
                                 txHash: dst_vault_txn_hash.clone(),
                                 tokenIn: orders[1].get("token_in"),
                                 tokenOut: orders[1].get("token_out"),
-                                explorerLink: utils::get_block_explorer_link(dst_chain_id, dst_vault_txn_hash),
-                                order_payload: Some(orders[1].get("order_payload"))
+                                explorerLink: utils::get_block_explorer_link(
+                                    dst_chain_id,
+                                    dst_vault_txn_hash,
+                                ),
+                                order_payload: Some(orders[1].get("order_payload")),
                             });
 
                             initial_data = Some(InitialData {
@@ -557,19 +605,17 @@ async fn fetch_transaction_history(
             let mut data: Vec<TransactionHistory> = vec![];
             for row in intent_row {
                 let intent_id: i64 = row.get("intent_id");
-                match client
-                    .query_one(query_intent_state, &[&intent_id])
-                    .await {
-                        Ok(state) => {
-                            let txn: TransactionHistory = TransactionHistory {
-                                intent_id,
-                                status: state.get("stage"),
-                                version: state.get("version"),
-                            };
-                            data.push(txn);
-                        },
-                        Err(_) => continue
+                match client.query_one(query_intent_state, &[&intent_id]).await {
+                    Ok(state) => {
+                        let txn: TransactionHistory = TransactionHistory {
+                            intent_id,
+                            status: state.get("stage"),
+                            version: state.get("version"),
+                        };
+                        data.push(txn);
                     }
+                    Err(_) => continue,
+                }
             }
             HttpResponse::Ok().json(data) // Return JSON response
         }
