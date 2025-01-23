@@ -53,7 +53,8 @@ order_created (
     order_id BIGINT NOT NULL,
     source_chain_id TEXT NOT NULL,
     destination_chain_id TEXT NOT NULL,
-    multi_leg BOOL NOT NULL DEFAULT false
+    multi_leg BOOL NOT NULL DEFAULT false,
+    order_payload TEXT NOT NULL
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,

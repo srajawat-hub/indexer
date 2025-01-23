@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::sync::Arc;
 
 use alloy::primitives::FixedBytes;
@@ -11,12 +10,7 @@ use log::{debug, info};
 use tokio_postgres::Client;
 
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2,
-    intent_processor::IntentProcessorV2::{self},
-    intenterop_lib_v2::InteropLibV2,
-    mocked_ln::MockLN,
-    vault::Vault,
-    IntentPayloadStakeData, SolidityAcknowledgementMetadata, SoliditySolution,
+    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2, vault::Vault,
 };
 use crate::solidity_structs::{
     IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
@@ -74,10 +68,10 @@ pub async fn update_intent_state(
             let gas_used = txn.gas_used as i64;
             gas_used
         }
-        Err(e) => 0 as i64,
+        Err(_e) => 0 as i64,
     };
     let txn_hash_str = transaction_hash.to_string();
-    let intent_state_response = client
+    let _intent_state_response = client
         .execute(
             query,
             &[
@@ -234,12 +228,13 @@ pub async fn process_evm_events(
                 let source_chain_id = order_struct.sourceChainId.to_string();
                 let destination_chain_id = order_struct.destinationChainId.to_string();
                 let multi_leg = order_struct.multiLeg;
+                let order_payload: String = order.to_string();
 
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)";
                 let response = client
                     .execute(
                         query,
@@ -257,6 +252,7 @@ pub async fn process_evm_events(
                             &source_chain_id,
                             &destination_chain_id,
                             &multi_leg,
+                            &order_payload,
                         ],
                     )
                     .await
