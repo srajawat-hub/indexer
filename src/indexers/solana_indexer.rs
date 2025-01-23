@@ -55,6 +55,9 @@ pub async fn update_intent_state(
     let timestamp = std::time::SystemTime::now();
 
     let txn_hash_str = transaction_hash.to_string();
+    let initiator_address_str = initiator_address.to_string();
+    info!("Tx hash length {:?}", txn_hash_str.len());
+    info!("Initiator address length {:?}", initiator_address_str.len());
     let _intent_state_response = client
         .execute(
             query,
@@ -104,7 +107,7 @@ impl SolanaIndexer {
         }
         let mut latest_tx = None;
         loop {
-            sleep(Duration::from_secs(1));
+            sleep(Duration::from_secs(10));
             info!(
                 "THis is last searched slot {:?} and last searched hash {:?}",
                 current_slot, last_searched_hash_val
@@ -348,16 +351,18 @@ impl SolanaIndexer {
 
                             // fetch intent_id
                             let intent_id_query =
-                                "SELECT intent_id FROM order_created WHERE order_id = $1";
+                                "SELECT intent_id,creator_address FROM order_created WHERE order_id = $1";
                             let intent_id_response = database_client
                                 .query(intent_id_query, &[&order_id])
                                 .await
                                 .unwrap();
+                            info!("Intent length {:?}", intent_id_response.len());
+                            info!("intent id response {:?}", intent_id_response);
                             let (intent_id, creator_address) = match intent_id_response.len() {
                                 0 => (0i64, "".to_string()),
                                 _ => (
-                                    response[0].get("intent_id"),
-                                    response[0].get("creator_address"),
+                                    intent_id_response[0].get("intent_id"),
+                                    intent_id_response[0].get("creator_address"),
                                 ),
                             };
 
@@ -367,7 +372,7 @@ impl SolanaIndexer {
                                     query,
                                     &[
                                         &intent_id,
-                                        &hex::encode(creator_address.clone()),
+                                        &creator_address,
                                         &origin_domain_id,
                                         &provider,
                                         &hex::encode(message),

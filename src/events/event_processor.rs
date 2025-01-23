@@ -428,8 +428,13 @@ pub async fn process_evm_events(
                     IntentProcessorBoundMessageAcknowledgementData::abi_decode(
                         decoded_message.data.as_ref(),
                         true,
-                    )
-                    .unwrap();
+                    );
+                let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
+                    decoded_message_data
+                } else {
+                    debug!("Error decoding message data");
+                    continue;
+                };
 
                 let order_id = decoded_message_data.intentId as i64;
                 let sender_address = log.address().to_string();
