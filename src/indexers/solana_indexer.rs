@@ -396,7 +396,7 @@ impl SolanaIndexer {
                                 tx_hash,
                                 &order_id,
                                 &self.chain_id,
-                                hex::encode(creator_address),
+                                creator_address,
                                 &database_client,
                             )
                             .await;
