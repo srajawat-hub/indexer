@@ -133,6 +133,10 @@ async fn main() {
                 "/intents/history/{initiator_address}",
                 web::get().to(fetch_transaction_history),
             )
+            .route(
+                "/transactions",
+                web::get().to(fetch_transactions),
+            )
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -602,6 +606,39 @@ async fn fetch_transaction_history(
     {
         Ok(intent_row) => {
             println!("row len {:?}", intent_row.len());
+            let mut data: Vec<TransactionHistory> = vec![];
+            for row in intent_row {
+                let intent_id: i64 = row.get("intent_id");
+                match client.query_one(query_intent_state, &[&intent_id]).await {
+                    Ok(state) => {
+                        let txn: TransactionHistory = TransactionHistory {
+                            intent_id,
+                            status: state.get("stage"),
+                            version: state.get("version"),
+                        };
+                        data.push(txn);
+                    }
+                    Err(_) => continue,
+                }
+            }
+            HttpResponse::Ok().json(data) // Return JSON response
+        }
+        Err(e) => HttpResponse::InternalServerError().finish(),
+    }
+}
+
+async fn fetch_transactions(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+) -> impl Responder {
+    let query_intent = "SELECT * FROM intent";
+    let query_intent_state =
+        "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
+
+    match client
+        .query(query_intent, &[])
+        .await
+    {
+        Ok(intent_row) => {
             let mut data: Vec<TransactionHistory> = vec![];
             for row in intent_row {
                 let intent_id: i64 = row.get("intent_id");
