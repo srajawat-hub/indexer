@@ -117,7 +117,6 @@ async fn main() {
                 error!("Error listening to events: {}", err);
             }
         });
-
         handles.push(handle);
     }
 
@@ -156,7 +155,7 @@ struct TransactionData {
     status: String,
     isDeposit: Option<bool>, // we don't have this currently
     senderAddress: String,
-    solverAddress: String,
+    solverAddress: Option<String>,
     source: Option<OrderTransactionData>,
     destination: Option<OrderTransactionData>,
     initial_data: Option<InitialData>,
@@ -186,7 +185,7 @@ struct InitialData {
     token_out: Option<String>,
     amount_out: Option<String>,
     initiator_address: String,
-    solver_address: String,
+    solver_address: Option<String>,
     ack_result: Option<bool>,
     ack_tx_status: String,
     ack_error_message: Option<String>,
@@ -221,11 +220,18 @@ async fn fetch_intents(
             let intent_version: i32 = intent_state.get("version");
             let sender_address: String = intent_row.get("owner_address");
 
-            let intent_solution = client
+            let (solver_address, solver_transaction_hash ) = match client
                 .query_one(query_solution, &[&intent_id])
-                .await
-                .unwrap();
-            let solver_address: String = intent_solution.get("solver_address");
+                .await {
+                    Ok(solution) => {
+                        let solver_address: String = solution.get("solver_address");
+                        let solver_transaction_hash: String = solution.get("transaction_hash");
+                        (Some(solver_address), Some(solver_transaction_hash))
+                    },
+                    Err(_) => {
+                        (None, None)
+                    }
+                };
 
             let intent_orders = match (intent_version > 1) {
                 true => {
@@ -276,7 +282,10 @@ async fn fetch_intents(
                                     let txn_hash: String = vault_order.get("transaction_hash");
                                     Some(txn_hash)
                                 }
-                                Err(_) => None,
+                                Err(e) => {
+                                    error!("error {:?}", e);
+                                    None
+                                },
                             };
 
                             match token_out {
@@ -306,7 +315,7 @@ async fn fetch_intents(
                                         amount_in: None,
                                         amount_out: orders[0].get("amount_out"),
                                         initiator_address: sender_address,
-                                        solver_address: solver_address,
+                                        solver_address: solver_address.clone(),
                                         ack_result: match &ack_row {
                                             Some(ack) => {
                                                 let ack_result: bool = ack.get("result");
@@ -325,7 +334,7 @@ async fn fetch_intents(
                                             }
                                             None => None,
                                         },
-                                        solver_tx_hash: intent_solution.get("transaction_hash"),
+                                        solver_tx_hash: solver_transaction_hash,
                                         ack_tx_hash: match ack_row {
                                             Some(ack) => ack.get("transaction_hash"),
                                             None => None,
@@ -358,7 +367,7 @@ async fn fetch_intents(
                                         amount_in: orders[0].get("amount_in"),
                                         amount_out: None,
                                         initiator_address: sender_address,
-                                        solver_address: solver_address,
+                                        solver_address: solver_address.clone(),
                                         ack_result: match &ack_row {
                                             Some(ack) => {
                                                 let ack_result: bool = ack.get("result");
@@ -377,7 +386,7 @@ async fn fetch_intents(
                                             }
                                             None => None,
                                         },
-                                        solver_tx_hash: intent_solution.get("transaction_hash"),
+                                        solver_tx_hash: solver_transaction_hash,
                                         ack_tx_hash: match ack_row {
                                             Some(ack) => ack.get("transaction_hash"),
                                             None => None,
@@ -452,8 +461,7 @@ async fn fetch_intents(
                                 amount_in: Some(orders[0].get("amount_in")),
                                 amount_out: Some(orders[1].get("amount_out")),
                                 initiator_address: sender_address,
-                                // receiver_address:
-                                solver_address: solver_address,
+                                solver_address: solver_address.clone(),
                                 ack_result: match &ack_row {
                                     Some(ack) => {
                                         let ack_result: bool = ack.get("result");
@@ -472,7 +480,7 @@ async fn fetch_intents(
                                     }
                                     None => None,
                                 },
-                                solver_tx_hash: intent_solution.get("transaction_hash"),
+                                solver_tx_hash: solver_transaction_hash,
                                 ack_tx_hash: match ack_row {
                                     Some(ack) => ack.get("transaction_hash"),
                                     None => None,
@@ -493,7 +501,7 @@ async fn fetch_intents(
                                 amount_in: None,
                                 amount_out: None,
                                 initiator_address: sender_address,
-                                solver_address: solver_address,
+                                solver_address: solver_address.clone(),
                                 ack_result: match &ack_row {
                                     Some(ack) => {
                                         let ack_result: bool = ack.get("result");
@@ -512,7 +520,7 @@ async fn fetch_intents(
                                     }
                                     None => None,
                                 },
-                                solver_tx_hash: intent_solution.get("transaction_hash"),
+                                solver_tx_hash: solver_transaction_hash,
                                 ack_tx_hash: match ack_row {
                                     Some(ack) => ack.get("transaction_hash"),
                                     None => None,
@@ -535,7 +543,7 @@ async fn fetch_intents(
                         amount_in: None,
                         amount_out: None,
                         initiator_address: sender_address,
-                        solver_address: solver_address,
+                        solver_address: solver_address.clone(),
                         ack_result: match &ack_row {
                             Some(ack) => {
                                 let ack_result: bool = ack.get("result");
@@ -554,7 +562,7 @@ async fn fetch_intents(
                             }
                             None => None,
                         },
-                        solver_tx_hash: intent_solution.get("transaction_hash"),
+                        solver_tx_hash: solver_transaction_hash,
                         ack_tx_hash: match ack_row {
                             Some(ack) => ack.get("transaction_hash"),
                             None => None,
@@ -573,7 +581,7 @@ async fn fetch_intents(
                 status: stage,
                 isDeposit: None,
                 senderAddress: intent_row.get("owner_address"),
-                solverAddress: intent_solution.get("solver_address"),
+                solverAddress: solver_address,
                 source: source_transaction_data,
                 destination: destination_transaction_data,
                 initial_data: initial_data,
