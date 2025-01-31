@@ -92,23 +92,33 @@ intent_state (
 
 `/transactions`
 
+#### Query params
+- id - id for the last reponse received
+- per_page - amount of transactions to receive on a single page
+
 #### Response
 ```
 [
     {
+        "id": 20,
         "intent_id": 73,
         "status": "Done",
-        "version": 5
+        "version": 5,
+        "timestamp": "2025-01-20T06:57:48.364874Z"
     },
     {
+        "id": 21,
         "intent_id": 74,
         "status": "Done",
-        "version": 5
+        "version": 5,
+        "timestamp": "2025-01-20T06:57:48.364874Z"
     },
     {
+        "id": 22,
         "intent_id": 88,
         "status": "Done",
-        "version": 5
+        "version": 5,
+        "timestamp": "2025-01-20T06:57:48.364874Z"
     } ...
 ]
 ```
@@ -117,23 +127,33 @@ intent_state (
 
 `/intents/history/{initiator_address}`
 
+#### Query params
+- id - id for the last reponse received
+- per_page - amount of transactions to receive on a single page
+
 #### Response
 ```
 [
     {
+        "id": 21,
         "intent_id": 73,
         "status": "Done",
-        "version": 5
+        "version": 5,
+        "timestamp": "2025-01-20T06:57:48.364874Z"
     },
     {
+        "id": 22,
         "intent_id": 74,
         "status": "Done",
-        "version": 5
+        "version": 5,
+        "timestamp": "2025-01-20T06:57:48.364874Z"
     },
     {
+        "id": 23,
         "intent_id": 88,
         "status": "Done",
-        "version": 5
+        "version": 5,
+        "timestamp": "2025-01-20T06:57:48.364874Z"
     }
 ]
 ```
@@ -190,7 +210,13 @@ intent_state (
         "ack_error_message": "",
         "solver_tx_hash": "0x12cf41e3299e21c0c8a49145cabfcf047eabe7bf54e41df39e22273d20d7e72e",
         "ack_tx_hash": "0x43c27ac2cb3858cbb20d96bea2556c0129507d1a851956030629583f7f45e5dd",
-        "intent_version": 5
+        "intent_version": 5,
+        "solution_type": "Cross Chain Transact"
     }
 }
 ```
+
+### Solution Type field
+In case of a `Cross Chain Transact`, the intent reponse should contain both Source and destination transactions as it involves 2 orders
+
+In case of a `Local Transact` or `Stake` only the Destination transaction will be returned as it involves a single order
