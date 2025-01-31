@@ -727,11 +727,11 @@ async fn fetch_transactions(
 
     let (query_intent, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) = match id {
         Some(ref cursor_id) => (
-            "SELECT id, intent_id, timestamp FROM intent WHERE id > $1 ORDER BY id ASC LIMIT $2",
+            "SELECT id, intent_id, timestamp FROM intent WHERE id < $1 ORDER BY id DESC LIMIT $2",
             vec![cursor_id, &per_page],
         ),
         None => (
-            "SELECT id, intent_id, timestamp FROM intent ORDER BY id ASC LIMIT $1",
+            "SELECT id, intent_id, timestamp FROM intent ORDER BY id DESC LIMIT $1",
             vec![&per_page],
         ),
     };

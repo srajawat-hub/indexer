@@ -127,10 +127,6 @@ intent_state (
 
 `/intents/history/{initiator_address}`
 
-#### Query params
-- id - id for the last reponse received
-- per_page - amount of transactions to receive on a single page
-
 #### Response
 ```
 [
