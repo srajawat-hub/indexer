@@ -6,11 +6,13 @@ mod utils;
 
 use actix_web::cookie::time::PrimitiveDateTime;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use chrono::{DateTime, Utc};
 use dotenv::dotenv;
 use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
 use serde::Deserialize;
+use solidity_structs::SolutionTypeEnum;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fmt::format, future::Future};
@@ -54,6 +56,12 @@ fn create_solana_indexer(
         *chain_id,
         program_id.to_string(),
     ))
+}
+
+#[derive(Deserialize)]
+struct PaginationParams {
+    id: Option<i64>,
+    per_page: Option<u32>,
 }
 
 #[tokio::main]
@@ -132,10 +140,7 @@ async fn main() {
                 "/intents/history/{initiator_address}",
                 web::get().to(fetch_transaction_history),
             )
-            .route(
-                "/transactions",
-                web::get().to(fetch_transactions),
-            )
+            .route("/transactions", web::get().to(fetch_transactions))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -151,7 +156,7 @@ async fn main() {
 struct TransactionData {
     id: i64,
     intentId: i64,
-    createdAt: SystemTime,
+    createdAt: DateTime<Utc>,
     status: String,
     isDeposit: Option<bool>, // we don't have this currently
     senderAddress: String,
@@ -192,6 +197,7 @@ struct InitialData {
     solver_tx_hash: Option<String>,
     ack_tx_hash: Option<String>,
     intent_version: i32, // check if more needed
+    solution_type: Option<String>
 }
 
 // Handler to fetch data from the database
@@ -220,17 +226,14 @@ async fn fetch_intents(
             let intent_version: i32 = intent_state.get("version");
             let sender_address: String = intent_row.get("owner_address");
 
-            let (solver_address, solver_transaction_hash ) = match client
-                .query_one(query_solution, &[&intent_id])
-                .await {
+            let (solver_address, solver_transaction_hash) =
+                match client.query_one(query_solution, &[&intent_id]).await {
                     Ok(solution) => {
                         let solver_address: String = solution.get("solver_address");
                         let solver_transaction_hash: String = solution.get("transaction_hash");
                         (Some(solver_address), Some(solver_transaction_hash))
-                    },
-                    Err(_) => {
-                        (None, None)
                     }
+                    Err(_) => (None, None),
                 };
 
             let intent_orders = match (intent_version > 1) {
@@ -268,28 +271,30 @@ async fn fetch_intents(
                 String::from("0x0000000000000000000000000000000000000000000000000000000000000000");
 
             match intent_orders {
-                Some(orders) => {
-                    match orders.len() {
-                        1 => {
-                            let token_out: String = orders[0].get("token_out");
-                            let chain_id: String = orders[0].get("source_chain_id");
-                            let order_id: i64 = orders[0].get("order_id");
-                            let vault_txn_hash: Option<String> = match client
-                                .query_one(query_message_on_vaults, &[&order_id])
-                                .await
-                            {
-                                Ok(vault_order) => {
-                                    let txn_hash: String = vault_order.get("transaction_hash");
-                                    Some(txn_hash)
-                                }
-                                Err(e) => {
-                                    error!("error {:?}", e);
-                                    None
-                                },
-                            };
+                Some(orders) => match orders.len() {
+                    1 => {
+                        let token_out: String = orders[0].get("token_out");
+                        let chain_id: String = orders[0].get("source_chain_id");
+                        let order_id: i64 = orders[0].get("order_id");
+                        let solution_type: Option<i32> = orders[0].get("solution_type");
+                        let multi_leg: bool = orders[0].get("multi_leg");
+                        let vault_txn_hash: Option<String> = match client
+                            .query_one(query_message_on_vaults, &[&order_id])
+                            .await
+                        {
+                            Ok(vault_order) => {
+                                let txn_hash: String = vault_order.get("transaction_hash");
+                                Some(txn_hash)
+                            }
+                            Err(e) => {
+                                error!("error {:?}", e);
+                                None
+                            }
+                        };
 
-                            match token_out {
-                                bytes32_zero_address => {
+                        match multi_leg {
+                            true => match token_out == bytes32_zero_address {
+                                true => {
                                     destination_transaction_data = Some(OrderTransactionData {
                                         amountIn: orders[0].get("amount_in"),
                                         amountOut: orders[0].get("amount_out"),
@@ -340,9 +345,10 @@ async fn fetch_intents(
                                             None => None,
                                         },
                                         intent_version: intent_version,
+                                        solution_type: Some(String::from("Cross Chain Transact"))
                                     });
                                 }
-                                _ => {
+                                false => {
                                     destination_transaction_data = None;
                                     source_transaction_data = Some(OrderTransactionData {
                                         amountIn: orders[0].get("amount_in"),
@@ -392,144 +398,209 @@ async fn fetch_intents(
                                             None => None,
                                         },
                                         intent_version: intent_version,
+                                        solution_type: Some(String::from("Cross Chain Transact"))
                                     });
                                 }
+                            },
+                            false => {
+                                source_transaction_data = None;
+                                destination_transaction_data = Some(OrderTransactionData {
+                                    amountIn: orders[0].get("amount_in"),
+                                    amountOut: orders[0].get("amount_out"),
+                                    chainId: chain_id.clone(),
+                                    txHash: vault_txn_hash.clone(),
+                                    tokenIn: orders[0].get("token_in"),
+                                    tokenOut: orders[0].get("token_out"),
+                                    explorerLink: utils::get_block_explorer_link(
+                                        chain_id,
+                                        vault_txn_hash,
+                                    ),
+                                    order_payload: Some(orders[0].get("order_payload")),
+                                });
+                                initial_data = Some(InitialData {
+                                    id: intent_row.get("id"),
+                                    intent_id: intent_id,
+                                    origin_chain: orders[0].get("source_chain_id"),
+                                    target_chain: orders[0].get("destination_chain_id"),
+                                    token_in: orders[0].get("token_in"),
+                                    token_out: orders[0].get("token_out"),
+                                    amount_in: orders[0].get("amount_in"),
+                                    amount_out: orders[0].get("amount_out"),
+                                    initiator_address: sender_address,
+                                    solver_address: solver_address.clone(),
+                                    ack_result: match &ack_row {
+                                        Some(ack) => {
+                                            let ack_result: bool = ack.get("result");
+                                            Some(ack_result)
+                                        }
+                                        None => Some(false),
+                                    },
+                                    ack_tx_status: match intent_version {
+                                        5 => String::from("Success"),
+                                        _ => String::from("Not started"),
+                                    },
+                                    ack_error_message: match &ack_row {
+                                        Some(ack) => {
+                                            let ack_error: String = ack.get("error_message");
+                                            Some(ack_error)
+                                        }
+                                        None => None,
+                                    },
+                                    solver_tx_hash: solver_transaction_hash,
+                                    ack_tx_hash: match ack_row {
+                                        Some(ack) => ack.get("transaction_hash"),
+                                        None => None,
+                                    },
+                                    intent_version: intent_version,
+                                    solution_type: match solution_type {
+                                        Some(type_id) => {
+                                            match type_id == 3 {
+                                                true => Some(String::from("Stake")),
+                                                false => Some(String::from("Local Transact"))
+                                            }
+                                        },
+                                        None => None
+                                    }
+                                });
                             }
                         }
-                        2 => {
-                            let src_chain_id: String = orders[0].get("source_chain_id");
-                            let src_order_id: i64 = orders[0].get("order_id");
-                            let src_vault_txn_hash: Option<String> = match client
-                                .query_one(query_message_on_vaults, &[&src_order_id])
-                                .await
-                            {
-                                Ok(vault_order) => {
-                                    let txn_hash: String = vault_order.get("transaction_hash");
-                                    Some(txn_hash)
-                                }
-                                Err(_) => None,
-                            };
-
-                            let dst_chain_id: String = orders[1].get("source_chain_id");
-                            let dst_order_id: i64 = orders[1].get("order_id");
-                            let dst_vault_txn_hash: Option<String> = match client
-                                .query_one(query_message_on_vaults, &[&dst_order_id])
-                                .await
-                            {
-                                Ok(vault_order) => {
-                                    let txn_hash: String = vault_order.get("transaction_hash");
-                                    Some(txn_hash)
-                                }
-                                Err(_) => None,
-                            };
-
-                            source_transaction_data = Some(OrderTransactionData {
-                                amountIn: orders[0].get("amount_in"),
-                                amountOut: orders[0].get("amount_out"),
-                                chainId: src_chain_id.clone(),
-                                txHash: src_vault_txn_hash.clone(),
-                                tokenIn: orders[0].get("token_in"),
-                                tokenOut: orders[0].get("token_out"),
-                                explorerLink: utils::get_block_explorer_link(
-                                    src_chain_id,
-                                    src_vault_txn_hash,
-                                ),
-                                order_payload: Some(orders[0].get("order_payload")),
-                            });
-
-                            destination_transaction_data = Some(OrderTransactionData {
-                                amountIn: orders[1].get("amount_in"),
-                                amountOut: orders[1].get("amount_out"),
-                                chainId: dst_chain_id.clone(),
-                                txHash: dst_vault_txn_hash.clone(),
-                                tokenIn: orders[1].get("token_in"),
-                                tokenOut: orders[1].get("token_out"),
-                                explorerLink: utils::get_block_explorer_link(
-                                    dst_chain_id,
-                                    dst_vault_txn_hash,
-                                ),
-                                order_payload: Some(orders[1].get("order_payload")),
-                            });
-
-                            initial_data = Some(InitialData {
-                                id: intent_row.get("id"),
-                                intent_id: intent_id,
-                                origin_chain: Some(orders[0].get("destination_chain_id")),
-                                target_chain: Some(orders[1].get("source_chain_id")),
-                                token_in: Some(orders[0].get("token_in")),
-                                token_out: Some(orders[1].get("token_out")),
-                                amount_in: Some(orders[0].get("amount_in")),
-                                amount_out: Some(orders[1].get("amount_out")),
-                                initiator_address: sender_address,
-                                solver_address: solver_address.clone(),
-                                ack_result: match &ack_row {
-                                    Some(ack) => {
-                                        let ack_result: bool = ack.get("result");
-                                        Some(ack_result)
-                                    }
-                                    None => Some(false),
-                                },
-                                ack_tx_status: match intent_version {
-                                    5 => String::from("Success"),
-                                    _ => String::from("Not started"),
-                                },
-                                ack_error_message: match &ack_row {
-                                    Some(ack) => {
-                                        let ack_error: String = ack.get("error_message");
-                                        Some(ack_error)
-                                    }
-                                    None => None,
-                                },
-                                solver_tx_hash: solver_transaction_hash,
-                                ack_tx_hash: match ack_row {
-                                    Some(ack) => ack.get("transaction_hash"),
-                                    None => None,
-                                },
-                                intent_version: intent_version,
-                            });
-                        }
-                        _ => {
-                            source_transaction_data = None;
-                            destination_transaction_data = None;
-                            initial_data = Some(InitialData {
-                                id: intent_row.get("id"),
-                                intent_id: intent_id,
-                                origin_chain: None,
-                                target_chain: None,
-                                token_in: None,
-                                token_out: None,
-                                amount_in: None,
-                                amount_out: None,
-                                initiator_address: sender_address,
-                                solver_address: solver_address.clone(),
-                                ack_result: match &ack_row {
-                                    Some(ack) => {
-                                        let ack_result: bool = ack.get("result");
-                                        Some(ack_result)
-                                    }
-                                    None => Some(false),
-                                },
-                                ack_tx_status: match intent_version {
-                                    5 => String::from("Success"),
-                                    _ => String::from("Not started"),
-                                },
-                                ack_error_message: match &ack_row {
-                                    Some(ack) => {
-                                        let ack_error: String = ack.get("error_message");
-                                        Some(ack_error)
-                                    }
-                                    None => None,
-                                },
-                                solver_tx_hash: solver_transaction_hash,
-                                ack_tx_hash: match ack_row {
-                                    Some(ack) => ack.get("transaction_hash"),
-                                    None => None,
-                                },
-                                intent_version: intent_version,
-                            });
-                        }
                     }
-                }
+                    2 => {
+                        let src_chain_id: String = orders[0].get("source_chain_id");
+                        let src_order_id: i64 = orders[0].get("order_id");
+                        let solution_type: Option<i32> = orders[0].get("solution_type");
+                        let src_vault_txn_hash: Option<String> = match client
+                            .query_one(query_message_on_vaults, &[&src_order_id])
+                            .await
+                        {
+                            Ok(vault_order) => {
+                                let txn_hash: String = vault_order.get("transaction_hash");
+                                Some(txn_hash)
+                            }
+                            Err(_) => None,
+                        };
+
+                        let dst_chain_id: String = orders[1].get("source_chain_id");
+                        let dst_order_id: i64 = orders[1].get("order_id");
+                        let dst_vault_txn_hash: Option<String> = match client
+                            .query_one(query_message_on_vaults, &[&dst_order_id])
+                            .await
+                        {
+                            Ok(vault_order) => {
+                                let txn_hash: String = vault_order.get("transaction_hash");
+                                Some(txn_hash)
+                            }
+                            Err(_) => None,
+                        };
+
+                        source_transaction_data = Some(OrderTransactionData {
+                            amountIn: orders[0].get("amount_in"),
+                            amountOut: orders[0].get("amount_out"),
+                            chainId: src_chain_id.clone(),
+                            txHash: src_vault_txn_hash.clone(),
+                            tokenIn: orders[0].get("token_in"),
+                            tokenOut: orders[0].get("token_out"),
+                            explorerLink: utils::get_block_explorer_link(
+                                src_chain_id,
+                                src_vault_txn_hash,
+                            ),
+                            order_payload: Some(orders[0].get("order_payload")),
+                        });
+
+                        destination_transaction_data = Some(OrderTransactionData {
+                            amountIn: orders[1].get("amount_in"),
+                            amountOut: orders[1].get("amount_out"),
+                            chainId: dst_chain_id.clone(),
+                            txHash: dst_vault_txn_hash.clone(),
+                            tokenIn: orders[1].get("token_in"),
+                            tokenOut: orders[1].get("token_out"),
+                            explorerLink: utils::get_block_explorer_link(
+                                dst_chain_id,
+                                dst_vault_txn_hash,
+                            ),
+                            order_payload: Some(orders[1].get("order_payload")),
+                        });
+
+                        initial_data = Some(InitialData {
+                            id: intent_row.get("id"),
+                            intent_id: intent_id,
+                            origin_chain: Some(orders[0].get("destination_chain_id")),
+                            target_chain: Some(orders[1].get("source_chain_id")),
+                            token_in: Some(orders[0].get("token_in")),
+                            token_out: Some(orders[1].get("token_out")),
+                            amount_in: Some(orders[0].get("amount_in")),
+                            amount_out: Some(orders[1].get("amount_out")),
+                            initiator_address: sender_address,
+                            solver_address: solver_address.clone(),
+                            ack_result: match &ack_row {
+                                Some(ack) => {
+                                    let ack_result: bool = ack.get("result");
+                                    Some(ack_result)
+                                }
+                                None => Some(false),
+                            },
+                            ack_tx_status: match intent_version {
+                                5 => String::from("Success"),
+                                _ => String::from("Not started"),
+                            },
+                            ack_error_message: match &ack_row {
+                                Some(ack) => {
+                                    let ack_error: String = ack.get("error_message");
+                                    Some(ack_error)
+                                }
+                                None => None,
+                            },
+                            solver_tx_hash: solver_transaction_hash,
+                            ack_tx_hash: match ack_row {
+                                Some(ack) => ack.get("transaction_hash"),
+                                None => None,
+                            },
+                            intent_version: intent_version,
+                            solution_type: Some(String::from("Cross Chain Transact"))
+                        });
+                    }
+                    _ => {
+                        source_transaction_data = None;
+                        destination_transaction_data = None;
+                        initial_data = Some(InitialData {
+                            id: intent_row.get("id"),
+                            intent_id: intent_id,
+                            origin_chain: None,
+                            target_chain: None,
+                            token_in: None,
+                            token_out: None,
+                            amount_in: None,
+                            amount_out: None,
+                            initiator_address: sender_address,
+                            solver_address: solver_address.clone(),
+                            ack_result: match &ack_row {
+                                Some(ack) => {
+                                    let ack_result: bool = ack.get("result");
+                                    Some(ack_result)
+                                }
+                                None => Some(false),
+                            },
+                            ack_tx_status: match intent_version {
+                                5 => String::from("Success"),
+                                _ => String::from("Not started"),
+                            },
+                            ack_error_message: match &ack_row {
+                                Some(ack) => {
+                                    let ack_error: String = ack.get("error_message");
+                                    Some(ack_error)
+                                }
+                                None => None,
+                            },
+                            solver_tx_hash: solver_transaction_hash,
+                            ack_tx_hash: match ack_row {
+                                Some(ack) => ack.get("transaction_hash"),
+                                None => None,
+                            },
+                            intent_version: intent_version,
+                            solution_type: None
+                        });
+                    }
+                },
                 None => {
                     source_transaction_data = None;
                     destination_transaction_data = None;
@@ -568,16 +639,18 @@ async fn fetch_intents(
                             None => None,
                         },
                         intent_version: intent_version,
+                        solution_type: None
                     });
                 }
             }
 
             let created_at: SystemTime = intent_row.get("timestamp");
+            let datetime: DateTime<Utc> = created_at.into();
 
             let transaction_data: TransactionData = TransactionData {
                 id: intent_row.get("id"),
                 intentId: intent_id,
-                createdAt: created_at,
+                createdAt: datetime,
                 status: stage,
                 isDeposit: None,
                 senderAddress: intent_row.get("owner_address"),
@@ -595,16 +668,18 @@ async fn fetch_intents(
 
 #[derive(serde::Serialize, Debug)]
 struct TransactionHistory {
+    id: i64,
     intent_id: i64,
     status: String,
     version: i32,
+    timestamp: Option<DateTime<Utc>>,
 }
 
 async fn fetch_transaction_history(
     client: web::Data<Arc<tokio_postgres::Client>>,
     initiator_address: web::Path<String>,
 ) -> impl Responder {
-    let query_intent = "SELECT * FROM intent WHERE owner_address = $1";
+    let query_intent = "SELECT id, intent_id, timestamp FROM intent WHERE owner_address = $1";
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
 
@@ -617,12 +692,17 @@ async fn fetch_transaction_history(
             let mut data: Vec<TransactionHistory> = vec![];
             for row in intent_row {
                 let intent_id: i64 = row.get("intent_id");
+                let timestamp: SystemTime = row.get("timestamp");
+                let datetime: DateTime<Utc> = timestamp.into();
+
                 match client.query_one(query_intent_state, &[&intent_id]).await {
                     Ok(state) => {
                         let txn: TransactionHistory = TransactionHistory {
+                            id: row.get("id"),
                             intent_id,
                             status: state.get("stage"),
                             version: state.get("version"),
+                            timestamp: Some(datetime),
                         };
                         data.push(txn);
                     }
@@ -637,25 +717,41 @@ async fn fetch_transaction_history(
 
 async fn fetch_transactions(
     client: web::Data<Arc<tokio_postgres::Client>>,
+    query: web::Query<PaginationParams>,
 ) -> impl Responder {
-    let query_intent = "SELECT * FROM intent";
-    let query_intent_state =
-        "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
+    let per_page = query.per_page.unwrap_or(10) as i64;
+    let id = query.id;
 
-    match client
-        .query(query_intent, &[])
-        .await
-    {
+    let query_intent_state =
+        "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1";
+
+    let (query_intent, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) = match id {
+        Some(ref cursor_id) => (
+            "SELECT id, intent_id, timestamp FROM intent WHERE id > $1 ORDER BY id ASC LIMIT $2",
+            vec![cursor_id, &per_page],
+        ),
+        None => (
+            "SELECT id, intent_id, timestamp FROM intent ORDER BY id ASC LIMIT $1",
+            vec![&per_page],
+        ),
+    };
+
+    match client.query(query_intent, &params).await {
         Ok(intent_row) => {
             let mut data: Vec<TransactionHistory> = vec![];
             for row in intent_row {
                 let intent_id: i64 = row.get("intent_id");
+                let timestamp: SystemTime = row.get("timestamp");
+                let datetime: DateTime<Utc> = timestamp.into();
+
                 match client.query_one(query_intent_state, &[&intent_id]).await {
                     Ok(state) => {
                         let txn: TransactionHistory = TransactionHistory {
+                            id: row.get("id"),
                             intent_id,
                             status: state.get("stage"),
                             version: state.get("version"),
+                            timestamp: Some(datetime),
                         };
                         data.push(txn);
                     }
