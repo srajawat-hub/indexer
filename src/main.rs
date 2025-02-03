@@ -483,10 +483,25 @@ async fn fetch_intents(
                         }
                     }
                     2 => {
-                        let src_chain_id: String = orders[0].get("source_chain_id");
-                        let src_order_id: i64 = orders[0].get("order_id");
-                        let solution_type: Option<i32> = orders[0].get("solution_type");
-                        let multi_leg: bool = orders[0].get("multi_leg");
+                        let mut source_order;
+                        let mut destination_order;
+
+                        let order_id1: i64 = orders[0].get("order_id");
+                        let order_id2: i64 = orders[1].get("order_id");
+
+                        if (order_id1 < order_id2) {
+                            source_order = orders[0].clone();
+                            destination_order = orders[1].clone();
+                        }
+                        else {
+                            source_order = orders[1].clone();
+                            destination_order = orders[0].clone();
+                        }
+                        
+                        let src_chain_id: String = source_order.get("source_chain_id");
+                        let src_order_id: i64 = source_order.get("order_id");
+                        let solution_type: Option<i32> = source_order.get("solution_type");
+                        let multi_leg: bool = source_order.get("multi_leg");
                         let src_vault_txn_hash: Option<String> = match client
                             .query_one(query_message_on_vaults, &[&src_order_id])
                             .await
@@ -498,8 +513,8 @@ async fn fetch_intents(
                             Err(_) => None,
                         };
 
-                        let dst_chain_id: String = orders[1].get("source_chain_id");
-                        let dst_order_id: i64 = orders[1].get("order_id");
+                        let dst_chain_id: String = destination_order.get("source_chain_id");
+                        let dst_order_id: i64 = destination_order.get("order_id");
                         let dst_vault_txn_hash: Option<String> = match client
                             .query_one(query_message_on_vaults, &[&dst_order_id])
                             .await
@@ -511,47 +526,47 @@ async fn fetch_intents(
                             Err(_) => None,
                         };
 
-                        let receiver_type: Option<i32> = orders[0].get("receiver_type");
+                        let receiver_type: Option<i32> = source_order.get("receiver_type");
                         intent_type = check_order_type(multi_leg, solution_type, receiver_type);
 
 
                         source_transaction_data = Some(OrderTransactionData {
-                            amountIn: orders[0].get("amount_in"),
-                            amountOut: orders[0].get("amount_out"),
+                            amountIn: source_order.get("amount_in"),
+                            amountOut: source_order.get("amount_out"),
                             chainId: src_chain_id.clone(),
                             txHash: src_vault_txn_hash.clone(),
-                            tokenIn: orders[0].get("token_in"),
-                            tokenOut: orders[0].get("token_out"),
+                            tokenIn: source_order.get("token_in"),
+                            tokenOut: source_order.get("token_out"),
                             explorerLink: utils::get_block_explorer_link(
                                 src_chain_id,
                                 src_vault_txn_hash,
                             ),
-                            order_payload: Some(orders[0].get("order_payload")),
+                            order_payload: Some(source_order.get("order_payload")),
                         });
 
                         destination_transaction_data = Some(OrderTransactionData {
-                            amountIn: orders[1].get("amount_in"),
-                            amountOut: orders[1].get("amount_out"),
+                            amountIn: destination_order.get("amount_in"),
+                            amountOut: destination_order.get("amount_out"),
                             chainId: dst_chain_id.clone(),
                             txHash: dst_vault_txn_hash.clone(),
-                            tokenIn: orders[1].get("token_in"),
-                            tokenOut: orders[1].get("token_out"),
+                            tokenIn: destination_order.get("token_in"),
+                            tokenOut: destination_order.get("token_out"),
                             explorerLink: utils::get_block_explorer_link(
                                 dst_chain_id,
                                 dst_vault_txn_hash,
                             ),
-                            order_payload: Some(orders[1].get("order_payload")),
+                            order_payload: Some(destination_order.get("order_payload")),
                         });
 
                         initial_data = Some(InitialData {
                             id: intent_row.get("id"),
                             intent_id: intent_id,
-                            origin_chain: Some(orders[0].get("destination_chain_id")),
-                            target_chain: Some(orders[1].get("source_chain_id")),
-                            token_in: Some(orders[0].get("token_in")),
-                            token_out: Some(orders[1].get("token_out")),
-                            amount_in: Some(orders[0].get("amount_in")),
-                            amount_out: Some(orders[1].get("amount_out")),
+                            origin_chain: Some(source_order.get("destination_chain_id")),
+                            target_chain: Some(destination_order.get("source_chain_id")),
+                            token_in: Some(source_order.get("token_in")),
+                            token_out: Some(destination_order.get("token_out")),
+                            amount_in: Some(source_order.get("amount_in")),
+                            amount_out: Some(destination_order.get("amount_out")),
                             initiator_address: sender_address,
                             solver_address: solver_address.clone(),
                             ack_result: match &ack_row {
