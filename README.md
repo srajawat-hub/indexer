@@ -168,6 +168,7 @@ intent_state (
         "nanos_since_epoch": 871916000
     },
     "status": "Done",
+    "intent_type": "Cross Chain Swap"
     "isDeposit": null,
     "senderAddress": "0x4153dF2A53CCC367a1A7e7140DD28b7e04B503A6",
     "solverAddress": "0x78C8891A2142a6D2dE612AC4d69A680Dd6056C59",
@@ -207,8 +208,7 @@ intent_state (
         "ack_error_message": "",
         "solver_tx_hash": "0x12cf41e3299e21c0c8a49145cabfcf047eabe7bf54e41df39e22273d20d7e72e",
         "ack_tx_hash": "0x43c27ac2cb3858cbb20d96bea2556c0129507d1a851956030629583f7f45e5dd",
-        "intent_version": 5,
-        "solution_type": "Cross Chain Transact"
+        "intent_version": 5
     }
 }
 ```
