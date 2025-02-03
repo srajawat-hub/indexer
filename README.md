@@ -221,3 +221,4 @@ Possible values of `intent_type`
 - Local Transfer
 - Local Swap
 - Stake
+- null // could not be determined
