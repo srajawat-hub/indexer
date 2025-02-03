@@ -6,13 +6,15 @@ mod utils;
 
 use actix_web::cookie::time::PrimitiveDateTime;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use alloy::primitives::bytes;
+use alloy::sol_types::SolValue;
 use chrono::{DateTime, Utc};
 use dotenv::dotenv;
 use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
 use serde::Deserialize;
-use solidity_structs::SolutionTypeEnum;
+use solidity_structs::{ReceiverEnum, SolidityOrder, SolutionTypeEnum};
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fmt::format, future::Future};
@@ -164,6 +166,7 @@ struct TransactionData {
     source: Option<OrderTransactionData>,
     destination: Option<OrderTransactionData>,
     initial_data: Option<InitialData>,
+    intent_type: Option<String>
 }
 
 // both for source and destination txn data
@@ -197,7 +200,28 @@ struct InitialData {
     solver_tx_hash: Option<String>,
     ack_tx_hash: Option<String>,
     intent_version: i32, // check if more needed
-    solution_type: Option<String>
+}
+
+fn check_order_type(
+    multi_leg: bool,
+    solution_type: Option<i32>,
+    receiver_type: Option<i32>
+) -> Option<String> {
+    match solution_type == Some(3) {
+        true => Some(String::from("Stake")),
+        false => match multi_leg {
+            true => match receiver_type {
+                Some(0) => Some(String::from("Cross Chain Transfer")),
+                Some(1) => Some(String::from("Cross Chain Swap")),
+                _ => None,
+            },
+            false => match receiver_type {
+                Some(0) => Some(String::from("Local Transfer")),
+                Some(1) => Some(String::from("Local Swap")),
+                _ => None,
+            },
+        },
+    }
 }
 
 // Handler to fetch data from the database
@@ -266,6 +290,7 @@ async fn fetch_intents(
             let mut source_transaction_data: Option<OrderTransactionData>;
             let mut destination_transaction_data: Option<OrderTransactionData>;
             let mut initial_data: Option<InitialData>;
+            let mut intent_type: Option<String> = Some(String::new());
 
             let bytes32_zero_address: String =
                 String::from("0x0000000000000000000000000000000000000000000000000000000000000000");
@@ -278,6 +303,9 @@ async fn fetch_intents(
                         let order_id: i64 = orders[0].get("order_id");
                         let solution_type: Option<i32> = orders[0].get("solution_type");
                         let multi_leg: bool = orders[0].get("multi_leg");
+                        let receiver_type: Option<i32> = orders[0].get("receiver_type");
+                        intent_type = check_order_type(multi_leg, solution_type, receiver_type);
+
                         let vault_txn_hash: Option<String> = match client
                             .query_one(query_message_on_vaults, &[&order_id])
                             .await
@@ -344,8 +372,7 @@ async fn fetch_intents(
                                             Some(ack) => ack.get("transaction_hash"),
                                             None => None,
                                         },
-                                        intent_version: intent_version,
-                                        solution_type: Some(String::from("Cross Chain Transact"))
+                                        intent_version: intent_version
                                     });
                                 }
                                 false => {
@@ -397,8 +424,7 @@ async fn fetch_intents(
                                             Some(ack) => ack.get("transaction_hash"),
                                             None => None,
                                         },
-                                        intent_version: intent_version,
-                                        solution_type: Some(String::from("Cross Chain Transact"))
+                                        intent_version: intent_version
                                     });
                                 }
                             },
@@ -451,16 +477,7 @@ async fn fetch_intents(
                                         Some(ack) => ack.get("transaction_hash"),
                                         None => None,
                                     },
-                                    intent_version: intent_version,
-                                    solution_type: match solution_type {
-                                        Some(type_id) => {
-                                            match type_id == 3 {
-                                                true => Some(String::from("Stake")),
-                                                false => Some(String::from("Local Transact"))
-                                            }
-                                        },
-                                        None => None
-                                    }
+                                    intent_version: intent_version
                                 });
                             }
                         }
@@ -469,6 +486,7 @@ async fn fetch_intents(
                         let src_chain_id: String = orders[0].get("source_chain_id");
                         let src_order_id: i64 = orders[0].get("order_id");
                         let solution_type: Option<i32> = orders[0].get("solution_type");
+                        let multi_leg: bool = orders[0].get("multi_leg");
                         let src_vault_txn_hash: Option<String> = match client
                             .query_one(query_message_on_vaults, &[&src_order_id])
                             .await
@@ -492,6 +510,10 @@ async fn fetch_intents(
                             }
                             Err(_) => None,
                         };
+
+                        let receiver_type: Option<i32> = orders[0].get("receiver_type");
+                        intent_type = check_order_type(multi_leg, solution_type, receiver_type);
+
 
                         source_transaction_data = Some(OrderTransactionData {
                             amountIn: orders[0].get("amount_in"),
@@ -555,8 +577,7 @@ async fn fetch_intents(
                                 Some(ack) => ack.get("transaction_hash"),
                                 None => None,
                             },
-                            intent_version: intent_version,
-                            solution_type: Some(String::from("Cross Chain Transact"))
+                            intent_version: intent_version
                         });
                     }
                     _ => {
@@ -596,8 +617,7 @@ async fn fetch_intents(
                                 Some(ack) => ack.get("transaction_hash"),
                                 None => None,
                             },
-                            intent_version: intent_version,
-                            solution_type: None
+                            intent_version: intent_version
                         });
                     }
                 },
@@ -638,8 +658,7 @@ async fn fetch_intents(
                             Some(ack) => ack.get("transaction_hash"),
                             None => None,
                         },
-                        intent_version: intent_version,
-                        solution_type: None
+                        intent_version: intent_version
                     });
                 }
             }
@@ -658,6 +677,7 @@ async fn fetch_intents(
                 source: source_transaction_data,
                 destination: destination_transaction_data,
                 initial_data: initial_data,
+                intent_type
             };
 
             HttpResponse::Ok().json(transaction_data)
