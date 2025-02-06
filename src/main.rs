@@ -6,7 +6,8 @@ mod utils;
 
 use actix_web::cookie::time::PrimitiveDateTime;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use alloy::primitives::bytes;
+use alloy::hex;
+use alloy::primitives::{bytes, Bytes, U256};
 use alloy::sol_types::SolValue;
 use chrono::{DateTime, Utc};
 use dotenv::dotenv;
@@ -14,7 +15,7 @@ use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
 use serde::Deserialize;
-use solidity_structs::{ReceiverEnum, SolidityOrder, SolutionTypeEnum};
+use solidity_structs::{ReceiverEnum, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData, StakeActionEnum};
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fmt::format, future::Future};
@@ -64,6 +65,13 @@ fn create_solana_indexer(
 struct PaginationParams {
     id: Option<i64>,
     per_page: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct CalculateStakeInitialDepositParams {
+    token_address: String,
+    chain_id: String,
+    user_address: String
 }
 
 #[tokio::main]
@@ -143,6 +151,7 @@ async fn main() {
                 web::get().to(fetch_transaction_history),
             )
             .route("/transactions", web::get().to(fetch_transactions))
+            .route("/initialdeposit", web::get().to(calculate_stake_initial_deposit))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -166,7 +175,7 @@ struct TransactionData {
     source: Option<OrderTransactionData>,
     destination: Option<OrderTransactionData>,
     initial_data: Option<InitialData>,
-    intent_type: Option<String>
+    intent_type: Option<String>,
 }
 
 // both for source and destination txn data
@@ -205,19 +214,19 @@ struct InitialData {
 fn check_order_type(
     multi_leg: bool,
     solution_type: Option<i32>,
-    receiver_type: Option<i32>
+    receiver_type: Option<i32>,
 ) -> Option<String> {
     match solution_type == Some(3) {
         true => Some(String::from("Stake")),
         false => match multi_leg {
             true => match receiver_type {
-                Some(0) => Some(String::from("Cross Chain Transfer")),
-                Some(1) => Some(String::from("Cross Chain Swap")),
+                Some(0) => Some(String::from("Cross Chain Transfer")), // receiver is not vault
+                Some(1) => Some(String::from("Cross Chain Swap")), // receiver is vault
                 _ => None,
             },
             false => match receiver_type {
-                Some(0) => Some(String::from("Local Transfer")),
-                Some(1) => Some(String::from("Local Swap")),
+                Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
+                Some(1) => Some(String::from("Local Swap")), // receiver is vault
                 _ => None,
             },
         },
@@ -372,7 +381,7 @@ async fn fetch_intents(
                                             Some(ack) => ack.get("transaction_hash"),
                                             None => None,
                                         },
-                                        intent_version: intent_version
+                                        intent_version: intent_version,
                                     });
                                 }
                                 false => {
@@ -424,7 +433,7 @@ async fn fetch_intents(
                                             Some(ack) => ack.get("transaction_hash"),
                                             None => None,
                                         },
-                                        intent_version: intent_version
+                                        intent_version: intent_version,
                                     });
                                 }
                             },
@@ -477,7 +486,7 @@ async fn fetch_intents(
                                         Some(ack) => ack.get("transaction_hash"),
                                         None => None,
                                     },
-                                    intent_version: intent_version
+                                    intent_version: intent_version,
                                 });
                             }
                         }
@@ -492,12 +501,11 @@ async fn fetch_intents(
                         if (order_id1 < order_id2) {
                             source_order = orders[0].clone();
                             destination_order = orders[1].clone();
-                        }
-                        else {
+                        } else {
                             source_order = orders[1].clone();
                             destination_order = orders[0].clone();
                         }
-                        
+
                         let src_chain_id: String = source_order.get("source_chain_id");
                         let src_order_id: i64 = source_order.get("order_id");
                         let solution_type: Option<i32> = source_order.get("solution_type");
@@ -528,7 +536,6 @@ async fn fetch_intents(
 
                         let receiver_type: Option<i32> = source_order.get("receiver_type");
                         intent_type = check_order_type(multi_leg, solution_type, receiver_type);
-
 
                         source_transaction_data = Some(OrderTransactionData {
                             amountIn: source_order.get("amount_in"),
@@ -592,7 +599,7 @@ async fn fetch_intents(
                                 Some(ack) => ack.get("transaction_hash"),
                                 None => None,
                             },
-                            intent_version: intent_version
+                            intent_version: intent_version,
                         });
                     }
                     _ => {
@@ -632,7 +639,7 @@ async fn fetch_intents(
                                 Some(ack) => ack.get("transaction_hash"),
                                 None => None,
                             },
-                            intent_version: intent_version
+                            intent_version: intent_version,
                         });
                     }
                 },
@@ -673,7 +680,7 @@ async fn fetch_intents(
                             Some(ack) => ack.get("transaction_hash"),
                             None => None,
                         },
-                        intent_version: intent_version
+                        intent_version: intent_version,
                     });
                 }
             }
@@ -692,7 +699,7 @@ async fn fetch_intents(
                 source: source_transaction_data,
                 destination: destination_transaction_data,
                 initial_data: initial_data,
-                intent_type
+                intent_type,
             };
 
             HttpResponse::Ok().json(transaction_data)
@@ -797,4 +804,64 @@ async fn fetch_transactions(
         }
         Err(e) => HttpResponse::InternalServerError().finish(),
     }
+}
+
+async fn calculate_stake_initial_deposit(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    query: web::Query<CalculateStakeInitialDepositParams>,
+) -> impl Responder {
+    let querydb = "SELECT order_payload, amount_in FROM order_created WHERE token_in=$1 AND source_chain_id=$2 AND creator_address=$3 AND solution_type=3";
+
+    let amount = match client.query(querydb, &[&query.token_address, &query.chain_id, &query.user_address]).await {
+        Ok(orders) => {
+            let mut order_amount:U256 = U256::from(0);
+            for order in orders {
+                let order_payload: String = order.get("order_payload");
+                let amount_in: String = order.get("amount_in");
+                let order_bytes = hex::decode(order_payload.strip_prefix("0x").unwrap_or(&order_payload)).expect("Invalid hex");
+                let order_bytes = Bytes::from(order_bytes);
+
+                match SolidityOrder::abi_decode(&order_bytes, true) {
+                    Ok(data) => {
+                        let solution = data.solution.data;
+                        match SolutionTypeStakeData::abi_decode(&solution, true) {
+                            Ok(solution_data) => {
+                                match solution_data.stakeAction {
+                                    StakeActionEnum::Deposit => {
+                                        let dec_amt = U256::from_str_radix(amount_in.as_str(), 10).unwrap();
+                                        order_amount += U256::from_str_radix(amount_in.as_str(), 10).unwrap();
+                                    },
+                                    StakeActionEnum::Withdraw => {
+                                        order_amount -= U256::from_str_radix(amount_in.as_str(), 10).unwrap();
+                                    },
+                                    StakeActionEnum::__Invalid => {
+                                        order_amount += U256::from(0);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                error!("error {:?}", e);
+                                order_amount = U256::from(0);
+                                break;
+                            }
+                        };
+                    },
+                    Err(e) => {
+                        error!("error {:?}", e);
+                        order_amount = U256::from(0);
+                        break;
+                    }
+                };
+            }
+            order_amount // Return JSON response
+        },
+        Err(e) => {
+            error!("error {:?}", e);
+            U256::from(0)
+        }
+    };
+
+    info!("amount {:?}", amount);
+    HttpResponse::Ok().json(amount)
+
 }

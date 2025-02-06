@@ -256,7 +256,7 @@ pub async fn process_evm_events(
                             &multi_leg,
                             &order_payload,
                             &solution_type,
-                            &receiver_type
+                            &receiver_type,
                         ],
                     )
                     .await
