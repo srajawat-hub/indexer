@@ -838,28 +838,7 @@ async fn calculate_stake_initial_deposit(
 
                 match SolidityOrder::abi_decode(&order_bytes, true) {
                     Ok(data) => {
-                        let solution = data.solution.data;
-                        match SolutionTypeStakeData::abi_decode(&solution, true) {
-                            Ok(solution_data) => {
-                                match solution_data.stakeAction {
-                                    StakeActionEnum::Deposit => {
-                                        let dec_amt = U256::from_str_radix(amount_in.as_str(), 10).unwrap();
-                                        order_amount += U256::from_str_radix(amount_in.as_str(), 10).unwrap();
-                                    },
-                                    StakeActionEnum::Withdraw => {
-                                        order_amount -= U256::from_str_radix(amount_in.as_str(), 10).unwrap();
-                                    },
-                                    StakeActionEnum::__Invalid => {
-                                        order_amount += U256::from(0);
-                                    }
-                                }
-                            },
-                            Err(e) => {
-                                error!("error {:?}", e);
-                                order_amount = U256::from(0);
-                                break;
-                            }
-                        };
+                        order_amount += U256::from_str_radix(amount_in.as_str(), 10).unwrap();
                     },
                     Err(e) => {
                         error!("error {:?}", e);
