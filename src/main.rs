@@ -810,12 +810,27 @@ async fn calculate_stake_initial_deposit(
     client: web::Data<Arc<tokio_postgres::Client>>,
     query: web::Query<CalculateStakeInitialDepositParams>,
 ) -> impl Responder {
-    let querydb = "SELECT order_payload, amount_in FROM order_created WHERE token_in=$1 AND source_chain_id=$2 AND creator_address=$3 AND solution_type=3";
+    let querydb = "SELECT intent_id, order_payload, amount_in FROM order_created WHERE token_in=$1 AND source_chain_id=$2 AND creator_address=$3 AND solution_type=3";
 
     let amount = match client.query(querydb, &[&query.token_address, &query.chain_id, &query.user_address]).await {
         Ok(orders) => {
             let mut order_amount:U256 = U256::from(0);
             for order in orders {
+                let intent_id: i64 = order.get("intent_id");
+                let intent_state_query = "SELECT MAX(version) as latest_version FROM intent_state WHERE intent_id=$1";
+                let intent_version: i32 = match client.query_one(intent_state_query, &[&intent_id]).await {
+                    Ok(res) => {
+                        let version: i32 = res.get("latest_version");
+                        version
+                    },
+                    Err(e) => {
+                        error!("Error fetching version {:?}, excluding this intent_id {:?} from calculation", e, intent_id);
+                        0
+                    }
+                };
+                if (intent_version <= 4) { // no ack started or received
+                    continue;
+                }
                 let order_payload: String = order.get("order_payload");
                 let amount_in: String = order.get("amount_in");
                 let order_bytes = hex::decode(order_payload.strip_prefix("0x").unwrap_or(&order_payload)).expect("Invalid hex");
