@@ -928,7 +928,7 @@ async fn fetch_contract_balance(
                         let data: Value = result.json().await.unwrap();
                         let result_balance = data.get("result").unwrap();
                         let native_balance: TokenBalance = TokenBalance {
-                            balance: Some(result_balance),
+                            balance: Some(String::from(result_balance)),
                             contractAddress: Some(String::from("0x1111111111111111111111111111111111111111")),
                             decimals: Some(String::from("18")),
                             name: Some(String::from("Native")),
