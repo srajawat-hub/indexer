@@ -14,8 +14,11 @@ use dotenv::dotenv;
 use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use solidity_structs::{ReceiverEnum, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData, StakeActionEnum};
+use utils::get_api_url;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fmt::format, future::Future};
@@ -72,6 +75,12 @@ struct CalculateStakeInitialDepositParams {
     token_address: String,
     chain_id: String,
     user_address: String
+}
+
+#[derive(Deserialize)]
+struct BalanceParams {
+    contract_address: String,
+    chain_id: String,
 }
 
 #[tokio::main]
@@ -152,6 +161,7 @@ async fn main() {
             )
             .route("/transactions", web::get().to(fetch_transactions))
             .route("/initialdeposit", web::get().to(calculate_stake_initial_deposit))
+            .route("/contract_balance/{network}", web::post().to(fetch_contract_balance))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -858,4 +868,82 @@ async fn calculate_stake_initial_deposit(
     info!("amount {:?}", amount);
     HttpResponse::Ok().json(amount)
 
+}
+
+#[derive(Serialize, Debug, Deserialize)]
+struct TokenBalance {
+    balance: Option<String>,
+    contractAddress: Option<String>,
+    decimals: Option<String>,
+    name: Option<String>,
+    symbol: Option<String>
+}
+
+#[derive(Serialize, Debug, Deserialize)]
+struct ContractBalance {
+    message: String,
+    result: Vec<TokenBalance>,
+    status: String
+}
+
+#[derive(Serialize, Debug)]
+struct ContractBalanceResponse {
+    data: HashMap<String, Vec<TokenBalance>>
+}
+
+async fn fetch_contract_balance(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    network: web::Path<String>,
+    req: web::Json<Vec<BalanceParams>>
+) -> impl Responder {
+    let mut balances: ContractBalanceResponse = ContractBalanceResponse { data: HashMap::new() };
+
+    match network.to_string().as_ref() {
+        "testnet" => {
+            let contracts = req.0;
+            for contract in contracts {
+                let chain_id = contract.chain_id;
+                let contract_address = contract.contract_address;
+                let api_url = match get_api_url(chain_id.clone(), String::from("tokenlist"), contract_address.clone()) {
+                    Some(url) => url,
+                    None => continue
+                };
+                let api_client = reqwest::Client::new();
+                let mut contract_balances: Vec<TokenBalance> = vec![];
+                match api_client.get(api_url).header("Content-Type", "application/json").send().await {
+                    Ok(result) => {
+                        let data: ContractBalance = result.json().await.unwrap();
+                        contract_balances = data.result;
+                        // balances.data.insert(chain_id, data.result)
+                    },
+                    Err(_) => continue
+                };
+
+                let native_api_url = match get_api_url(chain_id.clone(), String::from("balance"), contract_address) {
+                    Some(url) => url,
+                    None => continue
+                };
+                match api_client.get(native_api_url).header("Content-Type", "application/json").send().await {
+                    Ok(result) => {
+                        let data: Value = result.json().await.unwrap();
+                        let result_balance = data.get("result").unwrap();
+                        let native_balance: TokenBalance = TokenBalance {
+                            balance: Some(result_balance),
+                            contractAddress: Some(String::from("0x1111111111111111111111111111111111111111")),
+                            decimals: Some(String::from("18")),
+                            name: Some(String::from("Native")),
+                            symbol: Some(String::from("Native"))
+                        };
+
+                        contract_balances.push(native_balance);
+
+                        balances.data.insert(chain_id, contract_balances);
+                    },
+                    Err(_) => continue
+                };
+            }
+        },
+        &_ => error!("No match"),
+    }
+    HttpResponse::Ok().json(balances)
 }
