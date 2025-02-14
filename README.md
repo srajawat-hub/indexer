@@ -222,3 +222,68 @@ Possible values of `intent_type`
 - Local Swap
 - Stake
 - null // could not be determined
+
+## Fetch token balance
+Request Type - POST
+
+endpoint - /contract_balance/{network}
+
+**Query Params**
+network - testnet or mainnet
+
+**Input Payload**
+- For EVM
+```
+{
+    "type": "EVM",
+    "token_address": [
+        {
+            "chain_id": "421614",
+            "contract_address": "0x123141"
+        },
+        {
+            "chain_id": "11155420",
+            "contract_address": "0x12142"
+        }
+    ]
+}
+```
+
+- For Solana
+```
+{
+    "type": "SVM",
+    "user_address": "0xaed223306A006975c00A939dBEB6d7eBd9C04d80",
+    "token_address": [
+        "2Y9NGj5JGhuMFcSYQM71eK1eFNVx6j3GpnjvHEGXopzU",
+        "2Y9NGj5JGhuMFcSYQM71eK1eFNVx6j3GpnjvHEGXopzU",
+        "5M8FC3ViURaWPLT8xEEW2EbW7jUfBJULEmoemqfcdKpw"
+    ]
+}
+```
+
+**Response**
+```
+{
+    "data": {
+        "11155420": [
+            {
+                "balance": "989995000000000000000000000",
+                "contractAddress": "0x61d1350f74be0bcd1bdee84499c71ac47666a031",
+                "decimals": "18",
+                "name": "USDT",
+                "symbol": "USDT"
+            },
+        ],
+        "421614": [
+            {
+                "balance": "1000000000000000000000000000",
+                "contractAddress": "0x24580a645e1b88d2261498d965562cfb7b68d646",
+                "decimals": "18",
+                "name": "USDC",
+                "symbol": "USD Coin"
+            },
+        ]
+    }
+}
+```

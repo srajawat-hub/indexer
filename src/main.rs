@@ -7,7 +7,7 @@ mod utils;
 use actix_web::cookie::time::PrimitiveDateTime;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use alloy::hex;
-use alloy::primitives::{bytes, Bytes, U256};
+use alloy::primitives::{bytes, Address, Bytes, U256};
 use alloy::sol_types::SolValue;
 use chrono::{DateTime, Utc};
 use dotenv::dotenv;
@@ -16,15 +16,22 @@ use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use solidity_structs::{ReceiverEnum, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData, StakeActionEnum};
-use utils::get_api_url;
+use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::program_pack::Pack;
+use solana_sdk::pubkey::Pubkey;
+use solidity_structs::{
+    ReceiverEnum, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData, StakeActionEnum,
+};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fmt::format, future::Future};
 use std::{fs, time};
 use tokio::signal;
 use tokio_postgres::{connect, NoTls};
+use utils::get_api_url;
 
 #[derive(Deserialize)]
 struct IndexerConfig {
@@ -74,13 +81,7 @@ struct PaginationParams {
 struct CalculateStakeInitialDepositParams {
     token_address: String,
     chain_id: String,
-    user_address: String
-}
-
-#[derive(Deserialize)]
-struct BalanceParams {
-    contract_address: String,
-    chain_id: String,
+    user_address: String,
 }
 
 #[tokio::main]
@@ -160,8 +161,14 @@ async fn main() {
                 web::get().to(fetch_transaction_history),
             )
             .route("/transactions", web::get().to(fetch_transactions))
-            .route("/initialdeposit", web::get().to(calculate_stake_initial_deposit))
-            .route("/contract_balance/{network}", web::post().to(fetch_contract_balance))
+            .route(
+                "/initialdeposit",
+                web::get().to(calculate_stake_initial_deposit),
+            )
+            .route(
+                "/contract_balance/{network}",
+                web::post().to(fetch_contract_balance),
+            )
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -231,12 +238,12 @@ fn check_order_type(
         false => match multi_leg {
             true => match receiver_type {
                 Some(0) => Some(String::from("Cross Chain Transfer")), // receiver is not vault
-                Some(1) => Some(String::from("Cross Chain Swap")), // receiver is vault
+                Some(1) => Some(String::from("Cross Chain Swap")),     // receiver is vault
                 _ => None,
             },
             false => match receiver_type {
                 Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
-                Some(1) => Some(String::from("Local Swap")), // receiver is vault
+                Some(1) => Some(String::from("Local Swap")),     // receiver is vault
                 _ => None,
             },
         },
@@ -740,7 +747,6 @@ async fn fetch_transaction_history(
         .await
     {
         Ok(intent_row) => {
-            println!("row len {:?}", intent_row.len());
             let mut data: Vec<TransactionHistory> = vec![];
             for row in intent_row {
                 let intent_id: i64 = row.get("intent_id");
@@ -822,34 +828,47 @@ async fn calculate_stake_initial_deposit(
 ) -> impl Responder {
     let querydb = "SELECT intent_id, order_payload, amount_in FROM order_created WHERE token_in=$1 AND source_chain_id=$2 AND creator_address=$3 AND solution_type=3";
 
-    let amount = match client.query(querydb, &[&query.token_address, &query.chain_id, &query.user_address]).await {
+    let amount = match client
+        .query(
+            querydb,
+            &[&query.token_address, &query.chain_id, &query.user_address],
+        )
+        .await
+    {
         Ok(orders) => {
-            let mut order_amount:U256 = U256::from(0);
+            let mut order_amount: U256 = U256::from(0);
             for order in orders {
                 let intent_id: i64 = order.get("intent_id");
-                let intent_state_query = "SELECT MAX(version) as latest_version FROM intent_state WHERE intent_id=$1";
-                let intent_version: i32 = match client.query_one(intent_state_query, &[&intent_id]).await {
+                let intent_state_query =
+                    "SELECT MAX(version) as latest_version FROM intent_state WHERE intent_id=$1";
+                let intent_version: i32 = match client
+                    .query_one(intent_state_query, &[&intent_id])
+                    .await
+                {
                     Ok(res) => {
                         let version: i32 = res.get("latest_version");
                         version
-                    },
+                    }
                     Err(e) => {
                         error!("Error fetching version {:?}, excluding this intent_id {:?} from calculation", e, intent_id);
                         0
                     }
                 };
-                if (intent_version <= 4) { // no ack started or received
+                if (intent_version <= 4) {
+                    // no ack started or received
                     continue;
                 }
                 let order_payload: String = order.get("order_payload");
                 let amount_in: String = order.get("amount_in");
-                let order_bytes = hex::decode(order_payload.strip_prefix("0x").unwrap_or(&order_payload)).expect("Invalid hex");
+                let order_bytes =
+                    hex::decode(order_payload.strip_prefix("0x").unwrap_or(&order_payload))
+                        .expect("Invalid hex");
                 let order_bytes = Bytes::from(order_bytes);
 
                 match SolidityOrder::abi_decode(&order_bytes, true) {
                     Ok(data) => {
                         order_amount += U256::from_str_radix(amount_in.as_str(), 10).unwrap();
-                    },
+                    }
                     Err(e) => {
                         error!("error {:?}", e);
                         order_amount = U256::from(0);
@@ -858,7 +877,7 @@ async fn calculate_stake_initial_deposit(
                 };
             }
             order_amount // Return JSON response
-        },
+        }
         Err(e) => {
             error!("error {:?}", e);
             U256::from(0)
@@ -867,7 +886,6 @@ async fn calculate_stake_initial_deposit(
 
     info!("amount {:?}", amount);
     HttpResponse::Ok().json(amount)
-
 }
 
 #[derive(Serialize, Debug, Deserialize)]
@@ -876,74 +894,185 @@ struct TokenBalance {
     contractAddress: Option<String>,
     decimals: Option<String>,
     name: Option<String>,
-    symbol: Option<String>
+    symbol: Option<String>,
 }
 
 #[derive(Serialize, Debug, Deserialize)]
 struct ContractBalance {
     message: String,
     result: Vec<TokenBalance>,
-    status: String
+    status: String,
 }
 
 #[derive(Serialize, Debug)]
 struct ContractBalanceResponse {
-    data: HashMap<String, Vec<TokenBalance>>
+    data: HashMap<String, Vec<TokenBalance>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct BalanceParams {
+    contract_address: String,
+    chain_id: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct EVMBalanceParams {
+    token_address: Vec<BalanceParams>
+}
+
+#[derive(Deserialize, Debug)]
+struct SolanaBalanceParams {
+    user_address: Address,
+    token_address: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+pub enum ContractBalanceRequest {
+    EVM(EVMBalanceParams),
+    SVM(SolanaBalanceParams),
 }
 
 async fn fetch_contract_balance(
     client: web::Data<Arc<tokio_postgres::Client>>,
     network: web::Path<String>,
-    req: web::Json<Vec<BalanceParams>>
+    req: web::Json<ContractBalanceRequest>,
 ) -> impl Responder {
-    let mut balances: ContractBalanceResponse = ContractBalanceResponse { data: HashMap::new() };
+    let mut balances: ContractBalanceResponse = ContractBalanceResponse {
+        data: HashMap::new(),
+    };
 
-    match network.to_string().as_ref() {
-        "testnet" => {
-            let contracts = req.0;
-            for contract in contracts {
-                let chain_id = contract.chain_id;
-                let contract_address = contract.contract_address;
-                let api_url = match get_api_url(chain_id.clone(), String::from("tokenlist"), contract_address.clone()) {
-                    Some(url) => url,
-                    None => continue
-                };
-                let api_client = reqwest::Client::new();
-                let mut contract_balances: Vec<TokenBalance> = vec![];
-                match api_client.get(api_url).header("Content-Type", "application/json").send().await {
-                    Ok(result) => {
-                        let data: ContractBalance = result.json().await.unwrap();
-                        contract_balances = data.result;
-                        // balances.data.insert(chain_id, data.result)
-                    },
-                    Err(_) => continue
-                };
+    let SOLANA_PROGRAM_ID: Pubkey =
+        Pubkey::from_str("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz").unwrap();
 
-                let native_api_url = match get_api_url(chain_id.clone(), String::from("balance"), contract_address) {
-                    Some(url) => url,
-                    None => continue
-                };
-                match api_client.get(native_api_url).header("Content-Type", "application/json").send().await {
-                    Ok(result) => {
-                        let data: Value = result.json().await.unwrap();
-                        let result_balance = data.get("result").unwrap();
-                        let native_balance: TokenBalance = TokenBalance {
-                            balance: Some(result_balance.to_string()),
-                            contractAddress: Some(String::from("0x1111111111111111111111111111111111111111")),
-                            decimals: Some(String::from("18")),
-                            name: Some(String::from("Native")),
-                            symbol: Some(String::from("Native"))
-                        };
+    match req.0 {
+        ContractBalanceRequest::EVM(contracts) => {
+                for contract in contracts.token_address {
+                    let chain_id = contract.chain_id;
+                    let contract_address = contract.contract_address;
+                    let api_url = match get_api_url(
+                        network.to_string(),
+                        chain_id.clone(),
+                        String::from("tokenlist"),
+                        contract_address.clone(),
+                    ) {
+                        Some(url) => url,
+                        None => continue,
+                    };
+                    let api_client = reqwest::Client::new();
+                    let mut contract_balances: Vec<TokenBalance> = vec![];
+                    match api_client
+                        .get(api_url)
+                        .header("Content-Type", "application/json")
+                        .send()
+                        .await
+                    {
+                        Ok(result) => {
+                            let data: ContractBalance = result.json().await.unwrap();
+                            contract_balances = data.result;
+                        }
+                        Err(_) => continue,
+                    };
 
-                        contract_balances.push(native_balance);
+                    let native_api_url = match get_api_url(
+                        network.to_string(),
+                        chain_id.clone(),
+                        String::from("balance"),
+                        contract_address,
+                    ) {
+                        Some(url) => url,
+                        None => continue,
+                    };
+                    match api_client
+                        .get(native_api_url)
+                        .header("Content-Type", "application/json")
+                        .send()
+                        .await
+                    {
+                        Ok(result) => {
+                            let data: Value = result.json().await.unwrap();
+                            let result_balance = data.get("result").unwrap();
+                            let native_balance: TokenBalance = TokenBalance {
+                                balance: Some(result_balance.to_string()),
+                                contractAddress: Some(String::from(
+                                    "0x1111111111111111111111111111111111111111",
+                                )),
+                                decimals: Some(String::from("18")),
+                                name: Some(String::from("Native")),
+                                symbol: Some(String::from("Native")),
+                            };
 
-                        balances.data.insert(chain_id, contract_balances);
-                    },
-                    Err(_) => continue
-                };
-            }
+                            contract_balances.push(native_balance);
+
+                            balances.data.insert(chain_id, contract_balances);
+                        }
+                        Err(_) => continue,
+                    };
+                }
         },
-        &_ => error!("No match"),
+        ContractBalanceRequest::SVM(svm_meta_data) => {
+            let mut rpc_url = "";
+            match network.to_string().as_ref() {
+                "testnet" => {
+                    rpc_url = "http://api.devnet.solana.com";
+                }
+                "mainnet" => {
+                    rpc_url = "https://api.mainnet-beta.solana.com";
+                }
+                &_ => error!("No Network match"),
+            }
+
+            let client =
+                RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
+
+            let user_address: [u8; 20] = svm_meta_data.user_address.try_into().unwrap();
+
+            let mut contract_balances: Vec<TokenBalance> = vec![];
+
+            for token_address in svm_meta_data.token_address {
+                let token_mint = Pubkey::from_str(&token_address).unwrap();
+                let token_account = Pubkey::find_program_address(
+                    &[
+                        b"user_deposit_address",
+                        user_address.as_slice(),
+                        token_mint.as_ref(),
+                    ],
+                    &SOLANA_PROGRAM_ID,
+                )
+                .0;
+
+                match client.get_account(&token_account).await {
+                    Ok(account) => {
+                        info!("Token account exists {:?}", account);
+
+                        match client.get_token_account_balance(&token_account).await {
+                            Ok(balance) => {
+                                let token_balance: TokenBalance = TokenBalance {
+                                    balance: Some(balance.amount),
+                                    contractAddress: Some(token_mint.to_string()),
+                                    decimals: Some(String::from("9")),
+                                    name: None,
+                                    symbol: None,
+                                };
+                                contract_balances.push(token_balance);
+                            }
+                            Err(e) => {
+                                error!("Error in fetching balance of derived account {:?}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error in fetching account of derived address {:?}", e);
+                        continue;
+                    }
+                }
+            }
+            balances
+                .data
+                .insert(String::from("4294967295"), contract_balances);
+        }
     }
+
     HttpResponse::Ok().json(balances)
 }
