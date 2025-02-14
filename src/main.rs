@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use dotenv::dotenv;
 use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -21,7 +21,10 @@ use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
-    ReceiverEnum, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData, StakeActionEnum,
+    AcknowledgementMetadataStake, IntentPayloadEnum,
+    IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum, ReceiverEnum,
+    SolidityIntentProcessorBoundMessage, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData,
+    StakeActionEnum
 };
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -82,6 +85,11 @@ struct CalculateStakeInitialDepositParams {
     token_address: String,
     chain_id: String,
     user_address: String,
+}
+
+#[derive(Deserialize)]
+struct UnbondingBalance {
+    user_address: String
 }
 
 #[tokio::main]
@@ -169,6 +177,7 @@ async fn main() {
                 "/contract_balance/{network}",
                 web::post().to(fetch_contract_balance),
             )
+            .route("/get_ack_metadata", web::get().to(fetch_ack_metadata))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -886,6 +895,87 @@ async fn calculate_stake_initial_deposit(
 
     info!("amount {:?}", amount);
     HttpResponse::Ok().json(amount)
+}
+
+async fn fetch_ack_metadata(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    query: web::Query<UnbondingBalance>,
+) -> impl Responder {
+    let request_ids = get_stake_request_ids(&client, &query.user_address).await;
+    info!("request_ids {:?}", request_ids);
+    HttpResponse::Ok().json(request_ids)
+}
+
+async fn get_stake_request_ids(
+    client: &Arc<tokio_postgres::Client>,
+    user_address: &str,
+) -> Vec<U256> {
+    let query_order =
+        "SELECT intent_id FROM order_created WHERE creator_address=$1 AND solution_type=3";
+    let mut request_ids = Vec::new();
+
+    let order_rows = match client.query(query_order, &[&user_address]).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            error!("Error querying orders: {:?}", e);
+            return request_ids;
+        }
+    };
+
+    for order_row in order_rows {
+        if let Some(request_id) =
+            get_request_id_from_intent(client, order_row.get("intent_id")).await
+        {
+            request_ids.push(request_id);
+        }
+    }
+
+    request_ids
+}
+
+async fn get_request_id_from_intent(
+    client: &Arc<tokio_postgres::Client>,
+    intent_id: i64,
+) -> Option<U256> {
+    let query_vault = "SELECT message FROM message_dispatched_from_vault WHERE intent_id=$1";
+
+    let vault_row = match client.query_one(query_vault, &[&intent_id]).await {
+        Ok(row) => row,
+        Err(_) => return None,
+    };
+
+    let ack_message: String = vault_row.get("message");
+    let ack_message_bytes =
+        match hex::decode(ack_message.strip_prefix("0x").unwrap_or(&ack_message)) {
+            Ok(bytes) => Bytes::from(bytes),
+            Err(_) => return None,
+        };
+
+    parse_ack_message(&ack_message_bytes)
+}
+
+fn parse_ack_message(ack_message_bytes: &Bytes) -> Option<U256> {
+    let ipb_message =
+        SolidityIntentProcessorBoundMessage::abi_decode(ack_message_bytes, true).ok()?;
+
+    // Return early if not an Acknowledgement message
+    if !matches!(ipb_message.enumVariant, IntentProcessorBoundMessageEnum::Acknowledgement) {
+        return None;
+    }
+
+    let ack_data =
+        IntentProcessorBoundMessageAcknowledgementData::abi_decode(&ipb_message.data, true).ok()?;
+
+    // Return early if not a Stake message
+    if !matches!(ack_data.metadata.enumVariant, IntentPayloadEnum::Stake) {
+        return None;
+    }
+
+    let ack_metadata_struct =
+        AcknowledgementMetadataStake::abi_decode(&ack_data.metadata.data, true).ok()?;
+
+    info!("Got request id {:?}", ack_metadata_struct.request_id);
+    Some(ack_metadata_struct.request_id)
 }
 
 #[derive(Serialize, Debug, Deserialize)]

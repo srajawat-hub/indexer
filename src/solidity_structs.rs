@@ -196,9 +196,9 @@ sol! {
     }
 
     #[derive(Debug)]
+    #[derive(PartialEq)]
     enum IntentPayloadEnum {
-        Swap,
-        Transfer,
+        Transact,
         Stake
     }
 
@@ -213,6 +213,7 @@ sol! {
     }
 
     #[derive(Debug)]
+    #[derive(PartialEq)]
     enum IntentProcessorBoundMessageEnum {
         RegisterVault,
         UpdateVaultStatus,
@@ -256,6 +257,7 @@ sol! {
         bytes32 receiptTokenAddress;
         bool isTokenCredited;
         uint256 amountCredited;
+        uint256 request_id;
     }
 
     #[derive(Debug)]
