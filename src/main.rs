@@ -1149,7 +1149,7 @@ async fn fetch_contract_balance(
                     chain_id = "4294967295";
                 }
                 "mainnet" => {
-                    rpc_url = "https://othilie-wobneo-fast-mainnet.helius-rpc.com";
+                    rpc_url = "https://mainnet.helius-rpc.com/?api-key=d4d3c545-bd81-405c-9e51-3f600e9c25ad";
                 }
                 &_ => error!("No Network match"),
             }
