@@ -1046,6 +1046,10 @@ async fn fetch_contract_balance(
         data: HashMap::new(),
     };
 
+    let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set")
+    .parse::<String>()
+    .unwrap();
+
     let SOLANA_PROGRAM_ID: Pubkey =
         Pubkey::from_str("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz").unwrap();
 
@@ -1054,7 +1058,7 @@ async fn fetch_contract_balance(
             for contract in contracts.token_address {
                 let chain_id = contract.chain_id;
                 let contract_address = contract.contract_address;
-                let api_url = match get_api_url(network.to_string(), chain_id.clone()) {
+                let api_url = match get_api_url(network.to_string(), chain_id.clone(), alchemy_api_key.clone()) {
                     Some(url) => url,
                     None => continue,
                 };
@@ -1096,7 +1100,7 @@ async fn fetch_contract_balance(
                     Err(_) => continue,
                 };
 
-                let native_api_url = match get_api_url(network.to_string(), chain_id.clone()) {
+                let native_api_url = match get_api_url(network.to_string(), chain_id.clone(), alchemy_api_key.clone()) {
                     Some(url) => url,
                     None => continue,
                 };

@@ -19,28 +19,29 @@ pub fn get_block_explorer_link(chain_id: String, tx_hash: Option<String>) -> Opt
 }
 
 /// Returns the block explorer link for a given chain ID and transaction hash.
-pub fn get_api_url(network: String, chain_id: String) -> Option<String> {
+pub fn get_api_url(network: String, chain_id: String, alchemy_api_key: String) -> Option<String> {
     let chain_id_num: u32 = chain_id.parse().unwrap();
+
     match network.as_ref() {
         "testnet" => {
             match chain_id_num {
-                11155111 => Some(String::from("https://eth-sepolia.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")), // Ethereum sepolia
-                421614 => Some(String::from("https://arb-sepolia.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")),
-                11155420 => Some(String::from("https://opt-sepolia.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")), // Optimism sepolia Testnet
-                80002 => Some(String::from("https://polygon-amoy.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")), // Polygon amoy Testnet
-                84532 => Some(String::from("https://base-sepolia.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")), // Base sepolia testnet
-                17000 => Some(String::from("https://eth-holesky.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")), // Ethereum holesky testnet
+                11155111 => Some(format!("https://eth-sepolia.g.alchemy.com/v2/{}", alchemy_api_key)), // Ethereum sepolia
+                421614 => Some(format!("https://arb-sepolia.g.alchemy.com/v2/{}", alchemy_api_key)),
+                11155420 => Some(format!("https://opt-sepolia.g.alchemy.com/v2/{}", alchemy_api_key)), // Optimism sepolia Testnet
+                80002 => Some(format!("https://polygon-amoy.g.alchemy.com/v2/{}", alchemy_api_key)), // Polygon amoy Testnet
+                84532 => Some(format!("https://base-sepolia.g.alchemy.com/v2/{}", alchemy_api_key)), // Base sepolia testnet
+                17000 => Some(format!("https://eth-holesky.g.alchemy.com/v2/{}", alchemy_api_key)), // Ethereum holesky testnet
                 // 4294967295 => Some(format!("https://solscan.io/tx/")), // Solana devnet
                 _ => None, // Return None for unsupported chain IDs
             }
         },
         "mainnet" => {
             match chain_id_num {
-                1 => Some(String::from("https://eth-mainnet.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")), // Ethereum sepolia
-                42161 => Some(String::from("https://arb-mainnet.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")),
-                10 => Some(String::from("https://opt-mainnet.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")),
-                137 => Some(String::from("https://polygon-mainnet.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")),
-                8453 => Some(String::from("https://base-mainnet.g.alchemy.com/v2/7b4v9HWZgi_BlLtoxK25IdxuD5jeQkX5")),
+                1 => Some(format!("https://eth-mainnet.g.alchemy.com/v2/{}", alchemy_api_key)), // Ethereum sepolia
+                42161 => Some(format!("https://arb-mainnet.g.alchemy.com/v2/{}", alchemy_api_key)),
+                10 => Some(format!("https://opt-mainnet.g.alchemy.com/v2/{}", alchemy_api_key)),
+                137 => Some(format!("https://polygon-mainnet.g.alchemy.com/v2/{}", alchemy_api_key)),
+                8453 => Some(format!("https://base-mainnet.g.alchemy.com/v2/{}", alchemy_api_key)),
                 // 4294967295 => Some(format!("https://solscan.io/tx/")), // Solana devnet
                 _ => None, // Return None for unsupported chain IDs
             }
