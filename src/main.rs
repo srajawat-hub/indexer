@@ -15,7 +15,7 @@ use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::program_pack::Pack;
@@ -24,7 +24,7 @@ use solidity_structs::{
     AcknowledgementMetadataStake, IntentPayloadEnum,
     IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum, ReceiverEnum,
     SolidityIntentProcessorBoundMessage, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData,
-    StakeActionEnum
+    StakeActionEnum,
 };
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -89,7 +89,7 @@ struct CalculateStakeInitialDepositParams {
 
 #[derive(Deserialize)]
 struct UnbondingBalance {
-    user_address: String
+    user_address: String,
 }
 
 #[tokio::main]
@@ -959,7 +959,10 @@ fn parse_ack_message(ack_message_bytes: &Bytes) -> Option<U256> {
         SolidityIntentProcessorBoundMessage::abi_decode(ack_message_bytes, true).ok()?;
 
     // Return early if not an Acknowledgement message
-    if !matches!(ipb_message.enumVariant, IntentProcessorBoundMessageEnum::Acknowledgement) {
+    if !matches!(
+        ipb_message.enumVariant,
+        IntentProcessorBoundMessageEnum::Acknowledgement
+    ) {
         return None;
     }
 
@@ -980,7 +983,7 @@ fn parse_ack_message(ack_message_bytes: &Bytes) -> Option<U256> {
 
 #[derive(Serialize, Debug, Deserialize)]
 struct TokenBalance {
-    balance: Option<String>,
+    tokenBalance: Option<String>,
     contractAddress: Option<String>,
     decimals: Option<String>,
     name: Option<String>,
@@ -989,9 +992,10 @@ struct TokenBalance {
 
 #[derive(Serialize, Debug, Deserialize)]
 struct ContractBalance {
-    message: String,
-    result: Vec<TokenBalance>,
-    status: String,
+    address: Option<String>,
+    message: Option<String>,
+    tokenBalances: Vec<TokenBalance>,
+    status: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -1007,7 +1011,7 @@ struct BalanceParams {
 
 #[derive(Deserialize, Debug)]
 struct EVMBalanceParams {
-    token_address: Vec<BalanceParams>
+    token_address: Vec<BalanceParams>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1021,6 +1025,16 @@ struct SolanaBalanceParams {
 pub enum ContractBalanceRequest {
     EVM(EVMBalanceParams),
     SVM(SolanaBalanceParams),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct EVMbalances {
+    result: ContractBalance,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct EVMNativeBalance {
+    result: Option<String>
 }
 
 async fn fetch_contract_balance(
@@ -1037,69 +1051,91 @@ async fn fetch_contract_balance(
 
     match req.0 {
         ContractBalanceRequest::EVM(contracts) => {
-                for contract in contracts.token_address {
-                    let chain_id = contract.chain_id;
-                    let contract_address = contract.contract_address;
-                    let api_url = match get_api_url(
-                        network.to_string(),
-                        chain_id.clone(),
-                        String::from("tokenlist"),
-                        contract_address.clone(),
-                    ) {
-                        Some(url) => url,
-                        None => continue,
-                    };
-                    let api_client = reqwest::Client::new();
-                    let mut contract_balances: Vec<TokenBalance> = vec![];
-                    match api_client
-                        .get(api_url)
-                        .header("Content-Type", "application/json")
-                        .send()
-                        .await
+            for contract in contracts.token_address {
+                let chain_id = contract.chain_id;
+                let contract_address = contract.contract_address;
+                let api_url = match get_api_url(network.to_string(), chain_id.clone()) {
+                    Some(url) => url,
+                    None => continue,
+                };
+                let api_client = reqwest::Client::new();
+                let mut contract_balances: Vec<TokenBalance> = vec![];
+                let payload = json!({
+                    "id": 1,
+                    "jsonrpc": "2.0",
+                    "method": "alchemy_getTokenBalances",
+                    "params": [contract_address],
+                });
+
+                match api_client
+                    .post(api_url)
+                    .header("Content-Type", "application/json")
+                    .header("accept", "application/json")
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(result) => {
+                        let data: EVMbalances = result.json().await.unwrap();
+                        contract_balances = data
+                            .result
+                            .tokenBalances
+                            .into_iter() // Consumes the vector
+                            .filter_map(|mut balance| {
+                                if balance.tokenBalance != Some(String::from("0x0000000000000000000000000000000000000000000000000000000000000000")) {
+                                    // Convert hex to decimal
+                                    if let Ok(dec_value) = u128::from_str_radix(balance.tokenBalance.unwrap().trim_start_matches("0x"), 16) {
+                                        balance.tokenBalance = Some(dec_value.to_string());
+                                        return Some(balance);
+                                    }
+                                }
+                                None
+                            })
+                            .collect(); // Collects filtered items into a vector
+                    }
+                    Err(_) => continue,
+                };
+
+                let native_api_url = match get_api_url(network.to_string(), chain_id.clone()) {
+                    Some(url) => url,
+                    None => continue,
+                };
+                let native_payload = json!(
                     {
-                        Ok(result) => {
-                            let data: ContractBalance = result.json().await.unwrap();
-                            contract_balances = data.result;
-                        }
-                        Err(_) => continue,
-                    };
+                        "id": 1,
+                        "jsonrpc": "2.0",
+                        "method": "eth_getBalance",
+                        "params": [contract_address]
+                    }
+                );
+                match api_client
+                    .post(native_api_url)
+                    .header("Content-Type", "application/json")
+                    .json(&native_payload)
+                    .send()
+                    .await
+                {
+                    Ok(result) => {
+                        let data: EVMNativeBalance = result.json().await.unwrap();
+                        let result_balance = data.result;
+                        let native_balance: TokenBalance = TokenBalance {
+                            tokenBalance: Some(u128::from_str_radix(result_balance.unwrap().trim_start_matches("0x"), 16).unwrap().to_string()),
+                            contractAddress: Some(String::from(
+                                "0x1111111111111111111111111111111111111111",
+                            )),
+                            decimals: Some(String::from("18")),
+                            name: Some(String::from("Native")),
+                            symbol: Some(String::from("Native")),
+                        };
 
-                    let native_api_url = match get_api_url(
-                        network.to_string(),
-                        chain_id.clone(),
-                        String::from("balance"),
-                        contract_address,
-                    ) {
-                        Some(url) => url,
-                        None => continue,
-                    };
-                    match api_client
-                        .get(native_api_url)
-                        .header("Content-Type", "application/json")
-                        .send()
-                        .await
-                    {
-                        Ok(result) => {
-                            let data: Value = result.json().await.unwrap();
-                            let result_balance = data.get("result").unwrap();
-                            let native_balance: TokenBalance = TokenBalance {
-                                balance: Some(result_balance.to_string()),
-                                contractAddress: Some(String::from(
-                                    "0x1111111111111111111111111111111111111111",
-                                )),
-                                decimals: Some(String::from("18")),
-                                name: Some(String::from("Native")),
-                                symbol: Some(String::from("Native")),
-                            };
+                        contract_balances.push(native_balance);
 
-                            contract_balances.push(native_balance);
-
-                            balances.data.insert(chain_id, contract_balances);
-                        }
-                        Err(_) => continue,
-                    };
-                }
-        },
+                        balances.data.insert(chain_id, contract_balances);
+                    }
+                    Err(_) => continue,
+                };
+            }
+        }
         ContractBalanceRequest::SVM(svm_meta_data) => {
             let mut rpc_url = "";
             match network.to_string().as_ref() {
@@ -1138,7 +1174,7 @@ async fn fetch_contract_balance(
                         match client.get_token_account_balance(&token_account).await {
                             Ok(balance) => {
                                 let token_balance: TokenBalance = TokenBalance {
-                                    balance: Some(balance.amount),
+                                    tokenBalance: Some(balance.amount),
                                     contractAddress: Some(token_mint.to_string()),
                                     decimals: Some(String::from("9")),
                                     name: None,
