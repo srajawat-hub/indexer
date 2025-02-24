@@ -1142,12 +1142,14 @@ async fn fetch_contract_balance(
         }
         ContractBalanceRequest::SVM(svm_meta_data) => {
             let mut rpc_url = "";
+            let mut chain_id = "1399811149";
             match network.to_string().as_ref() {
                 "testnet" => {
                     rpc_url = "http://api.devnet.solana.com";
+                    chain_id = "4294967295";
                 }
                 "mainnet" => {
-                    rpc_url = "https://api.mainnet-beta.solana.com";
+                    rpc_url = "https://othilie-wobneo-fast-mainnet.helius-rpc.com";
                 }
                 &_ => error!("No Network match"),
             }
@@ -1200,7 +1202,7 @@ async fn fetch_contract_balance(
             }
             balances
                 .data
-                .insert(String::from("4294967295"), contract_balances);
+                .insert(String::from(chain_id), contract_balances);
         }
     }
 

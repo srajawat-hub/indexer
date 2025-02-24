@@ -11,6 +11,12 @@ pub fn get_block_explorer_link(chain_id: String, tx_hash: Option<String>) -> Opt
                 84532 => Some(format!("https://sepolia.basescan.org/tx/{}", hash)), // Base sepolia testnet
                 17000 => Some(format!("https://holesky.etherscan.io/tx/{}", hash)), // Ethereum holesky testnet
                 4294967295 => Some(format!("https://solscan.io/tx/{}?cluster=devnet", hash)), // Solana devnet
+                1 => Some(format!("https://etherscan.io/tx/{}", hash)),
+                42161 => Some(format!("https://arbiscan.io/tx/{}", hash)),
+                10 => Some(format!("https://optimistic.etherscan.io/tx/{}", hash)),
+                137 => Some(format!("https://polygonscan.com/tx/{}", hash)),
+                8453 => Some(format!("https://basescan.org/tx/{}", hash)),
+                1399811149 => Some(format!("https://solscan.io/tx/{}", hash)), // Solana devnet
                 _ => None, // Return None for unsupported chain IDs
             }
         }
