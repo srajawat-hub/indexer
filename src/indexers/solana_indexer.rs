@@ -112,20 +112,24 @@ impl SolanaIndexer {
                 "THis is last searched slot {:?} and last searched hash {:?}",
                 current_slot, last_searched_hash_val
             );
-            let sigs = rpc_client
+            let sigs = match rpc_client
                 .get_signatures_for_address_with_config(
                     &self.program_id,
                     GetConfirmedSignaturesForAddress2Config {
-                        // Start searching from this hash
                         before: last_searched_hash_val,
-                        // Stops the search by checking the slot
                         until: latest_tx,
                         limit: Some(MAX_LIMIT as usize),
                         ..GetConfirmedSignaturesForAddress2Config::default()
                     },
                 )
                 .await
-                .unwrap();
+            {
+                Ok(sigs) => sigs,
+                Err(e) => {
+                    error!("Error fetching signatures: {:?}", e);
+                    continue;
+                }
+            };
             if sigs.is_empty() {
                 info!("Breaking because sigs length is 0");
                 current_slot = rpc_client.get_slot().await.unwrap();
@@ -158,34 +162,25 @@ impl SolanaIndexer {
                 body.push(payload);
             }
             // Fetching multiple transaction data from signatures in a single RPC.
-            // Since the rpc payload can be a array of objects, we can perform multiple
-            // requests in a single RPC calls which is much much faster.
-            let transactions: std::result::Result<Vec<Response>, reqwest::Error> =
-                reqwest::Client::new()
-                    .post(rpc_client.url())
-                    .json(&body)
-                    .send()
-                    .await
-                    .unwrap()
-                    .json()
-                    .await;
-
-            let transactions = match transactions {
-                Ok(tx) => tx,
+            let transactions = match reqwest::Client::new()
+                .post(rpc_client.url())
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(response) => match response.json::<Vec<Response>>().await {
+                    Ok(tx) => tx,
+                    Err(e) => {
+                        error!("Error parsing transaction response: {:?}", e);
+                        continue;
+                    }
+                },
                 Err(e) => {
-                    error!("Error fetching transactions due to {:?}", e);
-                    let response_in_text = reqwest::Client::new()
-                        .post(rpc_client.url())
-                        .json(&body)
-                        .send()
-                        .await
-                        .unwrap()
-                        .text()
-                        .await;
-                    info!("Response in text {:?}", response_in_text);
-                    return Ok(());
+                    error!("Error sending transaction request: {:?}", e);
+                    continue;
                 }
             };
+
             info!("Got transactions");
             for (index, tx) in transactions.iter().enumerate() {
                 if let Some(err) = tx.result.transaction.meta.clone().unwrap().err {
