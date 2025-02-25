@@ -329,10 +329,15 @@ pub async fn process_evm_events(
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
 
+                let intent_stage = match result {
+                    true => &IntentStage::Done.to_string(),
+                    false => &IntentStage::Failed.to_string()
+                };
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::AcknowledgementReceived as i32,
-                    &IntentStage::Done.to_string(),
+                    intent_stage,
                     log.transaction_hash.unwrap(),
                     &client,
                     chain_provider.clone(),
