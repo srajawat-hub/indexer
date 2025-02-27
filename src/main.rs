@@ -34,7 +34,7 @@ use std::{fmt::format, future::Future};
 use std::{fs, time};
 use tokio::signal;
 use tokio_postgres::{connect, NoTls};
-use utils::get_api_url;
+use utils::{get_api_url, structure_intent_orders};
 
 #[derive(Deserialize)]
 struct IndexerConfig {
@@ -258,6 +258,8 @@ fn check_order_type(
         },
     }
 }
+
+async fn create_intent_response(client: web::Data<Arc<tokio_postgres::Client>>) {}
 
 // Handler to fetch data from the database
 async fn fetch_intents(
@@ -743,43 +745,142 @@ struct TransactionHistory {
     timestamp: Option<DateTime<Utc>>,
 }
 
+#[derive(serde::Serialize, Debug, Deserialize)]
+struct FilterTokens {
+    tokens: Option<String>,
+}
+
 async fn fetch_transaction_history(
     client: web::Data<Arc<tokio_postgres::Client>>,
     initiator_address: web::Path<String>,
+    pagination_query: web::Query<PaginationParams>,
+    query: web::Query<FilterTokens>,
 ) -> impl Responder {
-    let query_intent = "SELECT id, intent_id, timestamp FROM intent WHERE owner_address = $1";
+    let per_page = pagination_query.per_page.unwrap_or(10) as i64;
+    let id = pagination_query.id;
+
+    let token_address_list: Option<Vec<String>> = query.tokens.as_ref().map(|tokens| {
+        tokens
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect()
+    });
+
+    let query_intent =
+        "SELECT id, intent_id, timestamp, owner_address FROM intent WHERE intent_id = $1";
+    let sender_address = initiator_address.to_string();
+    let query_orders = "SELECT * FROM order_created WHERE intent_id = $1";
+    let query_message_on_vaults =
+        "SELECT transaction_hash FROM received_message_on_vault WHERE order_id = $1"; // we will get 2 rows for 1 intent id, 1 for src_chain, next for dest_chain
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
+    let query_solution = "SELECT * FROM solution WHERE intent_id = $1";
+    let query_ack = "SELECT * FROM acknowledgement WHERE intent_id = $1";
 
-    match client
-        .query(query_intent, &[&initiator_address.to_string()])
-        .await
+    let mut data: Vec<TransactionData> = vec![];
+
+    let (query_intents, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) = match id
     {
-        Ok(intent_row) => {
-            let mut data: Vec<TransactionHistory> = vec![];
-            for row in intent_row {
-                let intent_id: i64 = row.get("intent_id");
-                let timestamp: SystemTime = row.get("timestamp");
-                let datetime: DateTime<Utc> = timestamp.into();
+        Some(ref cursor_id) => (
+            "SELECT * FROM intent WHERE owner_address = $1 AND id < $2 ORDER BY id DESC LIMIT $3",
+            vec![&sender_address, cursor_id, &per_page],
+        ),
+        None => (
+            "SELECT * FROM intent WHERE owner_address = $1 ORDER BY id DESC LIMIT $2",
+            vec![&sender_address, &per_page],
+        ),
+    };
 
-                match client.query_one(query_intent_state, &[&intent_id]).await {
-                    Ok(state) => {
-                        let txn: TransactionHistory = TransactionHistory {
-                            id: row.get("id"),
-                            intent_id,
-                            status: state.get("stage"),
-                            version: state.get("version"),
-                            timestamp: Some(datetime),
-                        };
-                        data.push(txn);
+    let intent_rows = match client.query(query_intents, &params).await {
+        Ok(rows) => rows,
+        Err(_) => Vec::default(),
+    };
+
+    if (intent_rows.is_empty()) {
+        HttpResponse::InternalServerError().finish();
+    }
+
+    for intent_row in intent_rows {
+        let intent_id: i64 = intent_row.get("intent_id");
+        let intent_state = client
+            .query_one(query_intent_state, &[&intent_id])
+            .await
+            .unwrap();
+        let stage: String = intent_state.get("stage");
+        let intent_version: i32 = intent_state.get("version");
+
+        let (solver_address, solver_transaction_hash) =
+            match client.query_one(query_solution, &[&intent_id]).await {
+                Ok(solution) => {
+                    let solver_address: String = solution.get("solver_address");
+                    let solver_transaction_hash: String = solution.get("transaction_hash");
+                    (Some(solver_address), Some(solver_transaction_hash))
+                }
+                Err(_) => (None, None),
+            };
+
+        let intent_orders = match client.query(query_orders, &[&intent_id]).await {
+            Ok(rows) => {
+                if rows.len() == 0 {
+                    continue;
+                }
+                let source_token_in: String = rows[0].get("token_in");
+                match token_address_list {
+                    Some(ref token_addresses) => {
+                        if token_addresses.contains(&source_token_in) {
+                            Some(rows)
+                        } else {
+                            continue;
+                        }
                     }
-                    Err(_) => continue,
+                    None => Some(rows),
                 }
             }
-            HttpResponse::Ok().json(data) // Return JSON response
-        }
-        Err(e) => HttpResponse::InternalServerError().finish(),
+            Err(e) => continue,
+        };
+
+        let ack_row = match intent_version {
+            5 => match client.query_one(query_ack, &[&intent_id]).await {
+                Ok(row) => Some(row),
+                Err(e) => None,
+            },
+            _ => None,
+        };
+
+        //
+        let (source_transaction_data, destination_transaction_data, initial_data, intent_type) =
+            structure_intent_orders(
+                &client,
+                &intent_row,
+                intent_orders,
+                ack_row,
+                solver_address.clone(),
+                solver_transaction_hash,
+                intent_version,
+                &sender_address,
+            )
+            .await;
+
+        let created_at: SystemTime = intent_row.get("timestamp");
+        let datetime: DateTime<Utc> = created_at.into();
+
+        let transaction_data: TransactionData = TransactionData {
+            id: intent_row.get("id"),
+            intentId: intent_id,
+            createdAt: datetime,
+            status: stage,
+            isDeposit: None,
+            senderAddress: intent_row.get("owner_address"),
+            solverAddress: solver_address,
+            source: source_transaction_data,
+            destination: destination_transaction_data,
+            initial_data: initial_data,
+            intent_type,
+        };
+
+        data.push(transaction_data);
     }
+    HttpResponse::Ok().json(data) // Return JSON response
 }
 
 async fn fetch_transactions(
@@ -1034,7 +1135,7 @@ struct EVMbalances {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct EVMNativeBalance {
-    result: Option<String>
+    result: Option<String>,
 }
 
 async fn fetch_contract_balance(
@@ -1046,9 +1147,10 @@ async fn fetch_contract_balance(
         data: HashMap::new(),
     };
 
-    let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set")
-    .parse::<String>()
-    .unwrap();
+    let alchemy_api_key = std::env::var("ALCHEMY_API_KEY")
+        .expect("ALCHEMY_API_KEY must be set")
+        .parse::<String>()
+        .unwrap();
 
     let SOLANA_PROGRAM_ID: Pubkey =
         Pubkey::from_str("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz").unwrap();
@@ -1058,7 +1160,11 @@ async fn fetch_contract_balance(
             for contract in contracts.token_address {
                 let chain_id = contract.chain_id;
                 let contract_address = contract.contract_address;
-                let api_url = match get_api_url(network.to_string(), chain_id.clone(), alchemy_api_key.clone()) {
+                let api_url = match get_api_url(
+                    network.to_string(),
+                    chain_id.clone(),
+                    alchemy_api_key.clone(),
+                ) {
                     Some(url) => url,
                     None => continue,
                 };
@@ -1100,7 +1206,11 @@ async fn fetch_contract_balance(
                     Err(_) => continue,
                 };
 
-                let native_api_url = match get_api_url(network.to_string(), chain_id.clone(), alchemy_api_key.clone()) {
+                let native_api_url = match get_api_url(
+                    network.to_string(),
+                    chain_id.clone(),
+                    alchemy_api_key.clone(),
+                ) {
                     Some(url) => url,
                     None => continue,
                 };
@@ -1123,7 +1233,14 @@ async fn fetch_contract_balance(
                         let data: EVMNativeBalance = result.json().await.unwrap();
                         let result_balance = data.result;
                         let native_balance: TokenBalance = TokenBalance {
-                            tokenBalance: Some(u128::from_str_radix(result_balance.unwrap().trim_start_matches("0x"), 16).unwrap().to_string()),
+                            tokenBalance: Some(
+                                u128::from_str_radix(
+                                    result_balance.unwrap().trim_start_matches("0x"),
+                                    16,
+                                )
+                                .unwrap()
+                                .to_string(),
+                            ),
                             contractAddress: Some(String::from(
                                 "0x1111111111111111111111111111111111111111",
                             )),

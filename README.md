@@ -87,7 +87,8 @@ intent_state (
 
 # APIs
 
-**Base url - http://192.241.245.190:18891**
+**Base url Devnet - http://192.241.245.190:18891**
+**Base url Mainnet - http://143.244.173.82:18891**
 
 ## All transactions
 
@@ -128,30 +129,64 @@ intent_state (
 
 `/intents/history/{initiator_address}`
 
+#### Query params
+- id - id for the last reponse received
+- per_page - amount of transactions to receive on a single page, Default 10
+- tokens - a comma separated list of tokens for the history to filter from. The intents will be filters by the `token_in` is present in the comma separated tokens list.
+
 #### Response
 ```
 [
     {
-        "id": 21,
-        "intent_id": 73,
+        "id": 272,
+        "intentId": 317,
+        "createdAt": "2025-02-19T17:27:17.555571Z",
         "status": "Done",
-        "version": 5,
-        "timestamp": "2025-01-20T06:57:48.364874Z"
+        "isDeposit": null,
+        "senderAddress": "0xaed223306A006975c00A939dBEB6d7eBd9C04d80",
+        "solverAddress": "0xa3108fDb46992dC24eA2c3CbD19D38de59B17851",
+        "source": {
+            "chainId": "421614",
+            "tokenIn": "0x000000000000000000000000b0268ffb7bc90eef1f3e0aa2133a1d5a5a73ee89",
+            "tokenOut": "0x000000000000000000000000750b8c791080d89e2e9d0620c4cb4982caef9217",
+            "txHash": "0x2afe9030da06ffa394cc0e22582f04f0ffc878d161ea6c988c879c4d2b2ba3fa",
+            "explorerLink": "https://sepolia.arbiscan.io/tx/0x2afe9030da06ffa394cc0e22582f04f0ffc878d161ea6c988c879c4d2b2ba3fa",
+            "amountIn": "4950000000000000000",
+            "amountOut": "4950000000000000000",
+            "order_payload": "0x000000000000000000..."
+        },
+        "destination": {
+            "chainId": "84532",
+            "tokenIn": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "tokenOut": "0x000000000000000000000000c8893cbc1ac0b977d5092a5d85dafbcb7c960514",
+            "txHash": "0x6fc402219aaab7692030d69ba7f81561c8f6a9336e37d2df311e94dc6791bd09",
+            "explorerLink": "https://sepolia.basescan.org/tx/0x6fc402219aaab7692030d69ba7f81561c8f6a9336e37d2df311e94dc6791bd09",
+            "amountIn": "4950000000000000000",
+            "amountOut": "10000000000000000000",
+            "order_payload": "0x00000000000000000..."
+        },
+        "initial_data": {
+            "id": 272,
+            "intent_id": 317,
+            "origin_chain": "421614",
+            "target_chain": "84532",
+            "token_in": "0x000000000000000000000000b0268ffb7bc90eef1f3e0aa2133a1d5a5a73ee89",
+            "amount_in": "4950000000000000000",
+            "token_out": "0x000000000000000000000000c8893cbc1ac0b977d5092a5d85dafbcb7c960514",
+            "amount_out": "10000000000000000000",
+            "initiator_address": "0xaed223306A006975c00A939dBEB6d7eBd9C04d80",
+            "solver_address": "0xa3108fDb46992dC24eA2c3CbD19D38de59B17851",
+            "ack_result": true,
+            "ack_tx_status": "Success",
+            "ack_error_message": "",
+            "solver_tx_hash": "0x8b44cfd30acacabfcc8320b4816a83eb75ab821c8c8cee678ed690069e0dcaf8",
+            "ack_tx_hash": "0xbae0b2e153d7098e7c5e76e87a093e265f86ff06842633fbf11214384a77d048",
+            "intent_version": 5
+        },
+        "intent_type": "Cross Chain Swap"
     },
-    {
-        "id": 22,
-        "intent_id": 74,
-        "status": "Done",
-        "version": 5,
-        "timestamp": "2025-01-20T06:57:48.364874Z"
-    },
-    {
-        "id": 23,
-        "intent_id": 88,
-        "status": "Done",
-        "version": 5,
-        "timestamp": "2025-01-20T06:57:48.364874Z"
-    }
+    {...},
+    {...}
 ]
 ```
 ## Intent with intent_id
