@@ -145,6 +145,19 @@ pub async fn structure_intent_orders(
     let bytes32_zero_address: String =
         String::from("0x0000000000000000000000000000000000000000000000000000000000000000");
 
+    let fulfill_transaction_state_query =
+        "SELECT transaction_hash FROM intent_state WHERE intent_id = $1 AND version = 4";
+    let fulfill_transaction_hash: Option<String> = match client
+        .query_one(fulfill_transaction_state_query, &[&intent_id])
+        .await
+    {
+        Ok(row) => {
+            let hash: String = row.get("transaction_hash");
+            Some(hash)
+        }
+        Err(_) => None,
+    };
+
     match intent_orders {
         Some(orders) => match orders.len() {
             1 => {
@@ -219,6 +232,7 @@ pub async fn structure_intent_orders(
                                     Some(ack) => ack.get("transaction_hash"),
                                     None => None,
                                 },
+                                fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
                             });
                         }
@@ -268,6 +282,7 @@ pub async fn structure_intent_orders(
                                     Some(ack) => ack.get("transaction_hash"),
                                     None => None,
                                 },
+                                fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
                             });
                         }
@@ -318,6 +333,7 @@ pub async fn structure_intent_orders(
                                 Some(ack) => ack.get("transaction_hash"),
                                 None => None,
                             },
+                            fulfill_tx_hash: fulfill_transaction_hash,
                             intent_version: intent_version,
                         });
                     }
@@ -425,6 +441,7 @@ pub async fn structure_intent_orders(
                         Some(ack) => ack.get("transaction_hash"),
                         None => None,
                     },
+                    fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
                 });
             }
@@ -465,6 +482,7 @@ pub async fn structure_intent_orders(
                         Some(ack) => ack.get("transaction_hash"),
                         None => None,
                     },
+                    fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
                 });
             }
@@ -506,6 +524,7 @@ pub async fn structure_intent_orders(
                     Some(ack) => ack.get("transaction_hash"),
                     None => None,
                 },
+                fulfill_tx_hash: fulfill_transaction_hash,
                 intent_version: intent_version,
             });
         }
