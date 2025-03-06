@@ -1,5 +1,5 @@
 use actix_web::web;
-use log::error;
+use log::{error, info};
 use std::sync::Arc;
 use tokio_postgres::Row;
 
@@ -101,20 +101,24 @@ fn check_order_type(
     solution_type: Option<i32>,
     receiver_type: Option<i32>,
 ) -> Option<String> {
-    match solution_type == Some(3) {
-        true => Some(String::from("Stake")),
-        false => match multi_leg {
-            true => match receiver_type {
+    match solution_type {
+        Some(3) => Some(String::from("Stake")),
+        Some(2) => match receiver_type {
                 Some(0) => Some(String::from("Cross Chain Transfer")), // receiver is not vault
                 Some(1) => Some(String::from("Cross Chain Swap")),     // receiver is vault
                 _ => None,
             },
-            false => match receiver_type {
+        Some(1) => match receiver_type {
                 Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
                 Some(1) => Some(String::from("Local Swap")),     // receiver is vault
                 _ => None,
             },
+        Some(0) => match receiver_type {
+            Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
+            Some(1) => Some(String::from("Local Swap")),     // receiver is vault
+            _ => None,
         },
+        _ => Some(String::new())
     }
 }
 
@@ -195,6 +199,7 @@ pub async fn structure_intent_orders(
                                 tokenOut: orders[0].get("token_out"),
                                 explorerLink: get_block_explorer_link(chain_id, vault_txn_hash),
                                 order_payload: Some(orders[0].get("order_payload")),
+                                orderId: Some(orders[0].get("order_id")),
                             });
                             source_transaction_data = None;
 
@@ -247,6 +252,7 @@ pub async fn structure_intent_orders(
                                 tokenOut: orders[0].get("token_out"),
                                 explorerLink: get_block_explorer_link(chain_id, vault_txn_hash),
                                 order_payload: Some(orders[0].get("order_payload")),
+                                orderId: Some(orders[0].get("order_id")),
                             });
                             initial_data = Some(InitialData {
                                 id: intent_row.get("id"),
@@ -289,15 +295,35 @@ pub async fn structure_intent_orders(
                     },
                     false => {
                         source_transaction_data = None;
+                        if (solution_type.unwrap() > 1) {
+                            source_transaction_data = Some(OrderTransactionData {
+                                amountIn: orders[0].get("amount_in"),
+                                amountOut: bytes32_zero_address,
+                                chainId: orders[0].get("source_chain_id"),
+                                txHash: vault_txn_hash.clone(), // check
+                                tokenIn: orders[0].get("token_in"),
+                                tokenOut: orders[0].get("token_out"),
+                                explorerLink: get_block_explorer_link(chain_id.clone(), vault_txn_hash.clone()),
+                                order_payload: Some(orders[0].get("order_payload")),
+                                orderId: Some(orders[0].get("order_id")),
+                            });
+                        }
                         destination_transaction_data = Some(OrderTransactionData {
                             amountIn: orders[0].get("amount_in"),
                             amountOut: orders[0].get("amount_out"),
-                            chainId: chain_id.clone(),
-                            txHash: vault_txn_hash.clone(),
+                            chainId: orders[0].get("destination_chain_id"),
+                            txHash: match (solution_type.unwrap() > 1) {
+                                true => fulfill_transaction_hash.clone(),
+                                false => vault_txn_hash.clone()
+                            },
                             tokenIn: orders[0].get("token_in"),
                             tokenOut: orders[0].get("token_out"),
-                            explorerLink: get_block_explorer_link(chain_id, vault_txn_hash),
+                            explorerLink: match (solution_type.unwrap() > 1) {
+                                true => get_block_explorer_link(orders[0].get("destination_chain_id"), fulfill_transaction_hash.clone()),
+                                false => get_block_explorer_link(orders[0].get("destination_chain_id"), vault_txn_hash.clone()),
+                            } ,
                             order_payload: Some(orders[0].get("order_payload")),
+                            orderId: Some(orders[0].get("order_id")),
                         });
                         initial_data = Some(InitialData {
                             id: intent_row.get("id"),
@@ -394,6 +420,7 @@ pub async fn structure_intent_orders(
                     tokenOut: source_order.get("token_out"),
                     explorerLink: get_block_explorer_link(src_chain_id, src_vault_txn_hash),
                     order_payload: Some(source_order.get("order_payload")),
+                    orderId: Some(source_order.get("order_id")),
                 });
 
                 destination_transaction_data = Some(OrderTransactionData {
@@ -405,6 +432,7 @@ pub async fn structure_intent_orders(
                     tokenOut: destination_order.get("token_out"),
                     explorerLink: get_block_explorer_link(dst_chain_id, dst_vault_txn_hash),
                     order_payload: Some(destination_order.get("order_payload")),
+                    orderId: Some(destination_order.get("order_id")),
                 });
 
                 initial_data = Some(InitialData {
