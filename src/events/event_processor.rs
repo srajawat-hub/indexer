@@ -10,7 +10,7 @@ use log::{debug, info};
 use tokio_postgres::Client;
 
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intenterop_lib_v2::InteropLibV2, vault::Vault,
+    intent_lib_v2::IntentLibV2, vault::Vault, intent_processor::IntentProcessorV2
 };
 use crate::solidity_structs::{
     IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
@@ -278,23 +278,25 @@ pub async fn process_evm_events(
                 )
                 .await;
             }
-            Some(&InteropLibV2::AcknowledgementReceived::SIGNATURE_HASH) => {
+            Some(&IntentProcessorV2::AcknowledgementReceived::SIGNATURE_HASH) => {
                 debug!("\nAcknowledgementReceived log - {:?}", log);
-                let InteropLibV2::AcknowledgementReceived {
-                    intentId,
+                let IntentProcessorV2::AcknowledgementReceived {
+                    orderId,
                     sender,
                     result,
                     errorMessage,
+                    metadata
                 } = log.log_decode().unwrap().inner.data;
-                info!("InteropLibV2::AcknowledgementReceived for orderId - {intentId} from {sender} with result {result}");
+                info!("IntentProcessorV2::AcknowledgementReceived for orderId - {orderId} from {sender} with result {result}");
 
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
-                let order_id = intentId as i64; // its the order id
+                let order_id = orderId as i64; // its the order id
                 let sender_address = sender.to_string();
                 let result = result;
                 let error_message = errorMessage;
                 let timestamp = std::time::SystemTime::now();
+                let ack_metadata: String = metadata.to_string();
 
                 // fetching intent id
                 let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
@@ -305,7 +307,7 @@ pub async fn process_evm_events(
                 let intent_id: i64 = intent_id_response.get("intent_id");
 
                 let query =
-                    "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                    "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
                 let response = client
                     .execute(
                         query,
@@ -318,12 +320,13 @@ pub async fn process_evm_events(
                             &block_number,
                             &timestamp,
                             &order_id,
+                            &ack_metadata
                         ],
                     )
                     .await
                     .unwrap();
                 info!(
-                    "InteropLibV2::AcknowledgementReceived inserted response {:?}",
+                    "IntentProcessorV2::AcknowledgementReceived inserted response {:?}",
                     response
                 );
 

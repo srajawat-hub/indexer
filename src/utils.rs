@@ -1,5 +1,5 @@
 use actix_web::web;
-use log::{error, info};
+use log::error;
 use std::sync::Arc;
 use tokio_postgres::Row;
 
@@ -97,7 +97,6 @@ pub fn get_api_url(network: String, chain_id: String, alchemy_api_key: String) -
 }
 
 fn check_order_type(
-    multi_leg: bool,
     solution_type: Option<i32>,
     receiver_type: Option<i32>,
 ) -> Option<String> {
@@ -142,8 +141,8 @@ pub async fn structure_intent_orders(
     let intent_id: i64 = intent_row.get("intent_id");
 
     let mut source_transaction_data: Option<OrderTransactionData>;
-    let mut destination_transaction_data: Option<OrderTransactionData>;
-    let mut initial_data: Option<InitialData>;
+    let destination_transaction_data: Option<OrderTransactionData>;
+    let initial_data: Option<InitialData>;
     let mut intent_type: Option<String> = Some(String::new());
 
     let bytes32_zero_address: String =
@@ -171,7 +170,7 @@ pub async fn structure_intent_orders(
                 let solution_type: Option<i32> = orders[0].get("solution_type");
                 let multi_leg: bool = orders[0].get("multi_leg");
                 let receiver_type: Option<i32> = orders[0].get("receiver_type");
-                intent_type = check_order_type(multi_leg, solution_type, receiver_type);
+                intent_type = check_order_type(solution_type, receiver_type);
 
                 let vault_txn_hash: Option<String> = match client
                     .query_one(query_message_on_vaults, &[&order_id])
@@ -295,7 +294,7 @@ pub async fn structure_intent_orders(
                     },
                     false => {
                         source_transaction_data = None;
-                        if (solution_type.unwrap() > 1) {
+                        if solution_type.unwrap() > 1 {
                             source_transaction_data = Some(OrderTransactionData {
                                 amountIn: orders[0].get("amount_in"),
                                 amountOut: bytes32_zero_address,
@@ -312,13 +311,13 @@ pub async fn structure_intent_orders(
                             amountIn: orders[0].get("amount_in"),
                             amountOut: orders[0].get("amount_out"),
                             chainId: orders[0].get("destination_chain_id"),
-                            txHash: match (solution_type.unwrap() > 1) {
+                            txHash: match solution_type.unwrap() > 1 {
                                 true => fulfill_transaction_hash.clone(),
                                 false => vault_txn_hash.clone()
                             },
                             tokenIn: orders[0].get("token_in"),
                             tokenOut: orders[0].get("token_out"),
-                            explorerLink: match (solution_type.unwrap() > 1) {
+                            explorerLink: match solution_type.unwrap() > 1 {
                                 true => get_block_explorer_link(orders[0].get("destination_chain_id"), fulfill_transaction_hash.clone()),
                                 false => get_block_explorer_link(orders[0].get("destination_chain_id"), vault_txn_hash.clone()),
                             } ,
@@ -366,13 +365,13 @@ pub async fn structure_intent_orders(
                 }
             }
             2 => {
-                let mut source_order;
-                let mut destination_order;
+                let source_order;
+                let destination_order;
 
                 let order_id1: i64 = orders[0].get("order_id");
                 let order_id2: i64 = orders[1].get("order_id");
 
-                if (order_id1 < order_id2) {
+                if order_id1 < order_id2 {
                     source_order = orders[0].clone();
                     destination_order = orders[1].clone();
                 } else {
@@ -383,7 +382,6 @@ pub async fn structure_intent_orders(
                 let src_chain_id: String = source_order.get("source_chain_id");
                 let src_order_id: i64 = source_order.get("order_id");
                 let solution_type: Option<i32> = source_order.get("solution_type");
-                let multi_leg: bool = source_order.get("multi_leg");
                 let src_vault_txn_hash: Option<String> = match client
                     .query_one(query_message_on_vaults, &[&src_order_id])
                     .await
@@ -409,7 +407,7 @@ pub async fn structure_intent_orders(
                 };
 
                 let receiver_type: Option<i32> = source_order.get("receiver_type");
-                intent_type = check_order_type(multi_leg, solution_type, receiver_type);
+                intent_type = check_order_type(solution_type, receiver_type);
 
                 source_transaction_data = Some(OrderTransactionData {
                     amountIn: source_order.get("amount_in"),

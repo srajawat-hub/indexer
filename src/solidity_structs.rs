@@ -58,18 +58,6 @@ pub mod intent_lib_v2 {
     );
 }
 
-pub mod intenterop_lib_v2 {
-    use alloy::sol;
-    sol!(
-        #[allow(clippy::too_many_arguments)]
-        #[allow(missing_docs)]
-        #[sol(rpc)]
-        #[derive(Debug)]
-        InteropLibV2,
-        "abi/InteropLibV2.json"
-    );
-}
-
 // Define our intent payload enum using Alloy's sol! macro
 sol! {
     #[derive(Debug)]

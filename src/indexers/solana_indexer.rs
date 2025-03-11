@@ -9,8 +9,7 @@ use crate::{
     events::event_processor::{IntentStage, IntentVersions},
     solidity_structs::{
         IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData,
-        SolidityIntentProcessorBoundMessage, SolidityVaultBoundMessage,
-        VaultBoundMessagePlaceOrderData,
+        SolidityIntentProcessorBoundMessage
     },
 };
 
@@ -19,7 +18,7 @@ use alloy::dyn_abi::SolType;
 use async_trait::async_trait;
 use base64::Engine as Base64Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use chrono::{Local, NaiveDateTime, Utc};
+use chrono::Local;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use solana_client::{

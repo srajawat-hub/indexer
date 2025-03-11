@@ -12,19 +12,6 @@
     },
     {
         "type": "function",
-        "name": "DEFAULT_ADMIN_ROLE",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "MAX_INTENT_EXPIRATION_TIME_IN_SEC",
         "inputs": [],
         "outputs": [
@@ -61,24 +48,6 @@
             }
         ],
         "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "addHypWarpRoute",
-        "inputs": [
-            {
-                "name": "hypDomainId",
-                "type": "uint32",
-                "internalType": "uint32"
-            },
-            {
-                "name": "warpRouteAddress",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
     },
     {
         "type": "function",
@@ -199,16 +168,6 @@
                 "name": "provider",
                 "type": "uint8",
                 "internalType": "enum IntentTypesLib.InteropProvider"
-            },
-            {
-                "name": "gas_limit",
-                "type": "uint128",
-                "internalType": "uint128"
-            },
-            {
-                "name": "value",
-                "type": "uint128",
-                "internalType": "uint128"
             }
         ],
         "outputs": [],
@@ -236,6 +195,19 @@
                 "name": "",
                 "type": "address",
                 "internalType": "contract ILayerZeroEndpointV2"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "fastBridgeCommitteeContract",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
             }
         ],
         "stateMutability": "view"
@@ -299,102 +271,6 @@
     },
     {
         "type": "function",
-        "name": "getOrder",
-        "inputs": [
-            {
-                "name": "intentId",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getRawIntent",
-        "inputs": [
-            {
-                "name": "intentId",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "internalType": "struct IntentTypesLib.SolidityRawIntent",
-                "components": [
-                    {
-                        "name": "id",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "intentOwner",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "creationUnixTimestampInSeconds",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "feesTaken",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "intentPayload",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityIntentPayload",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "uint8",
-                                "internalType": "enum IntentTypesLib.IntentPayloadEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getRoleAdmin",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "getUnsettledIntents",
         "inputs": [
             {
@@ -405,7 +281,7 @@
         ],
         "outputs": [
             {
-                "name": "",
+                "name": "temp",
                 "type": "tuple[]",
                 "internalType": "struct IntentTypesLib.SolidityRawIntent[]",
                 "components": [
@@ -447,244 +323,71 @@
                         ]
                     }
                 ]
+            },
+            {
+                "name": "count",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
         "stateMutability": "view"
     },
     {
         "type": "function",
-        "name": "getUnsettledOrdersByInitiator",
+        "name": "handle",
         "inputs": [
             {
-                "name": "initiator",
-                "type": "address",
-                "internalType": "address"
+                "name": "_origin",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "_sender",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_message",
+                "type": "bytes",
+                "internalType": "bytes"
             }
         ],
-        "outputs": [
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "handleAckFastBridge",
+        "inputs": [
             {
-                "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IntentTypesLib.SolidityOrder[]",
+                "name": "_orderHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "ackData",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.IntentProcessorBoundMessageAcknowledgementData",
                 "components": [
-                    {
-                        "name": "intentId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
                     {
                         "name": "orderId",
                         "type": "uint64",
                         "internalType": "uint64"
                     },
                     {
-                        "name": "amountIn",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenIn",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amountOut",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "tokenOut",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "receiver",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityReceiver",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "uint8",
-                                "internalType": "enum IntentTypesLib.ReceiverEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "sourceChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timeoutUnixTimestampInSec",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "solution",
-                        "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SoliditySolutionType",
-                        "components": [
-                            {
-                                "name": "enumVariant",
-                                "type": "uint8",
-                                "internalType": "enum IntentTypesLib.SolutionTypeEnum"
-                            },
-                            {
-                                "name": "data",
-                                "type": "bytes",
-                                "internalType": "bytes"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "initiatorAddress",
-                        "type": "address",
-                        "internalType": "address"
-                    },
-                    {
-                        "name": "multiLeg",
+                        "name": "result",
                         "type": "bool",
                         "internalType": "bool"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getWinningOrder",
-        "inputs": [
-            {
-                "name": "orderId",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "grantRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "handle",
-        "inputs": [
-            {
-                "name": "_origin",
-                "type": "uint32",
-                "internalType": "uint32"
-            },
-            {
-                "name": "_sender",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "_message",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "payable"
-    },
-    {
-        "type": "function",
-        "name": "hasRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getUnsettledIntents",
-        "inputs": [
-            {
-                "name": "initiator",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IntentTypesLib.SolidityRawIntent[]",
-                "components": [
-                    {
-                        "name": "id",
-                        "type": "uint64",
-                        "internalType": "uint64"
                     },
                     {
-                        "name": "intentOwner",
-                        "type": "address",
-                        "internalType": "address"
+                        "name": "errorMessage",
+                        "type": "string",
+                        "internalType": "string"
                     },
                     {
-                        "name": "creationUnixTimestampInSeconds",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "feesTaken",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "intentPayload",
+                        "name": "metadata",
                         "type": "tuple",
-                        "internalType": "struct IntentTypesLib.SolidityIntentPayload",
+                        "internalType": "struct IntentTypesLib.SolidityAcknowledgementMetadata",
                         "components": [
                             {
                                 "name": "enumVariant",
@@ -701,91 +404,8 @@
                 ]
             }
         ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getWinningOrder",
-        "inputs": [
-            {
-                "name": "orderId",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "grantRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
         "outputs": [],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "handle",
-        "inputs": [
-            {
-                "name": "_origin",
-                "type": "uint32",
-                "internalType": "uint32"
-            },
-            {
-                "name": "_sender",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "_message",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "payable"
-    },
-    {
-        "type": "function",
-        "name": "hasRole",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -796,25 +416,6 @@
                 "name": "",
                 "type": "address",
                 "internalType": "contract IMailbox"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "hypWarpRouteAddress",
-        "inputs": [
-            {
-                "name": "",
-                "type": "uint32",
-                "internalType": "uint32"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "address"
             }
         ],
         "stateMutability": "view"
@@ -862,11 +463,6 @@
                         "name": "feeCollector",
                         "type": "address",
                         "internalType": "address"
-                    },
-                    {
-                        "name": "feeBasisPoints",
-                        "type": "uint256",
-                        "internalType": "uint256"
                     }
                 ]
             }
@@ -959,19 +555,13 @@
     },
     {
         "type": "function",
-        "name": "isTrustedForwarder",
-        "inputs": [
-            {
-                "name": "forwarder",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
+        "name": "interchainSecurityModule",
+        "inputs": [],
         "outputs": [
             {
                 "name": "",
-                "type": "bool",
-                "internalType": "bool"
+                "type": "address",
+                "internalType": "contract IInterchainSecurityModule"
             }
         ],
         "stateMutability": "view"
@@ -1025,35 +615,6 @@
         ],
         "outputs": [],
         "stateMutability": "payable"
-    },
-    {
-        "type": "function",
-        "name": "lzquoteFee",
-        "inputs": [
-            {
-                "name": "_dstEndpointId",
-                "type": "uint32",
-                "internalType": "uint32"
-            },
-            {
-                "name": "_message",
-                "type": "bytes",
-                "internalType": "bytes"
-            },
-            {
-                "name": "_options",
-                "type": "bytes",
-                "internalType": "bytes"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "uint256",
-                "internalType": "uint256"
-            }
-        ],
-        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -1419,12 +980,61 @@
     },
     {
         "type": "function",
-        "name": "receiveMessage",
+        "name": "registerVaults",
         "inputs": [
             {
-                "name": "message",
-                "type": "bytes",
-                "internalType": "bytes"
+                "name": "_chain",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.Chain",
+                "components": [
+                    {
+                        "name": "identifier",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "vaultAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "vaultAuthority",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "poolAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "isActive",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "domainIds",
+                        "type": "tuple[]",
+                        "internalType": "struct IntentTypesLib.DomainId[]",
+                        "components": [
+                            {
+                                "name": "domainId",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "interopProvider",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.InteropProvider"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "executionEnvironment",
+                        "type": "uint8",
+                        "internalType": "enum IntentTypesLib.ExecutionEnvironment"
+                    }
+                ]
             }
         ],
         "outputs": [],
@@ -1439,39 +1049,22 @@
     },
     {
         "type": "function",
-        "name": "renounceRole",
+        "name": "requestIdToOrderId",
         "inputs": [
             {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "callerConfirmation",
-                "type": "address",
-                "internalType": "address"
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "revokeRole",
-        "inputs": [
+        "outputs": [
             {
-                "name": "role",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
+                "name": "",
+                "type": "uint64",
+                "internalType": "uint64"
             }
         ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
+        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -1492,6 +1085,19 @@
         "inputs": [
             {
                 "name": "_delegate",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setInterchainSecurityModule",
+        "inputs": [
+            {
+                "name": "_interchainSecurityModule",
                 "type": "address",
                 "internalType": "address"
             }
@@ -1552,9 +1158,9 @@
                 "internalType": "uint64"
             },
             {
-                "name": "solutions",
-                "type": "tuple[]",
-                "internalType": "struct IntentTypesLib.SoliditySolution[]",
+                "name": "solution",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SoliditySolution",
                 "components": [
                     {
                         "name": "enumVariant",
@@ -1571,25 +1177,6 @@
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "supportsInterface",
-        "inputs": [
-            {
-                "name": "interfaceId",
-                "type": "bytes4",
-                "internalType": "bytes4"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -1661,19 +1248,6 @@
     },
     {
         "type": "function",
-        "name": "updateHypMailbox",
-        "inputs": [
-            {
-                "name": "newMailbox",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "upgradeToAndCall",
         "inputs": [
             {
@@ -1708,7 +1282,7 @@
         "name": "AcknowledgementReceived",
         "inputs": [
             {
-                "name": "intentId",
+                "name": "orderId",
                 "type": "uint64",
                 "indexed": true,
                 "internalType": "uint64"
@@ -1730,19 +1304,12 @@
                 "type": "string",
                 "indexed": false,
                 "internalType": "string"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "ContractVersionUpdated",
-        "inputs": [
+            },
             {
-                "name": "version",
-                "type": "uint256",
-                "indexed": true,
-                "internalType": "uint256"
+                "name": "metadata",
+                "type": "bytes",
+                "indexed": false,
+                "internalType": "bytes"
             }
         ],
         "anonymous": false
@@ -1857,81 +1424,6 @@
     },
     {
         "type": "event",
-        "name": "RoleAdminChanged",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "previousAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "newAdminRole",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleGranted",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "RoleRevoked",
-        "inputs": [
-            {
-                "name": "role",
-                "type": "bytes32",
-                "indexed": true,
-                "internalType": "bytes32"
-            },
-            {
-                "name": "account",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "sender",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
         "name": "SolutionSubmitted",
         "inputs": [
             {
@@ -1974,27 +1466,6 @@
             }
         ],
         "anonymous": false
-    },
-    {
-        "type": "error",
-        "name": "AccessControlBadConfirmation",
-        "inputs": []
-    },
-    {
-        "type": "error",
-        "name": "AccessControlUnauthorizedAccount",
-        "inputs": [
-            {
-                "name": "account",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "neededRole",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            }
-        ]
     },
     {
         "type": "error",
@@ -2086,6 +1557,27 @@
     },
     {
         "type": "error",
+        "name": "NoSolutionsAvailableForIntent",
+        "inputs": [
+            {
+                "name": "intentOwner",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "intentId",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotApprovedVaultAddress",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "NotEnoughNative",
         "inputs": [
             {
@@ -2094,6 +1586,11 @@
                 "internalType": "uint256"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "NotHyperLaneMailBox",
+        "inputs": []
     },
     {
         "type": "error",

@@ -11,6 +11,23 @@
         "stateMutability": "nonpayable"
     },
     {
+        "type": "receive",
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "DEBRIDGE_REFERRAL_CODE",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
         "type": "function",
         "name": "UPGRADE_INTERFACE_VERSION",
         "inputs": [],
@@ -31,6 +48,24 @@
                 "name": "_hypMailbox",
                 "type": "address",
                 "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "addHyperlaneRemoteRouter",
+        "inputs": [
+            {
+                "name": "hypDomainId",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "mockLNAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "outputs": [],
@@ -92,28 +127,108 @@
     },
     {
         "type": "function",
-        "name": "claimTokens",
+        "name": "buildSolanaOrder",
         "inputs": [
             {
-                "name": "orderId",
+                "name": "_orderId",
                 "type": "uint64",
                 "internalType": "uint64"
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
-        "name": "claimTokensOnSource",
-        "inputs": [
+            },
             {
-                "name": "orderId",
-                "type": "uint64",
-                "internalType": "uint64"
+                "name": "_destinationVault",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_tokenIn",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "_amountIn",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "_tokenOut",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "_amountOut",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "_receiverAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple",
+                "internalType": "struct IDLNSource.OrderCreation",
+                "components": [
+                    {
+                        "name": "giveTokenAddress",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "giveAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takeTokenAddress",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "takeAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takeChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "receiverDst",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "givePatchAuthoritySrc",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "orderAuthorityAddressDst",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "allowedTakerDst",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "externalCall",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "allowedCancelBeneficiarySrc",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -131,10 +246,41 @@
     },
     {
         "type": "function",
-        "name": "createMockLNOrder",
+        "name": "endpoint",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract ILayerZeroEndpointV2"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "fastBridgeCommitteeContract",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "fulfillFastBridgeOrderWithOneInch",
         "inputs": [
             {
-                "name": "order",
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderData",
                 "type": "tuple",
                 "internalType": "struct IMockLN.MockLNOrder",
                 "components": [
@@ -179,9 +325,99 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "creationTime",
+                        "name": "filler",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "claimer",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "multiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "stableCoinAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "debridgeMetadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "swapCalldata",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "_signatures",
+                "type": "bytes[]",
+                "internalType": "bytes[]"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "fulfillFastBridgeOrderWithOrderData",
+        "inputs": [
+            {
+                "name": "_orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "_orderData",
+                "type": "tuple",
+                "internalType": "struct IMockLN.MockLNOrder",
+                "components": [
+                    {
+                        "name": "orderId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tokenIn",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "tokenOut",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "amountIn",
                         "type": "uint256",
                         "internalType": "uint256"
+                    },
+                    {
+                        "name": "amountOut",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "destinationChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "sourceChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "receiverAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     },
                     {
                         "name": "filler",
@@ -197,13 +433,23 @@
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
+                    },
+                    {
+                        "name": "stableCoinAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "debridgeMetadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
                     }
                 ]
             },
             {
-                "name": "isMultiLeg",
-                "type": "bool",
-                "internalType": "bool"
+                "name": "_signatures",
+                "type": "bytes[]",
+                "internalType": "bytes[]"
             }
         ],
         "outputs": [],
@@ -211,79 +457,189 @@
     },
     {
         "type": "function",
-        "name": "endpoint",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "address",
-                "internalType": "contract ILayerZeroEndpointV2"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "filleableOrders",
-        "inputs": [
-            {
-                "name": "",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "orderId",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "token",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "filler",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "destinationChainId",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "receiverAddress",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "isMultiLeg",
-                "type": "bool",
-                "internalType": "bool"
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "fullfillOrder",
+        "name": "fulfillOrderWithOneInch",
         "inputs": [
             {
                 "name": "orderId",
                 "type": "uint64",
                 "internalType": "uint64"
+            },
+            {
+                "name": "orderData",
+                "type": "tuple",
+                "internalType": "struct IMockLN.MockLNOrder",
+                "components": [
+                    {
+                        "name": "orderId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tokenIn",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "tokenOut",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "amountIn",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "amountOut",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "destinationChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "sourceChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "receiverAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "filler",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "claimer",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "multiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "stableCoinAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "debridgeMetadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
             },
             {
                 "name": "provider",
                 "type": "uint8",
                 "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "swapCalldata",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "fulfillOrderWithOrderData",
+        "inputs": [
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderData",
+                "type": "tuple",
+                "internalType": "struct IMockLN.MockLNOrder",
+                "components": [
+                    {
+                        "name": "orderId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tokenIn",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "tokenOut",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "amountIn",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "amountOut",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "destinationChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "sourceChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "receiverAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "filler",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "claimer",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "multiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "stableCoinAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "debridgeMetadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "claimAddressOnSource",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "outputs": [],
@@ -304,131 +660,13 @@
     },
     {
         "type": "function",
-        "name": "getClaimableOrders",
-        "inputs": [],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IMockLN.ClaimableOrder[]",
-                "components": [
-                    {
-                        "name": "orderId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "token",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
-        "name": "getClaimableOrdersWithIndex",
-        "inputs": [
-            {
-                "name": "startId",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "endId",
-                "type": "uint64",
-                "internalType": "uint64"
-            }
-        ],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IMockLN.ClaimableOrder[]",
-                "components": [
-                    {
-                        "name": "orderId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "token",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    }
-                ]
-            }
-        ],
-        "stateMutability": "view"
-    },
-    {
-        "type": "function",
         "name": "getFilleableOrders",
         "inputs": [],
         "outputs": [
             {
                 "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IMockLN.FillableOrder[]",
-                "components": [
-                    {
-                        "name": "orderId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "token",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "filler",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "receiverAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "isMultiLeg",
-                        "type": "bool",
-                        "internalType": "bool"
-                    }
-                ]
+                "type": "uint64[]",
+                "internalType": "uint64[]"
             }
         ],
         "stateMutability": "view"
@@ -451,45 +689,8 @@
         "outputs": [
             {
                 "name": "",
-                "type": "tuple[]",
-                "internalType": "struct IMockLN.FillableOrder[]",
-                "components": [
-                    {
-                        "name": "orderId",
-                        "type": "uint64",
-                        "internalType": "uint64"
-                    },
-                    {
-                        "name": "token",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "filler",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "destinationChainId",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "receiverAddress",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "isMultiLeg",
-                        "type": "bool",
-                        "internalType": "bool"
-                    }
-                ]
+                "type": "uint64[]",
+                "internalType": "uint64[]"
             }
         ],
         "stateMutability": "view"
@@ -544,11 +745,6 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "creationTime",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
                         "name": "filler",
                         "type": "bytes32",
                         "internalType": "bytes32"
@@ -562,6 +758,16 @@
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
+                    },
+                    {
+                        "name": "stableCoinAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "debridgeMetadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
                     }
                 ]
             }
@@ -613,32 +819,22 @@
     },
     {
         "type": "function",
-        "name": "hypSendMessage",
+        "name": "hyperlaneDomainMocklnAddress",
         "inputs": [
             {
-                "name": "destAddress",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "destinationDomain",
+                "name": "",
                 "type": "uint32",
                 "internalType": "uint32"
-            },
-            {
-                "name": "message",
-                "type": "bytes",
-                "internalType": "bytes"
             }
         ],
         "outputs": [
             {
-                "name": "messageId",
+                "name": "",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }
         ],
-        "stateMutability": "payable"
+        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -662,6 +858,38 @@
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "interchainSecurityModule",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract IInterchainSecurityModule"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "isOrderFilled",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -805,7 +1033,7 @@
     },
     {
         "type": "function",
-        "name": "orders",
+        "name": "orderIdToOrderHash",
         "inputs": [
             {
                 "name": "",
@@ -815,22 +1043,7 @@
         ],
         "outputs": [
             {
-                "name": "orderId",
-                "type": "uint64",
-                "internalType": "uint64"
-            },
-            {
-                "name": "token",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "amount",
-                "type": "uint256",
-                "internalType": "uint256"
-            },
-            {
-                "name": "claimer",
+                "name": "",
                 "type": "bytes32",
                 "internalType": "bytes32"
             }
@@ -891,10 +1104,96 @@
     },
     {
         "type": "function",
+        "name": "sendDLNOrderFromVault",
+        "inputs": [
+            {
+                "name": "debridgeMetadata",
+                "type": "tuple",
+                "internalType": "struct IMockLN.DebridgeMetadata",
+                "components": [
+                    {
+                        "name": "destinationVaultAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "tokenOut",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "amountOut",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "destinationChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "receiverAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "amountIn",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tokenIn",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "provider",
+                "type": "uint8",
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "setDelegate",
         "inputs": [
             {
                 "name": "_delegate",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setFastBridgeCommitteeContract",
+        "inputs": [
+            {
+                "name": "_fastBridgeCommitteeContract",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setInterchainSecurityModule",
+        "inputs": [
+            {
+                "name": "_interchainSecurityModule",
                 "type": "address",
                 "internalType": "address"
             }
@@ -928,6 +1227,24 @@
                 "name": "_vaultAddress",
                 "type": "address",
                 "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "storeOrderHash",
+        "inputs": [
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "orderHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "outputs": [],
@@ -1197,6 +1514,43 @@
     },
     {
         "type": "error",
+        "name": "CallerNotFiller",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "CallerNotVault",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignatureLength",
+        "inputs": [
+            {
+                "name": "length",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignatureS",
+        "inputs": [
+            {
+                "name": "s",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "ERC1967InvalidImplementation",
         "inputs": [
             {
@@ -1214,6 +1568,11 @@
     {
         "type": "error",
         "name": "FailedCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FastBridgeNotSupported",
         "inputs": []
     },
     {
@@ -1249,7 +1608,17 @@
     },
     {
         "type": "error",
+        "name": "InvalidSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "LzTokenUnavailable",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NoApproval",
         "inputs": []
     },
     {
@@ -1260,6 +1629,27 @@
                 "name": "eid",
                 "type": "uint32",
                 "internalType": "uint32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotApprovedMockLnAddress",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotEnoughAmountOut",
+        "inputs": [
+            {
+                "name": "expected",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "received",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ]
     },
@@ -1276,7 +1666,43 @@
     },
     {
         "type": "error",
+        "name": "NotEnoughSignaturesForConsensus",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotHyperLaneMailBox",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotLocalSwap",
+        "inputs": [
+            {
+                "name": "sourceChainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "destinationChainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotSingleChainMainnetOperation",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OneInchSwapFailed",
         "inputs": []
     },
     {
@@ -1305,6 +1731,36 @@
                 "internalType": "bytes32"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "OrderAlreadyFilled",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OrderDoesntExist",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OrderHashAlreadyStored",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OrderHashMismatch",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OrderNotClaimable",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OrderUpdateFailed",
+        "inputs": []
     },
     {
         "type": "error",

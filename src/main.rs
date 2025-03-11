@@ -4,36 +4,31 @@ mod indexers;
 pub mod solidity_structs;
 mod utils;
 
-use actix_web::cookie::time::PrimitiveDateTime;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use alloy::hex;
-use alloy::primitives::{bytes, Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256};
 use alloy::sol_types::SolValue;
 use chrono::{DateTime, Utc};
 use dotenv::dotenv;
-use futures_util::future;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
-use log::{debug, error, info, trace, warn};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
-use solana_sdk::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
     AcknowledgementMetadataStake, IntentPayloadEnum,
-    IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum, ReceiverEnum,
-    SolidityIntentProcessorBoundMessage, SolidityOrder, SolutionTypeEnum, SolutionTypeStakeData,
-    StakeActionEnum,
+    IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum,
+    SolidityIntentProcessorBoundMessage, SolidityOrder
 };
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::{fmt::format, future::Future};
-use std::{fs, time};
+use std::fs;
 use tokio::signal;
-use tokio_postgres::{connect, NoTls};
+use tokio_postgres::NoTls;
 use utils::{get_api_url, structure_intent_orders};
 
 #[derive(Deserialize)]
@@ -160,7 +155,7 @@ async fn main() {
     info!("total threads {:?}", handles.len());
 
     // Start the API server
-    let api_server = HttpServer::new(move || {
+    let _api_server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(Arc::clone(&db_server_client)))
             .route("/intents/{intent_id}", web::get().to(fetch_intents))
@@ -248,8 +243,7 @@ async fn fetch_intents(
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
     let query_orders = "SELECT * FROM order_created WHERE intent_id = $1"; // we will get 2 orders for 1 intent id
-    let query_message_on_vaults =
-        "SELECT transaction_hash FROM received_message_on_vault WHERE order_id = $1"; // we will get 2 rows for 1 intent id, 1 for src_chain, next for dest_chain
+    
     let query_solution = "SELECT * FROM solution WHERE intent_id = $1";
     let query_ack = "SELECT * FROM acknowledgement WHERE intent_id = $1";
 
@@ -275,11 +269,11 @@ async fn fetch_intents(
                     Err(_) => (None, None),
                 };
 
-            let intent_orders = match (intent_version > 1) {
+            let intent_orders = match intent_version > 1 {
                 true => {
                     let intent_order_rows = match client.query(query_orders, &[&intent_id]).await {
                         Ok(rows) => Some(rows),
-                        Err(e) => None,
+                        Err(_e) => None,
                     };
                     intent_order_rows
                 }
@@ -289,7 +283,7 @@ async fn fetch_intents(
             let ack_row = match intent_version {
                 5 => match client.query_one(query_ack, &[&intent_id]).await {
                     Ok(row) => Some(row),
-                    Err(e) => None,
+                    Err(_e) => None,
                 },
                 _ => None,
             };
@@ -357,12 +351,8 @@ async fn fetch_transaction_history(
         .as_ref()
         .map(|tokens| tokens.split(',').map(|s| s.trim().to_string()).collect());
 
-    let query_intent =
-        "SELECT id, intent_id, timestamp, owner_address FROM intent WHERE intent_id = $1";
     let sender_address = initiator_address.to_string();
     let query_orders = "SELECT * FROM order_created WHERE intent_id = $1";
-    let query_message_on_vaults =
-        "SELECT transaction_hash FROM received_message_on_vault WHERE order_id = $1"; // we will get 2 rows for 1 intent id, 1 for src_chain, next for dest_chain
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
     let query_solution = "SELECT * FROM solution WHERE intent_id = $1";
@@ -387,7 +377,7 @@ async fn fetch_transaction_history(
         Err(_) => Vec::default(),
     };
 
-    if (intent_rows.is_empty()) {
+    if intent_rows.is_empty() {
         HttpResponse::InternalServerError().finish();
     }
 
@@ -427,13 +417,13 @@ async fn fetch_transaction_history(
                     None => Some(rows),
                 }
             }
-            Err(e) => continue,
+            Err(_e) => continue,
         };
 
         let ack_row = match intent_version {
             5 => match client.query_one(query_ack, &[&intent_id]).await {
                 Ok(row) => Some(row),
-                Err(e) => None,
+                Err(_e) => None,
             },
             _ => None,
         };
@@ -519,7 +509,7 @@ async fn fetch_transactions(
             }
             HttpResponse::Ok().json(data) // Return JSON response
         }
-        Err(e) => HttpResponse::InternalServerError().finish(),
+        Err(_e) => HttpResponse::InternalServerError().finish(),
     }
 }
 
@@ -555,7 +545,7 @@ async fn calculate_stake_initial_deposit(
                         0
                     }
                 };
-                if (intent_version <= 4) {
+                if intent_version <= 4 {
                     // no ack started or received
                     continue;
                 }
@@ -567,7 +557,7 @@ async fn calculate_stake_initial_deposit(
                 let order_bytes = Bytes::from(order_bytes);
 
                 match SolidityOrder::abi_decode(&order_bytes, true) {
-                    Ok(data) => {
+                    Ok(_data) => {
                         order_amount += U256::from_str_radix(amount_in.as_str(), 10).unwrap();
                     }
                     Err(e) => {

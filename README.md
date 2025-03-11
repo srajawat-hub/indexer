@@ -25,6 +25,7 @@ acknowledgement (
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     order_id BIGINT NOT NULL
+    metadata TEXT
 );
 received_message_on_vault (
     id BIGSERIAL PRIMARY KEY,
