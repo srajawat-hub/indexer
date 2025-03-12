@@ -884,7 +884,7 @@ async fn fetch_contract_balance(
                     let native_balance: TokenBalance = TokenBalance {
                         tokenBalance: Some(sol_balance.to_string()),
                         contractAddress: Some(String::from(
-                            "0x1111111111111111111111111111111111111111",
+                            "0x1111111111111111111111111111111111111111111111111111111111111111",
                         )),
                         decimals: Some(String::from("9")),
                         name: Some(String::from("Native")),
