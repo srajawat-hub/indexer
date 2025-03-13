@@ -88,7 +88,7 @@ struct UnbondingBalance {
     user_address: String,
 }
 
-const SOLANA_ACCOUNT_RENT: u64 = 89088;
+const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
 #[tokio::main]
 async fn main() {
