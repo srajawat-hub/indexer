@@ -860,41 +860,75 @@ async fn fetch_contract_balance(
             let mut contract_balances: Vec<TokenBalance> = vec![];
 
             for token_address in svm_meta_data.token_address {
-                let token_mint = Pubkey::from_str(&token_address).unwrap();
-                let token_account = Pubkey::find_program_address(
-                    &[
-                        b"user_deposit_address",
-                        user_address.as_slice(),
-                        token_mint.as_ref(),
-                    ],
-                    &SOLANA_PROGRAM_ID,
-                )
-                .0;
+                if (&token_address == "0x1111111111111111111111111111111111111111111111111111111111111111") {
+                    let native_token_mint = Pubkey::from_str(&String::from("29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2")).unwrap(); // bs58 of 0x111...
+                    let native_token_account = Pubkey::find_program_address(
+                        &[
+                            b"user_deposit_address",
+                            user_address.as_slice(),
+                            native_token_mint.as_ref(),
+                        ],
+                        &SOLANA_PROGRAM_ID,
+                    )
+                    .0;
 
-                match client.get_account(&token_account).await {
-                    Ok(account) => {
-                        info!("Token account exists {:?}", account);
+                    let sol_balance = match client.get_balance(&Pubkey::new_from_array(native_token_account.to_bytes())).await {
+                        Ok(balance) => balance,
+                        Err(e) => {
+                            error!("Error fetching SOL balance: {:?}", e);
+                            0 // Default to 0 if there's an error
+                        }
+                    };
+                    
+                    info!("SOL Balance: {}", sol_balance);
+                    let native_balance: TokenBalance = TokenBalance {
+                        tokenBalance: Some(sol_balance.to_string()),
+                        contractAddress: Some(String::from(
+                            "0x1111111111111111111111111111111111111111",
+                        )),
+                        decimals: Some(String::from("9")),
+                        name: Some(String::from("Native")),
+                        symbol: Some(String::from("Native")),
+                    };
 
-                        match client.get_token_account_balance(&token_account).await {
-                            Ok(balance) => {
-                                let token_balance: TokenBalance = TokenBalance {
-                                    tokenBalance: Some(balance.amount),
-                                    contractAddress: Some(token_mint.to_string()),
-                                    decimals: Some(String::from("9")),
-                                    name: None,
-                                    symbol: None,
-                                };
-                                contract_balances.push(token_balance);
-                            }
-                            Err(e) => {
-                                error!("Error in fetching balance of derived account {:?}", e);
-                                continue;
+                    contract_balances.push(native_balance);
+                } else {
+                    let token_mint = Pubkey::from_str(&token_address).unwrap();
+                    let token_account = Pubkey::find_program_address(
+                        &[
+                            b"user_deposit_address",
+                            user_address.as_slice(),
+                            token_mint.as_ref(),
+                        ],
+                        &SOLANA_PROGRAM_ID,
+                    )
+                    .0;
+
+                    match client.get_account(&token_account).await {
+                        Ok(account) => {
+                            info!("Token account exists {:?}", account);
+    
+                            match client.get_token_account_balance(&token_account).await {
+                                Ok(balance) => {
+                                    let token_balance: TokenBalance = TokenBalance {
+                                        tokenBalance: Some(balance.amount),
+                                        contractAddress: Some(token_mint.to_string()),
+                                        decimals: Some(String::from("9")),
+                                        name: None,
+                                        symbol: None,
+                                    };
+                                    contract_balances.push(token_balance);
+                                }
+                                Err(e) => {
+                                    error!("Error in fetching balance of derived account {:?}", e);
+                                    continue;
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        error!("Error in fetching account of derived address {:?}", e);
-                        continue;
+                        Err(e) => {
+                            error!("Error in fetching account of derived address {:?}", e);
+                            continue;
+                        }
                     }
                 }
             }
