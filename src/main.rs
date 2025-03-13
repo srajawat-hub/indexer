@@ -880,6 +880,9 @@ async fn fetch_contract_balance(
                             if (balance >= SOLANA_ACCOUNT_RENT) {
                                 balance - SOLANA_ACCOUNT_RENT
                             } else {
+                                if (balance < 1000000) {
+                                    0
+                                }
                                 balance
                             }
                         }, // subtract solana rent
