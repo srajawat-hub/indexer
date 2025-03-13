@@ -876,7 +876,13 @@ async fn fetch_contract_balance(
                     .0;
 
                     let sol_balance = match client.get_balance(&Pubkey::new_from_array(native_token_account.to_bytes())).await {
-                        Ok(balance) => balance - SOLANA_ACCOUNT_RENT, // subtract solana rent
+                        Ok(balance) => {
+                            if (balance >= SOLANA_ACCOUNT_RENT) {
+                                balance - SOLANA_ACCOUNT_RENT
+                            } else {
+                                balance
+                            }
+                        }, // subtract solana rent
                         Err(e) => {
                             error!("Error fetching SOL balance: {:?}", e);
                             0 // Default to 0 if there's an error
