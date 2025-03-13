@@ -45,6 +45,7 @@ struct Config {
     indexers: Vec<IndexerConfig>,
 }
 
+
 impl Config {
     fn from_file(file_path: &str) -> Self {
         let content = fs::read_to_string(file_path).expect("Failed to read configuration file");
@@ -87,10 +88,12 @@ struct UnbondingBalance {
     user_address: String,
 }
 
+const SOLANA_ACCOUNT_RENT: u64 = 89088;
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-
+    
     env_logger::builder()
         .format(|buf, record| {
             use std::io::Write;
@@ -873,7 +876,7 @@ async fn fetch_contract_balance(
                     .0;
 
                     let sol_balance = match client.get_balance(&Pubkey::new_from_array(native_token_account.to_bytes())).await {
-                        Ok(balance) => balance,
+                        Ok(balance) => balance - SOLANA_ACCOUNT_RENT, // subtract solana rent
                         Err(e) => {
                             error!("Error fetching SOL balance: {:?}", e);
                             0 // Default to 0 if there's an error
