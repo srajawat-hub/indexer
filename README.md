@@ -38,7 +38,9 @@ received_message_on_vault (
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     chain_id BIGINT NOT NULL,
-    order_id BIGINT NOT NULL
+    order_id BIGINT NOT NULL,
+    dln_order_id VARCHAR(255),
+    timeout_unix_timestamp_in_sec BIGINT
 );
 order_created (
     id BIGSERIAL PRIMARY KEY,

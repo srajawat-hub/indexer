@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::sync::Arc;
 
 use alloy::primitives::FixedBytes;
@@ -10,11 +11,12 @@ use log::{debug, info};
 use tokio_postgres::Client;
 
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, vault::Vault, intent_processor::IntentProcessorV2
+    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
 use crate::solidity_structs::{
-    IntentProcessorBoundMessageAcknowledgementData, SolidityIntentProcessorBoundMessage,
-    SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
+    CreatedOrder, IntentProcessorBoundMessageAcknowledgementData,
+    SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage,
+    VaultBoundMessagePlaceOrderData,
 };
 
 pub enum IntentVersions {
@@ -285,7 +287,7 @@ pub async fn process_evm_events(
                     sender,
                     result,
                     errorMessage,
-                    metadata
+                    metadata,
                 } = log.log_decode().unwrap().inner.data;
                 info!("IntentProcessorV2::AcknowledgementReceived for orderId - {orderId} from {sender} with result {result}");
 
@@ -320,7 +322,7 @@ pub async fn process_evm_events(
                             &block_number,
                             &timestamp,
                             &order_id,
-                            &ack_metadata
+                            &ack_metadata,
                         ],
                     )
                     .await
@@ -334,7 +336,7 @@ pub async fn process_evm_events(
 
                 let intent_stage = match result {
                     true => &IntentStage::Done.to_string(),
-                    false => &IntentStage::Failed.to_string()
+                    false => &IntentStage::Failed.to_string(),
                 };
 
                 update_intent_state(
@@ -369,7 +371,9 @@ pub async fn process_evm_events(
                 )
                 .unwrap();
 
-                let transaction_hash = log.transaction_hash.unwrap().to_string();
+                let timeout_unix_timestamp_in_sec =
+                    decoded_message_data.order.timeoutUnixTimestampInSec as i64;
+
                 let block_number = log.block_number.unwrap() as i64;
                 let intent_id = decoded_message_data.order.intentId as i64;
                 let order_id = decoded_message_data.order.orderId as i64;
@@ -379,7 +383,31 @@ pub async fn process_evm_events(
                 let message = message.to_string();
                 let timestamp = std::time::SystemTime::now();
 
-                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
+                let transaction_hash = log.transaction_hash.unwrap();
+                //  get the logs from the transaction hash
+                let logs = chain_provider
+                    .get_filter_logs(transaction_hash.into())
+                    .await
+                    .unwrap();
+                //  iterate over the logs and get the dln_order_id
+                let dln_order_id = logs
+                    .iter()
+                    .find(|log| log.topics()[0] == CreatedOrder::SIGNATURE_HASH);
+
+                let dln_order_id = match dln_order_id {
+                    Some(log) => {
+                        let primitive_log = alloy::primitives::Log {
+                            address: log.address(),
+                            data: log.data().clone(),
+                        };
+                        let decoded = CreatedOrder::decode_log(&primitive_log, true).unwrap();
+                        let debridge_order_id = decoded.orderId;
+                        Some(debridge_order_id)
+                    } // convert log into primite log
+                    None => None,
+                };
+
+                let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
                 let response = client
                     .execute(
                         query,
@@ -389,11 +417,13 @@ pub async fn process_evm_events(
                             &sender_address,
                             &message,
                             &provider,
-                            &transaction_hash,
+                            &transaction_hash.to_string(),
                             &block_number,
                             &timestamp,
                             &chain_id,
                             &order_id,
+                            &dln_order_id.map(hex::encode),
+                            &timeout_unix_timestamp_in_sec,
                         ],
                     )
                     .await
@@ -449,7 +479,8 @@ pub async fn process_evm_events(
                 let destination_domain_id = destinationDomain as i32;
                 let provider = provider as i32;
                 let message = message.to_string();
-                let transaction_hash = log.transaction_hash.unwrap().to_string();
+                let transaction_hash = log.transaction_hash.unwrap();
+
                 let block_number = log.block_number.unwrap() as i64;
                 let timestamp = std::time::SystemTime::now();
 
@@ -472,7 +503,7 @@ pub async fn process_evm_events(
                             &destination_domain_id,
                             &provider,
                             &message,
-                            &transaction_hash,
+                            &transaction_hash.to_string(),
                             &block_number,
                             &timestamp,
                             &order_id,

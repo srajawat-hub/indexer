@@ -96,28 +96,25 @@ pub fn get_api_url(network: String, chain_id: String, alchemy_api_key: String) -
     }
 }
 
-fn check_order_type(
-    solution_type: Option<i32>,
-    receiver_type: Option<i32>,
-) -> Option<String> {
+fn check_order_type(solution_type: Option<i32>, receiver_type: Option<i32>) -> Option<String> {
     match solution_type {
         Some(3) => Some(String::from("Stake")),
         Some(2) => match receiver_type {
-                Some(0) => Some(String::from("Cross Chain Transfer")), // receiver is not vault
-                Some(1) => Some(String::from("Cross Chain Swap")),     // receiver is vault
-                _ => None,
-            },
+            Some(0) => Some(String::from("Cross Chain Transfer")), // receiver is not vault
+            Some(1) => Some(String::from("Cross Chain Swap")),     // receiver is vault
+            _ => None,
+        },
         Some(1) => match receiver_type {
-                Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
-                Some(1) => Some(String::from("Local Swap")),     // receiver is vault
-                _ => None,
-            },
+            Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
+            Some(1) => Some(String::from("Local Swap")),     // receiver is vault
+            _ => None,
+        },
         Some(0) => match receiver_type {
             Some(0) => Some(String::from("Local Transfer")), // receiver is not vault
             Some(1) => Some(String::from("Local Swap")),     // receiver is vault
             _ => None,
         },
-        _ => Some(String::new())
+        _ => Some(String::new()),
     }
 }
 
@@ -302,7 +299,10 @@ pub async fn structure_intent_orders(
                                 txHash: vault_txn_hash.clone(), // check
                                 tokenIn: orders[0].get("token_in"),
                                 tokenOut: orders[0].get("token_out"),
-                                explorerLink: get_block_explorer_link(chain_id.clone(), vault_txn_hash.clone()),
+                                explorerLink: get_block_explorer_link(
+                                    chain_id.clone(),
+                                    vault_txn_hash.clone(),
+                                ),
                                 order_payload: Some(orders[0].get("order_payload")),
                                 orderId: Some(orders[0].get("order_id")),
                             });
@@ -313,14 +313,20 @@ pub async fn structure_intent_orders(
                             chainId: orders[0].get("destination_chain_id"),
                             txHash: match solution_type.unwrap() > 1 {
                                 true => fulfill_transaction_hash.clone(),
-                                false => vault_txn_hash.clone()
+                                false => vault_txn_hash.clone(),
                             },
                             tokenIn: orders[0].get("token_in"),
                             tokenOut: orders[0].get("token_out"),
                             explorerLink: match solution_type.unwrap() > 1 {
-                                true => get_block_explorer_link(orders[0].get("destination_chain_id"), fulfill_transaction_hash.clone()),
-                                false => get_block_explorer_link(orders[0].get("destination_chain_id"), vault_txn_hash.clone()),
-                            } ,
+                                true => get_block_explorer_link(
+                                    orders[0].get("destination_chain_id"),
+                                    fulfill_transaction_hash.clone(),
+                                ),
+                                false => get_block_explorer_link(
+                                    orders[0].get("destination_chain_id"),
+                                    vault_txn_hash.clone(),
+                                ),
+                            },
                             order_payload: Some(orders[0].get("order_payload")),
                             orderId: Some(orders[0].get("order_id")),
                         });

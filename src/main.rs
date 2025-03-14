@@ -20,13 +20,13 @@ use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
     AcknowledgementMetadataStake, IntentPayloadEnum,
     IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum,
-    SolidityIntentProcessorBoundMessage, SolidityOrder
+    SolidityIntentProcessorBoundMessage, SolidityOrder,
 };
 use std::collections::HashMap;
+use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::fs;
 use tokio::signal;
 use tokio_postgres::NoTls;
 use utils::{get_api_url, structure_intent_orders};
@@ -44,7 +44,6 @@ struct IndexerConfig {
 struct Config {
     indexers: Vec<IndexerConfig>,
 }
-
 
 impl Config {
     fn from_file(file_path: &str) -> Self {
@@ -90,10 +89,27 @@ struct UnbondingBalance {
 
 const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
+#[derive(Deserialize)]
+struct TimeoutParams {
+    chain_id: Option<i64>,
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct TimedOutOrder {
+    intent_id: i64,
+    order_id: i64,
+    dln_order_id: Option<String>,
+    timeout_timestamp: i64,
+    current_timestamp: i64,
+    elapsed_seconds: i64,
+    chain_id: i64,
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-    
+
     env_logger::builder()
         .format(|buf, record| {
             use std::io::Write;
@@ -176,6 +192,7 @@ async fn main() {
                 web::post().to(fetch_contract_balance),
             )
             .route("/get_ack_metadata", web::get().to(fetch_ack_metadata))
+            .route("/timed_out_orders", web::get().to(fetch_timed_out_orders))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -213,7 +230,7 @@ struct OrderTransactionData {
     amountIn: String,
     amountOut: String,
     order_payload: Option<String>,
-    orderId: Option<i64>
+    orderId: Option<i64>,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -246,7 +263,7 @@ async fn fetch_intents(
     let query_intent_state =
         "SELECT * FROM intent_state WHERE intent_id = $1 ORDER BY version DESC LIMIT 1"; // get state by intent id
     let query_orders = "SELECT * FROM order_created WHERE intent_id = $1"; // we will get 2 orders for 1 intent id
-    
+
     let query_solution = "SELECT * FROM solution WHERE intent_id = $1";
     let query_ack = "SELECT * FROM acknowledgement WHERE intent_id = $1";
 
@@ -301,7 +318,8 @@ async fn fetch_intents(
                     solver_transaction_hash,
                     intent_version,
                     &sender_address,
-                ).await;
+                )
+                .await;
 
             let created_at: SystemTime = intent_row.get("timestamp");
             let datetime: DateTime<Utc> = created_at.into();
@@ -863,8 +881,13 @@ async fn fetch_contract_balance(
             let mut contract_balances: Vec<TokenBalance> = vec![];
 
             for token_address in svm_meta_data.token_address {
-                if (&token_address == "0x1111111111111111111111111111111111111111111111111111111111111111") {
-                    let native_token_mint = Pubkey::from_str(&String::from("29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2")).unwrap(); // bs58 of 0x111...
+                if (&token_address
+                    == "0x1111111111111111111111111111111111111111111111111111111111111111")
+                {
+                    let native_token_mint = Pubkey::from_str(&String::from(
+                        "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2",
+                    ))
+                    .unwrap(); // bs58 of 0x111...
                     let native_token_account = Pubkey::find_program_address(
                         &[
                             b"user_deposit_address",
@@ -875,7 +898,10 @@ async fn fetch_contract_balance(
                     )
                     .0;
 
-                    let sol_balance = match client.get_balance(&Pubkey::new_from_array(native_token_account.to_bytes())).await {
+                    let sol_balance = match client
+                        .get_balance(&Pubkey::new_from_array(native_token_account.to_bytes()))
+                        .await
+                    {
                         Ok(balance) => {
                             if (balance >= SOLANA_ACCOUNT_RENT) {
                                 balance - SOLANA_ACCOUNT_RENT
@@ -887,13 +913,13 @@ async fn fetch_contract_balance(
                                     balance
                                 }
                             }
-                        }, // subtract solana rent
+                        } // subtract solana rent
                         Err(e) => {
                             error!("Error fetching SOL balance: {:?}", e);
                             0 // Default to 0 if there's an error
                         }
                     };
-                    
+
                     info!("SOL Balance: {}", sol_balance);
                     let native_balance: TokenBalance = TokenBalance {
                         tokenBalance: Some(sol_balance.to_string()),
@@ -921,7 +947,7 @@ async fn fetch_contract_balance(
                     match client.get_account(&token_account).await {
                         Ok(account) => {
                             info!("Token account exists {:?}", account);
-    
+
                             match client.get_token_account_balance(&token_account).await {
                                 Ok(balance) => {
                                     let token_balance: TokenBalance = TokenBalance {
@@ -953,4 +979,60 @@ async fn fetch_contract_balance(
     }
 
     HttpResponse::Ok().json(balances)
+}
+
+async fn fetch_timed_out_orders(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    query: web::Query<TimeoutParams>,
+) -> impl Responder {
+    let limit = query.limit.unwrap_or(100);
+    let chain_id_filter = query
+        .chain_id
+        .map(|id| format!("AND chain_id = {}", id))
+        .unwrap_or_default();
+
+    // Get current timestamp in seconds
+    let current_timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let query = format!(
+        "SELECT intent_id, order_id, dln_order_id, timeout_unix_timestamp_in_sec, chain_id 
+         FROM received_message_on_vault 
+         WHERE timeout_unix_timestamp_in_sec < {} {} 
+         ORDER BY timeout_unix_timestamp_in_sec DESC 
+         LIMIT {}",
+        current_timestamp, chain_id_filter, limit
+    );
+
+    match client.query(query.as_str(), &[]).await {
+        Ok(rows) => {
+            let timed_out_orders: Vec<TimedOutOrder> = rows
+                .iter()
+                .map(|row| {
+                    let timeout_timestamp: i64 = row.get("timeout_unix_timestamp_in_sec");
+                    let elapsed = current_timestamp - timeout_timestamp;
+
+                    TimedOutOrder {
+                        intent_id: row.get("intent_id"),
+                        order_id: row.get("order_id"),
+                        dln_order_id: row.get("dln_order_id"),
+                        timeout_timestamp,
+                        current_timestamp,
+                        elapsed_seconds: elapsed,
+                        chain_id: row.get("chain_id"),
+                    }
+                })
+                .collect();
+
+            HttpResponse::Ok().json(timed_out_orders)
+        }
+        Err(e) => {
+            error!("Error fetching timed out orders: {:?}", e);
+            HttpResponse::InternalServerError().json(json!({
+                "error": format!("Failed to fetch timed out orders: {}", e)
+            }))
+        }
+    }
 }
