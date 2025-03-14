@@ -14,7 +14,8 @@ use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
 use crate::solidity_structs::{
-    CreatedOrder, IntentProcessorBoundMessageAcknowledgementData,
+    AcknowledgementMetadataStake, AcknowledgementMetadataTransact, CreatedOrder,
+    IntentProcessorBoundMessageAcknowledgementData, SolidityAcknowledgementMetadata,
     SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage,
     VaultBoundMessagePlaceOrderData,
 };
@@ -351,6 +352,46 @@ pub async fn process_evm_events(
                     initiator_address,
                 )
                 .await;
+
+                let decoded_ack_metadata =
+                    SolidityAcknowledgementMetadata::abi_decode(metadata.as_ref(), true).unwrap();
+                if (decoded_ack_metadata.data.len() > 0) {
+                    let mut actual_amount = String::new();
+                    let metadata_variant = decoded_ack_metadata.enumVariant as u8;
+                    if (metadata_variant == 1) {
+                        // stake
+                        let metadata_data = AcknowledgementMetadataStake::abi_decode(
+                            decoded_ack_metadata.data.as_ref(),
+                            true,
+                        )
+                        .unwrap();
+                        actual_amount = metadata_data.amountCredited.to_string();
+                    } else {
+                        // transact
+                        let metadata_data = AcknowledgementMetadataTransact::abi_decode(
+                            decoded_ack_metadata.data.as_ref(),
+                            true,
+                        )
+                        .unwrap();
+                        actual_amount = metadata_data.amount.to_string();
+                    }
+
+                    let update_order_query = "
+                    UPDATE order_created
+                    SET amount_out = $1
+                    WHERE order_id = $2
+                    AND (SELECT COUNT(*) FROM order_created WHERE order_id = $2) = 1
+                    ";
+
+                    let order_rows_updated = client
+                        .execute(update_order_query, &[&actual_amount, &order_id])
+                        .await
+                        .unwrap();
+                    info!(
+                        "updated actual amount for order, updated rows count {:?}",
+                        order_rows_updated
+                    );
+                }
             }
             Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
                 let Vault::ReceivedMessageOnVault {
@@ -474,7 +515,7 @@ pub async fn process_evm_events(
                     continue;
                 };
 
-                let order_id = decoded_message_data.intentId as i64;
+                let order_id = decoded_message_data.orderId as i64;
                 let sender_address = log.address().to_string();
                 let destination_domain_id = destinationDomain as i32;
                 let provider = provider as i32;
