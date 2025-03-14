@@ -228,7 +228,7 @@ sol! {
 
     #[derive(Debug)]
     struct IntentProcessorBoundMessageAcknowledgementData {
-        uint64 intentId;
+        uint64 orderId;
         bool result;
         string errorMessage;
         SolidityAcknowledgementMetadata metadata;
@@ -246,6 +246,17 @@ sol! {
         bool isTokenCredited;
         uint256 amountCredited;
         uint256 request_id;
+    }
+
+    /// This metadata is used for transact intents that are processed using deBridge DLN.
+    #[derive(Debug)]
+    struct AcknowledgementMetadataTransact {
+        // This is the token mint that the solver has given to the vault.
+        bytes32 receiveTokenAddress;
+        // Amount of tokens that were credited during the transact.
+        uint256 amount;
+        // This is the address that received the above token.
+        bytes32 receiver;
     }
 
     #[derive(Debug)]

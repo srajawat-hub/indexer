@@ -330,7 +330,7 @@ impl SolanaIndexer {
                                 continue;
                             };
 
-                            let order_id = decoded_message_data.intentId as i64;
+                            let order_id = decoded_message_data.orderId as i64;
                             let origin_domain_id = destination_domain as i32;
                             let provider = interop_provider as i32;
                             let tx_hash = sigs[index].signature.clone();
