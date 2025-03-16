@@ -104,6 +104,7 @@ struct TimedOutOrder {
     current_timestamp: i64,
     elapsed_seconds: i64,
     chain_id: i64,
+    destination_chain_id: Option<String>,
 }
 
 #[tokio::main]
@@ -988,7 +989,7 @@ async fn fetch_timed_out_orders(
     let limit = query.limit.unwrap_or(100);
     let chain_id_filter = query
         .chain_id
-        .map(|id| format!("AND chain_id = {}", id))
+        .map(|id| format!("AND r.chain_id = {}", id))
         .unwrap_or_default();
 
     // Get current timestamp in seconds
@@ -997,11 +998,13 @@ async fn fetch_timed_out_orders(
         .unwrap()
         .as_secs() as i64;
 
+    // Join with order_created to get destination_chain_id
     let query = format!(
-        "SELECT intent_id, order_id, dln_order_id, timeout_unix_timestamp_in_sec, chain_id 
-         FROM received_message_on_vault 
-         WHERE timeout_unix_timestamp_in_sec < {} {} 
-         ORDER BY timeout_unix_timestamp_in_sec DESC 
+        "SELECT r.intent_id, r.order_id, r.dln_order_id, r.timeout_unix_timestamp_in_sec, r.chain_id, o.destination_chain_id 
+         FROM received_message_on_vault r
+         LEFT JOIN order_created o ON r.intent_id = o.intent_id
+         WHERE r.timeout_unix_timestamp_in_sec < {} {} 
+         ORDER BY r.timeout_unix_timestamp_in_sec DESC 
          LIMIT {}",
         current_timestamp, chain_id_filter, limit
     );
@@ -1022,6 +1025,7 @@ async fn fetch_timed_out_orders(
                         current_timestamp,
                         elapsed_seconds: elapsed,
                         chain_id: row.get("chain_id"),
+                        destination_chain_id: row.get("destination_chain_id"),
                     }
                 })
                 .collect();
