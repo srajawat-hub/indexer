@@ -998,11 +998,22 @@ async fn fetch_timed_out_orders(
         .unwrap()
         .as_secs() as i64;
 
-    // Join with order_created to get destination_chain_id
+    // Join with order_created to get destination_chain_id and intent_state to get latest version (2 or 4)
     let query = format!(
-        "SELECT r.intent_id, r.order_id, r.dln_order_id, r.timeout_unix_timestamp_in_sec, r.chain_id, o.destination_chain_id 
-         FROM received_message_on_vault r
+        "WITH latest_messages AS (
+            SELECT DISTINCT ON (intent_id) *
+            FROM received_message_on_vault
+            ORDER BY intent_id, id DESC
+         )
+         SELECT r.intent_id, r.order_id, r.dln_order_id, r.timeout_unix_timestamp_in_sec, r.chain_id, o.destination_chain_id 
+         FROM latest_messages r
          LEFT JOIN order_created o ON r.intent_id = o.intent_id
+         JOIN (
+             SELECT intent_id, MAX(version) as version
+             FROM intent_state 
+             WHERE version IN (2, 4)
+             GROUP BY intent_id
+         ) i ON r.intent_id = i.intent_id
          WHERE r.timeout_unix_timestamp_in_sec < {} {} 
          ORDER BY r.timeout_unix_timestamp_in_sec DESC 
          LIMIT {}",
