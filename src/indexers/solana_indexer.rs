@@ -9,7 +9,7 @@ use crate::{
     events::event_processor::{IntentStage, IntentVersions},
     solidity_structs::{
         IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData,
-        SolidityIntentProcessorBoundMessage
+        SolidityIntentProcessorBoundMessage,
     },
 };
 
