@@ -385,7 +385,7 @@ impl SolanaIndexer {
 
                             update_intent_state(
                                 &intent_id,
-                                IntentVersions::ReceivedMessageOnVault as i32,
+                                IntentVersions::MessageDispatchedFromVault as i32,
                                 &IntentStage::Processing.to_string(),
                                 tx_hash,
                                 &order_id,
