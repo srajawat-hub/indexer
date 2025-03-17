@@ -393,6 +393,40 @@ pub async fn process_evm_events(
                     );
                 }
             }
+            Some(&IntentProcessorV2::DepositReceived::SIGNATURE_HASH) => {
+                let IntentProcessorV2::DepositReceived {
+                    userAddress,
+                    tokenAddress,
+                    chainId,
+                    amount
+                } = log.log_decode().unwrap().inner.data;
+
+                info!("IntentProcessorV2::DepositReceived from user {userAddress}");
+                let chain_id = chainId.to_string();
+                let amount = amount.to_string();
+                let user_address = userAddress.to_string();
+                let token_address = tokenAddress.to_string();
+                let timestamp = std::time::SystemTime::now();
+
+                let query = "INSERT INTO deposit_received VALUES (DEFAULT, $1, $2, $3, $4, $5)";
+                let response = client
+                    .execute(
+                        query,
+                        &[
+                            &user_address,
+                            &token_address,
+                            &chain_id,
+                            &amount,
+                            &timestamp
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                info!(
+                    "IntentProcessorV2::DepositReceived inserted response {:?}",
+                    response
+                );
+            }
             Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
                 let Vault::ReceivedMessageOnVault {
                     origin,

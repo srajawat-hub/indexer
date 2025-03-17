@@ -83,9 +83,17 @@ intent_state (
     gas_fees BIGINT,
     gas_token TEXT,
     order_id BIGINT,
-    chain_id BIGING NOT NULL,
+    chain_id BIGINT NOT NULL,
     initiator_address VARCHAR(66) NOT NULL
 );
+deposit_received (
+    id BIGSERIAL PRIMARY KEY,
+    user_address TEXT NOT NULL,
+    token_address TEXT NOT NULL,
+    chain_id TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    timestamp TIMESTAMP NOT NULL
+)
 ```
 
 # APIs
