@@ -459,27 +459,29 @@ pub async fn process_evm_events(
                 let timestamp = std::time::SystemTime::now();
 
                 let transaction_hash = log.transaction_hash.unwrap();
-                //  get the logs from the transaction hash
-                let logs = chain_provider
-                    .get_filter_logs(transaction_hash.into())
-                    .await
-                    .unwrap();
-                //  iterate over the logs and get the dln_order_id
-                let dln_order_id = logs
-                    .iter()
-                    .find(|log| log.topics()[0] == CreatedOrder::SIGNATURE_HASH);
 
-                let dln_order_id = match dln_order_id {
-                    Some(log) => {
-                        let primitive_log = alloy::primitives::Log {
-                            address: log.address(),
-                            data: log.data().clone(),
-                        };
-                        let decoded = CreatedOrder::decode_log(&primitive_log, true).unwrap();
-                        let debridge_order_id = decoded.orderId;
-                        Some(debridge_order_id)
-                    } // convert log into primite log
-                    None => None,
+                let dln_order_id = match chain_provider.get_transaction_receipt(transaction_hash).await {
+                    Ok(receipt) => match receipt {
+                        Some(tx_receipt) => {
+                            let receipt_logs = tx_receipt.inner.logs();
+                            let order_id_log = receipt_logs.iter().find(|log| log.topics()[0] == CreatedOrder::SIGNATURE_HASH);
+                            let dln_order_id = match order_id_log {
+                                Some(log) => {
+                                    let primitive_log = alloy::primitives::Log {
+                                        address: log.address(),
+                                        data: log.data().clone(),
+                                    };
+                                    let decoded = CreatedOrder::decode_log(&primitive_log, true).unwrap();
+                                    let debridge_order_id = decoded.orderId;
+                                    Some(debridge_order_id)
+                                } // convert log into primite log
+                                None => None,
+                            };
+                            dln_order_id
+                        },
+                        None => None
+                    },
+                    Err(_e) => None
                 };
 
                 let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
