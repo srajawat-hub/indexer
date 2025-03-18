@@ -194,6 +194,7 @@ async fn main() {
             )
             .route("/get_ack_metadata", web::get().to(fetch_ack_metadata))
             .route("/timed_out_orders", web::get().to(fetch_timed_out_orders))
+            .route("/get_deposit_history/{user_address}", web::get().to(get_deposit_history))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -1049,5 +1050,49 @@ async fn fetch_timed_out_orders(
                 "error": format!("Failed to fetch timed out orders: {}", e)
             }))
         }
+    }
+}
+
+
+#[derive(Serialize)]
+struct DepositHistory {
+    id: i64,
+    user_address: String,
+    token_address: String,
+    chain_id: String,
+    amount: String,
+    timestamp: Option<DateTime<Utc>>
+}
+
+async fn get_deposit_history(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    user_address: web::Path<String>
+) -> impl Responder {
+    let query = "SELECT * FROM deposit_received WHERE user_address = $1";
+
+    match client.query(query, &[&user_address.to_string()]).await {
+        Ok(deposit_row) => {
+            let mut data: Vec<DepositHistory> = vec![];
+            for row in deposit_row {
+                let id: i64 = row.get("id");
+                let timestamp: SystemTime = row.get("timestamp");
+                let datetime: DateTime<Utc> = timestamp.into();
+                let token_address: String = row.get("token_address");
+                let chain_id: String = row.get("chain_id");
+                let amount: String = row.get("amount");
+
+                let txn: DepositHistory = DepositHistory {
+                    id,
+                    user_address: user_address.to_string(),
+                    token_address,
+                    chain_id,
+                    amount,
+                    timestamp: Some(datetime),
+                };
+                data.push(txn);
+            }
+            HttpResponse::Ok().json(data) // Return JSON response
+        }
+        Err(_e) => HttpResponse::InternalServerError().finish(),
     }
 }
