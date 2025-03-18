@@ -254,6 +254,7 @@ struct InitialData {
     ack_tx_hash: Option<String>,
     fulfill_tx_hash: Option<String>,
     intent_version: i32, // check if more needed
+    receiver_address: Option<String>
 }
 
 // Handler to fetch data from the database

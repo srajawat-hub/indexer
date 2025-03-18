@@ -167,6 +167,7 @@ pub async fn structure_intent_orders(
                 let solution_type: Option<i32> = orders[0].get("solution_type");
                 let multi_leg: bool = orders[0].get("multi_leg");
                 let receiver_type: Option<i32> = orders[0].get("receiver_type");
+                let receiver_address: Option<String> = orders[0].get("receiver_address");
                 intent_type = check_order_type(solution_type, receiver_type);
 
                 let vault_txn_hash: Option<String> = match client
@@ -235,6 +236,7 @@ pub async fn structure_intent_orders(
                                 },
                                 fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
+                                receiver_address
                             });
                         }
                         false => {
@@ -286,6 +288,7 @@ pub async fn structure_intent_orders(
                                 },
                                 fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
+                                receiver_address
                             });
                         }
                     },
@@ -366,6 +369,7 @@ pub async fn structure_intent_orders(
                             },
                             fulfill_tx_hash: fulfill_transaction_hash,
                             intent_version: intent_version,
+                            receiver_address
                         });
                     }
                 }
@@ -413,6 +417,7 @@ pub async fn structure_intent_orders(
                 };
 
                 let receiver_type: Option<i32> = source_order.get("receiver_type");
+                let receiver_address: Option<String> = source_order.get("receiver_address");
                 intent_type = check_order_type(solution_type, receiver_type);
 
                 source_transaction_data = Some(OrderTransactionData {
@@ -475,6 +480,7 @@ pub async fn structure_intent_orders(
                     },
                     fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
+                    receiver_address
                 });
             }
             _ => {
@@ -516,6 +522,7 @@ pub async fn structure_intent_orders(
                     },
                     fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
+                    receiver_address: None
                 });
             }
         },
@@ -558,6 +565,7 @@ pub async fn structure_intent_orders(
                 },
                 fulfill_tx_hash: fulfill_transaction_hash,
                 intent_version: intent_version,
+                receiver_address: None
             });
         }
     }

@@ -59,7 +59,8 @@ order_created (
     multi_leg BOOL NOT NULL DEFAULT false,
     order_payload TEXT NOT NULL,
     solution_type INTEGER,
-    receiver_type INTEGER
+    receiver_type INTEGER,
+    receiver_address TEXT
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,

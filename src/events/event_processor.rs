@@ -14,10 +14,7 @@ use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
 use crate::solidity_structs::{
-    AcknowledgementMetadataStake, AcknowledgementMetadataTransact, CreatedOrder,
-    IntentProcessorBoundMessageAcknowledgementData, SolidityAcknowledgementMetadata,
-    SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage,
-    VaultBoundMessagePlaceOrderData,
+    AcknowledgementMetadataStake, AcknowledgementMetadataTransact, CreatedOrder, IntentProcessorBoundMessageAcknowledgementData, ReceiverUserAddressData, ReceiverVaultData, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData
 };
 
 pub enum IntentVersions {
@@ -235,11 +232,22 @@ pub async fn process_evm_events(
                 let solution_type = order_struct.solution.enumVariant as i32;
                 let receiver_type: i32 = order_struct.receiver.enumVariant as i32;
 
+                let receiver_data = order_struct.receiver.data;
+                let receiver_address: String;
+                if receiver_type == 0 {
+                    let receiver_address_struct = ReceiverUserAddressData::abi_decode(&receiver_data, true).unwrap();
+                    receiver_address = receiver_address_struct.userAddress.to_string();
+
+                } else {
+                    let receiver_address_struct = ReceiverVaultData::abi_decode(&receiver_data, true).unwrap();
+                    receiver_address = receiver_address_struct.vaultUser.to_string();
+                }
+                
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)";
                 let response = client
                     .execute(
                         query,
@@ -260,6 +268,7 @@ pub async fn process_evm_events(
                             &order_payload,
                             &solution_type,
                             &receiver_type,
+                            &receiver_address
                         ],
                     )
                     .await
