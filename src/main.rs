@@ -38,6 +38,8 @@ struct IndexerConfig {
     #[serde(default)]
     chain_id: i64,
     execution_environment: String,
+    #[serde(default)]
+    mockln_contract: String,
 }
 
 #[derive(Deserialize)]
@@ -52,8 +54,16 @@ impl Config {
     }
 }
 
-fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send + Sync> {
-    Box::new(EvmIndexer::new(url.to_string(), address.to_string()))
+fn create_evm_indexer(
+    url: &str,
+    address: &str,
+    is_mockln: bool,
+) -> Box<dyn BlockchainIndexer + Send + Sync> {
+    Box::new(EvmIndexer::new(
+        url.to_string(),
+        address.to_string(),
+        is_mockln,
+    ))
 }
 
 fn create_solana_indexer(
@@ -143,12 +153,12 @@ async fn main() {
     let config_path = std::env::var("CONFIG_PATH").unwrap_or("config.toml".to_string());
     let config = Config::from_file(&config_path);
 
-    let indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
+    let mut indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
         .indexers
-        .into_iter()
+        .iter()
         .map(|conf| {
             if conf.execution_environment == "EVM" {
-                create_evm_indexer(&conf.url, &conf.contract)
+                create_evm_indexer(&conf.url, &conf.contract, false)
             } else if conf.execution_environment == "SVM" {
                 create_solana_indexer(&conf.url, &conf.contract, &conf.chain_id)
             } else {
@@ -159,6 +169,13 @@ async fn main() {
             }
         })
         .collect();
+
+    // add mockln indexer
+    config.indexers.iter().for_each(|conf| {
+        if !conf.mockln_contract.is_empty() {
+            indexers.push(create_evm_indexer(&conf.url, &conf.mockln_contract, true));
+        }
+    });
 
     let mut handles = vec![];
     for indexer in indexers {
@@ -194,7 +211,10 @@ async fn main() {
             )
             .route("/get_ack_metadata", web::get().to(fetch_ack_metadata))
             .route("/timed_out_orders", web::get().to(fetch_timed_out_orders))
-            .route("/get_deposit_history/{user_address}", web::get().to(get_deposit_history))
+            .route(
+                "/get_deposit_history/{user_address}",
+                web::get().to(get_deposit_history),
+            )
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -254,7 +274,7 @@ struct InitialData {
     ack_tx_hash: Option<String>,
     fulfill_tx_hash: Option<String>,
     intent_version: i32, // check if more needed
-    receiver_address: Option<String>
+    receiver_address: Option<String>,
 }
 
 // Handler to fetch data from the database
@@ -1055,7 +1075,6 @@ async fn fetch_timed_out_orders(
     }
 }
 
-
 #[derive(Serialize)]
 struct DepositHistory {
     id: i64,
@@ -1063,12 +1082,12 @@ struct DepositHistory {
     token_address: String,
     chain_id: String,
     amount: String,
-    timestamp: Option<DateTime<Utc>>
+    timestamp: Option<DateTime<Utc>>,
 }
 
 async fn get_deposit_history(
     client: web::Data<Arc<tokio_postgres::Client>>,
-    user_address: web::Path<String>
+    user_address: web::Path<String>,
 ) -> impl Responder {
     let query = "SELECT * FROM deposit_received WHERE user_address = $1";
 
