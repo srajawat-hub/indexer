@@ -54,16 +54,8 @@ impl Config {
     }
 }
 
-fn create_evm_indexer(
-    url: &str,
-    address: &str,
-    is_mockln: bool,
-) -> Box<dyn BlockchainIndexer + Send + Sync> {
-    Box::new(EvmIndexer::new(
-        url.to_string(),
-        address.to_string(),
-        is_mockln,
-    ))
+fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send + Sync> {
+    Box::new(EvmIndexer::new(url.to_string(), address.to_string()))
 }
 
 fn create_solana_indexer(
@@ -153,27 +145,24 @@ async fn main() {
     let config_path = std::env::var("CONFIG_PATH").unwrap_or("config.toml".to_string());
     let config = Config::from_file(&config_path);
 
-    let mut indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = config
-        .indexers
-        .iter()
-        .map(|conf| {
-            if conf.execution_environment == "EVM" {
-                create_evm_indexer(&conf.url, &conf.contract, false)
-            } else if conf.execution_environment == "SVM" {
-                create_solana_indexer(&conf.url, &conf.contract, &conf.chain_id)
-            } else {
-                panic!(
-                    "Invalid execution environment: {}",
-                    conf.execution_environment
-                );
-            }
-        })
-        .collect();
-
-    // add mockln indexer
+    let mut indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = vec![];
     config.indexers.iter().for_each(|conf| {
-        if !conf.mockln_contract.is_empty() {
-            indexers.push(create_evm_indexer(&conf.url, &conf.mockln_contract, true));
+        if conf.execution_environment == "EVM" {
+            if !conf.mockln_contract.is_empty() {
+                indexers.push(create_evm_indexer(&conf.url, &conf.mockln_contract));
+            }
+            indexers.push(create_evm_indexer(&conf.url, &conf.contract));
+        } else if conf.execution_environment == "SVM" {
+            indexers.push(create_solana_indexer(
+                &conf.url,
+                &conf.contract,
+                &conf.chain_id,
+            ));
+        } else {
+            panic!(
+                "Invalid execution environment: {}",
+                conf.execution_environment
+            );
         }
     });
 
@@ -1033,10 +1022,7 @@ async fn fetch_timed_out_orders(
          FROM latest_messages r
          LEFT JOIN order_created o ON r.intent_id = o.intent_id
          JOIN (
-             SELECT intent_id, MAX(version) as version
-             FROM intent_state 
-             WHERE version = 3
-             GROUP BY intent_id
+             SELECT intent_id FROM intent_state GROUP BY intent_id HAVING MAX(version) = 3 ORDER BY intent_id
          ) i ON r.intent_id = i.intent_id
          WHERE r.timeout_unix_timestamp_in_sec < {} {} 
          ORDER BY r.timeout_unix_timestamp_in_sec DESC 
