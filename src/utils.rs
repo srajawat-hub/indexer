@@ -136,6 +136,7 @@ pub async fn structure_intent_orders(
     let query_message_on_vaults =
         "SELECT transaction_hash FROM received_message_on_vault WHERE order_id = $1"; // we will get 2 rows for 1 intent id, 1 for src_chain, next for dest_chain
     let intent_id: i64 = intent_row.get("intent_id");
+    let feeAmount: Option<String> = intent_row.get("feeAmount");
 
     let mut source_transaction_data: Option<OrderTransactionData>;
     let destination_transaction_data: Option<OrderTransactionData>;
@@ -236,7 +237,8 @@ pub async fn structure_intent_orders(
                                 },
                                 fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
-                                receiver_address
+                                receiver_address,
+                                feeAmount
                             });
                         }
                         false => {
@@ -288,7 +290,8 @@ pub async fn structure_intent_orders(
                                 },
                                 fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
-                                receiver_address
+                                receiver_address,
+                                feeAmount
                             });
                         }
                     },
@@ -369,7 +372,8 @@ pub async fn structure_intent_orders(
                             },
                             fulfill_tx_hash: fulfill_transaction_hash,
                             intent_version: intent_version,
-                            receiver_address
+                            receiver_address,
+                            feeAmount
                         });
                     }
                 }
@@ -480,7 +484,8 @@ pub async fn structure_intent_orders(
                     },
                     fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
-                    receiver_address
+                    receiver_address,
+                    feeAmount
                 });
             }
             _ => {
@@ -522,7 +527,8 @@ pub async fn structure_intent_orders(
                     },
                     fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
-                    receiver_address: None
+                    receiver_address: None,
+                    feeAmount: None
                 });
             }
         },
@@ -565,7 +571,8 @@ pub async fn structure_intent_orders(
                 },
                 fulfill_tx_hash: fulfill_transaction_hash,
                 intent_version: intent_version,
-                receiver_address: None
+                receiver_address: None,
+                feeAmount: None
             });
         }
     }
