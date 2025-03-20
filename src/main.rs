@@ -1021,10 +1021,7 @@ async fn fetch_timed_out_orders(
          FROM latest_messages r
          LEFT JOIN order_created o ON r.intent_id = o.intent_id
          JOIN (
-             SELECT intent_id, MAX(version) as version
-             FROM intent_state 
-             WHERE version = 3
-             GROUP BY intent_id
+             SELECT intent_id FROM intent_state GROUP BY intent_id HAVING MAX(version) = 3 ORDER BY intent_id
          ) i ON r.intent_id = i.intent_id
          WHERE r.timeout_unix_timestamp_in_sec < {} {} 
          ORDER BY r.timeout_unix_timestamp_in_sec DESC 
