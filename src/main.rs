@@ -1005,6 +1005,7 @@ async fn fetch_timed_out_orders(
         "WITH latest_messages AS (
             SELECT DISTINCT ON (intent_id) *
             FROM received_message_on_vault
+            WHERE dln_order_id IS NOT NULL
             ORDER BY intent_id, id DESC
          )
          SELECT r.intent_id, r.order_id, r.dln_order_id, r.timeout_unix_timestamp_in_sec, r.chain_id, o.destination_chain_id 
@@ -1013,7 +1014,7 @@ async fn fetch_timed_out_orders(
          JOIN (
              SELECT intent_id, MAX(version) as version
              FROM intent_state 
-             WHERE version IN (2, 4)
+             WHERE version = 3
              GROUP BY intent_id
          ) i ON r.intent_id = i.intent_id
          WHERE r.timeout_unix_timestamp_in_sec < {} {} 
