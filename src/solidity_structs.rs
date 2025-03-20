@@ -502,4 +502,6 @@ sol! {
         bytes metadata
     );
 
+    #[derive(Debug)]
+    event DebridgeOrderCreated(uint64 orderId, bytes32 debridgeOrderId);
 }
