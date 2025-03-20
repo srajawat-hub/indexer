@@ -141,7 +141,7 @@ pub async fn process_evm_events(
         } else {
             match log.topic0() {
                 Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
-                    let IntentLibV2::IntentSubmitted { intentId, owner } =
+                    let IntentLibV2::IntentSubmitted { intentId, owner , feeAmount} =
                         log.log_decode().unwrap().inner.data;
                     info!("IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
 
@@ -154,7 +154,7 @@ pub async fn process_evm_events(
                     let current_timestamp = std::time::SystemTime::now();
                     let timestamp = current_timestamp;
 
-                    let query = "INSERT INTO intent VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+                    let query = "INSERT INTO intent VALUES(DEFAULT, $1, $2, $3, $4, $5, $6)";
                     let response = client
                         .execute(
                             query,
@@ -164,6 +164,7 @@ pub async fn process_evm_events(
                                 &transaction_hash,
                                 &block_number,
                                 &timestamp,
+                                &feeAmount.to_string()
                             ],
                         )
                         .await

@@ -1373,6 +1373,12 @@
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"
+            },
+            {
+                "name": "feeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
             }
         ],
         "anonymous": false
