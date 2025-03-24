@@ -1071,7 +1071,7 @@ struct DepositHistory {
     amount: String,
     timestamp: Option<DateTime<Utc>>,
     transaction_hash: Option<String>,
-    status: i32
+    status: Option<i32>
 }
 
 async fn get_deposit_history(
@@ -1091,7 +1091,7 @@ async fn get_deposit_history(
                 let chain_id: String = row.get("chain_id");
                 let amount: String = row.get("amount");
                 let transaction_hash: Option<String> = row.get("source_transaction_hash");
-                let status: i32 = row.get("status");
+                let status: Option<i32> = row.get("status");
 
                 let txn: DepositHistory = DepositHistory {
                     id,
