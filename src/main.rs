@@ -1070,6 +1070,8 @@ struct DepositHistory {
     chain_id: String,
     amount: String,
     timestamp: Option<DateTime<Utc>>,
+    transaction_hash: Option<String>,
+    status: i32
 }
 
 async fn get_deposit_history(
@@ -1088,6 +1090,8 @@ async fn get_deposit_history(
                 let token_address: String = row.get("token_address");
                 let chain_id: String = row.get("chain_id");
                 let amount: String = row.get("amount");
+                let transaction_hash: Option<String> = row.get("source_transaction_hash");
+                let status: i32 = row.get("status");
 
                 let txn: DepositHistory = DepositHistory {
                     id,
@@ -1096,6 +1100,8 @@ async fn get_deposit_history(
                     chain_id,
                     amount,
                     timestamp: Some(datetime),
+                    transaction_hash,
+                    status
                 };
                 data.push(txn);
             }
