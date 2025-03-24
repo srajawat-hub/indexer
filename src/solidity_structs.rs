@@ -58,6 +58,19 @@ pub mod intent_lib_v2 {
     );
 }
 
+pub mod intent_lib {
+    use alloy::sol;
+    sol!(
+        #[allow(clippy::too_many_arguments)]
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        IntentLib,
+        "abi/IntentLib.json"
+    );
+}
+
+
 // Define our intent payload enum using Alloy's sol! macro
 sol! {
     #[derive(Debug)]
@@ -504,4 +517,18 @@ sol! {
 
     #[derive(Debug)]
     event DebridgeOrderCreated(uint64 orderId, bytes32 debridgeOrderId);
+
+    #[derive(Debug)]
+    event Dispatch(
+        address indexed sender,
+        uint32 indexed destination,
+        bytes32 indexed recipient,
+        bytes message
+    );
+
+    #[derive(Debug)]
+    event DispatchId(bytes32 indexed messageId);
+    
+    #[derive(Debug)]
+    event ProcessId(bytes32 indexed messageId);
 }

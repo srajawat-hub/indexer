@@ -1,0 +1,350 @@
+[
+    {
+        "type": "event",
+        "name": "CircuitBreakerStateChanged",
+        "inputs": [
+            {
+                "name": "state",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum IntentLib.CircuitBreakerState"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DepositContractCreated",
+        "inputs": [
+            {
+                "name": "depositContractAddress",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "user",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DepositedFunds",
+        "inputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "tokenAddress",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "MessageDispatchedFromVault",
+        "inputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "destinationDomain",
+                "type": "uint32",
+                "indexed": true,
+                "internalType": "uint32"
+            },
+            {
+                "name": "provider",
+                "type": "uint8",
+                "indexed": true,
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            },
+            {
+                "name": "message",
+                "type": "bytes",
+                "indexed": false,
+                "internalType": "bytes"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "OwnershipTransferStarted",
+        "inputs": [
+            {
+                "name": "currentOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "proposedOwner",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "PauserUpdated",
+        "inputs": [
+            {
+                "name": "oldPauser",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newPauser",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ReceivedMessageOnVault",
+        "inputs": [
+            {
+                "name": "origin",
+                "type": "uint32",
+                "indexed": false,
+                "internalType": "uint32"
+            },
+            {
+                "name": "sender",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "message",
+                "type": "bytes",
+                "indexed": false,
+                "internalType": "bytes"
+            },
+            {
+                "name": "provider",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum IntentTypesLib.InteropProvider"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "VaultInitialized",
+        "inputs": [
+            {
+                "name": "vaultAddress",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "owner",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "VaultStateToggled",
+        "inputs": [
+            {
+                "name": "isVaultActive",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            },
+            {
+                "name": "timestamp",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "AlreadyProposedOwner",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "AmountMismatch",
+        "inputs": [
+            {
+                "name": "received",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "expected",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "CallerIsNotOperator",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "HyperlaneNotSupported",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InsufficientNativeFunds",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidCircuitBreaker",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidDepositContract",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInteropProvider",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidLiquidityNetwork",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidOrderType",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidSolutionType",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidState",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OnlyProposedOwner",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "TimeLockNotExpired",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "TokenMismatch",
+        "inputs": [
+            {
+                "name": "received",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "expected",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "TransferFailed",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "Unauthorized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UnauthorizedCancelOrder",
+        "inputs": [
+            {
+                "name": "sender",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "required",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "VaultAlreadyActive",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "VaultAlreadyPaused",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "VaultNotActive",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ZeroAddress",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ZeroAmount",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ZeroBalance",
+        "inputs": []
+    }
+]

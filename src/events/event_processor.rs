@@ -1,22 +1,19 @@
 use std::sync::Arc;
 
-use alloy::primitives::FixedBytes;
+use alloy::primitives::{Bytes, FixedBytes};
 use alloy::providers::Provider;
 use alloy::rpc::types::Log;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use futures_util::stream::StreamExt;
-use log::{debug, info};
+use log::{debug, info, error};
 use tokio_postgres::Client;
 
 use crate::solidity_structs::{
-    self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, CreatedOrder,
-    IntentProcessorBoundMessageAcknowledgementData, ReceiverUserAddressData, ReceiverVaultData,
-    SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder,
-    SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
+    self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, CreatedOrder, Dispatch, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, ProcessId, ReceiverUserAddressData, ReceiverVaultData, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData
 };
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
+    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault, intent_lib::{IntentLib, IntentTypesLib}
 };
 
 pub enum IntentVersions {
@@ -34,6 +31,12 @@ pub enum IntentStage {
     Processing,
     Done,
     Failed,
+}
+
+#[derive(Debug)]
+pub enum DepositStatus {
+    Initialized,
+    Done
 }
 
 impl ToString for IntentStage {
@@ -421,24 +424,87 @@ pub async fn process_evm_events(
                 let token_address = tokenAddress.to_string();
                 let timestamp = std::time::SystemTime::now();
 
-                let query = "INSERT INTO deposit_received VALUES (DEFAULT, $1, $2, $3, $4, $5)";
-                let response = client
-                    .execute(
-                        query,
-                        &[
-                            &user_address,
-                            &token_address,
-                            &chain_id,
-                            &amount,
-                            &timestamp,
-                        ],
-                    )
+                let transaction_hash = log.transaction_hash.unwrap();
+
+                // get message_id from hyperlane process event; get the event log from the transaction receipt
+                let process_message_id = match chain_provider
+                    .get_transaction_receipt(transaction_hash)
                     .await
-                    .unwrap();
-                info!(
-                    "IntentProcessorV2::DepositReceived inserted response {:?}",
-                    response
-                );
+                {
+                    Ok(receipt) => match receipt {
+                        Some(tx_receipt) => {
+                            let receipt_logs = tx_receipt.inner.logs();
+                            let process_id_log = receipt_logs
+                                .iter()
+                                .find(|log| log.topics()[0] == ProcessId::SIGNATURE_HASH);
+                            let message_process_id = match process_id_log {
+                                Some(log) => {
+                                    let primitive_log = alloy::primitives::Log {
+                                        address: log.address(),
+                                        data: log.data().clone(),
+                                    };
+                                    let decoded =
+                                        ProcessId::decode_log(&primitive_log, true).unwrap();
+                                    let process_message_id = decoded.messageId;
+                                    Some(process_message_id)
+                                } // convert log into primite log
+                                None => None,
+                            };
+                            message_process_id
+                        }
+                        None => None,
+                    },
+                    Err(_e) => None,
+                };
+                let deposit_status = DepositStatus::Done as i32;
+                match process_message_id {
+                    Some(id) => {
+                        let message_id = id.to_string();
+                        let query = "INSERT INTO deposit_received VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (message_id) DO UPDATE SET status = EXCLUDED.status WHERE deposit_received.status <> 1;";
+                        let deposit_transaction = match client.execute(
+                            query, 
+                            &[
+                                &user_address,
+                                &token_address,
+                                &chain_id,
+                                &amount,
+                                &timestamp,
+                                &transaction_hash.to_string(),
+                                &message_id,
+                                &deposit_status
+                            ]).await {
+                            Ok(row) => {
+                                info!("Successfully updated deposit status with message_id {:?}", message_id);
+                            },
+                            Err(_e) => {
+                                error!("Error updating deposit status with message_id {:?} with error {:?}", message_id, _e);
+                            }
+                        };
+                    },
+                    None => {
+                        // if not, we will have to add this into history
+                        let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                        let response = client
+                            .execute(
+                                query,
+                                &[
+                                    &user_address,
+                                    &token_address,
+                                    &chain_id,
+                                    &amount,
+                                    &timestamp,
+                                    &transaction_hash.to_string(),
+                                    &deposit_status
+                                ],
+                            )
+                            .await
+                            .unwrap();
+                        info!(
+                            "IntentProcessorV2::DepositReceived inserted response {:?}",
+                            response
+                        );
+                    }
+                }
             }
             Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
                 let Vault::ReceivedMessageOnVault {
@@ -554,78 +620,170 @@ pub async fn process_evm_events(
                 debug!("\nMessageDispatchedFromVault log - {:?}", log);
                 // have to get intentId here.
                 info!("Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
-
+                
                 let decoded_message =
                     SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true)
                         .unwrap();
-                let decoded_message_data =
-                    IntentProcessorBoundMessageAcknowledgementData::abi_decode(
-                        decoded_message.data.as_ref(),
-                        true,
-                    );
-                let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
-                    decoded_message_data
-                } else {
-                    debug!("Error decoding message data");
-                    continue;
-                };
 
-                let order_id = decoded_message_data.orderId as i64;
-                let sender_address = log.address().to_string();
-                let destination_domain_id = destinationDomain as i32;
-                let provider = provider as i32;
-                let message = message.to_string();
-                let transaction_hash = log.transaction_hash.unwrap();
+                let message_variant = decoded_message.enumVariant as u8;
 
-                let block_number = log.block_number.unwrap() as i64;
-                let timestamp = std::time::SystemTime::now();
-
-                // fetch intent_id
-                let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
-                let intent_id_response = client
-                    .query_one(intent_id_query, &[&order_id])
-                    .await
-                    .unwrap();
-                let intent_id: i64 = intent_id_response.get("intent_id");
-
-                let query =
-                    "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
-                let response = client
-                    .execute(
-                        query,
-                        &[
+                match message_variant {
+                    2 => {
+                        // ack
+                        let decoded_message_data =
+                            IntentProcessorBoundMessageAcknowledgementData::abi_decode(
+                                decoded_message.data.as_ref(),
+                                true,
+                            );
+                        let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
+                            decoded_message_data
+                        } else {
+                            debug!("Error decoding message data");
+                            continue;
+                        };
+        
+                        let order_id = decoded_message_data.orderId as i64;
+                        let sender_address = log.address().to_string();
+                        let destination_domain_id = destinationDomain as i32;
+                        let provider = provider as i32;
+                        let message = message.to_string();
+                        let transaction_hash = log.transaction_hash.unwrap();
+        
+                        let block_number = log.block_number.unwrap() as i64;
+                        let timestamp = std::time::SystemTime::now();
+        
+                        // fetch intent_id
+                        let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
+                        let intent_id_response = client
+                            .query_one(intent_id_query, &[&order_id])
+                            .await
+                            .unwrap();
+                        let intent_id: i64 = intent_id_response.get("intent_id");
+        
+                        let query =
+                            "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                        let response = client
+                            .execute(
+                                query,
+                                &[
+                                    &intent_id,
+                                    &sender_address,
+                                    &destination_domain_id,
+                                    &provider,
+                                    &message,
+                                    &transaction_hash.to_string(),
+                                    &block_number,
+                                    &timestamp,
+                                    &order_id,
+                                ],
+                            )
+                            .await
+                            .unwrap();
+                        info!(
+                            "Vault::MessageDispatchedFromVault inserted response {:?}",
+                            response
+                        );
+        
+                        let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+        
+                        update_intent_state(
                             &intent_id,
-                            &sender_address,
-                            &destination_domain_id,
-                            &provider,
-                            &message,
-                            &transaction_hash.to_string(),
-                            &block_number,
-                            &timestamp,
+                            IntentVersions::MessageDispatchedFromVault as i32,
+                            &IntentStage::Processing.to_string(),
+                            log.transaction_hash.unwrap(),
+                            &client,
+                            chain_provider.clone(),
                             &order_id,
-                        ],
-                    )
-                    .await
-                    .unwrap();
-                info!(
-                    "Vault::MessageDispatchedFromVault inserted response {:?}",
-                    response
-                );
+                            chain_id,
+                            initiator_address,
+                        )
+                        .await;
+                    },
+                    3 => {
+                        let deposit_message_data = IntentProcessorBoundMessageDepositData::abi_decode(&decoded_message.data, true).unwrap();
+                        let deposit_user_address = deposit_message_data.userAddress;
+                        let user_address = deposit_user_address.to_string();
+                        let amount = deposit_message_data.amount.to_string();
+                        let token_address = deposit_message_data.tokenAddress.to_string();
 
-                let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+                        // deposit message
+                        let transaction_hash = log.transaction_hash.unwrap(); // source_transaction_hash
+                        let message_id = match chain_provider
+                            .get_transaction_receipt(transaction_hash)
+                            .await
+                        {
+                            Ok(receipt) => match receipt {
+                                Some(tx_receipt) => {
+                                    let receipt_logs = tx_receipt.inner.logs();
+                                    
+                                    let dispatch_id_log = receipt_logs
+                                        .iter()
+                                        .find(|log| log.topics()[0] == DispatchId::SIGNATURE_HASH);
 
-                update_intent_state(
-                    &intent_id,
-                    IntentVersions::MessageDispatchedFromVault as i32,
-                    &IntentStage::Processing.to_string(),
-                    log.transaction_hash.unwrap(),
-                    &client,
-                    chain_provider.clone(),
-                    &order_id,
-                    chain_id,
-                    initiator_address,
-                )
-                .await;
+                                    let dispatch_id = match dispatch_id_log {
+                                        Some(log) => {
+                                            let primitive_log = alloy::primitives::Log {
+                                                address: log.address(),
+                                                data: log.data().clone(),
+                                            };
+                                            let decoded =
+                                                DispatchId::decode_log(&primitive_log, true).unwrap();
+                                            let message_dispatch_id = decoded.messageId;
+                                            Some(message_dispatch_id.to_string())
+                                        }
+                                        None => None,
+                                    };
+                                    dispatch_id
+                                }
+                                None => None,
+                            },
+                            Err(_e) => None,
+                        };
+                        // let user_address = match user_address {
+                        //     Some(address) => address.to_string(),
+                        //     None => String::new()
+                        // };
+                        // let message_id = match message_id {
+                        //     Some(id) => id.to_string(),
+                        //     None => String::new()
+                        // };
+                        println!("message_id from source {:?}", message_id);
+                        println!("user_address from source {:?}", user_address);
+
+                        let chain_id = match chain_provider.get_chain_id().await {
+                            Ok(id) => id.to_string(),
+                            Err(_e) => {
+                                error!("Error fetching the chain id for deposit message source {:?}", _e);
+                                String::new()
+                            }
+                        };
+                        let timestamp = std::time::SystemTime::now();
+                        let status = DepositStatus::Initialized as i32;
+
+                        let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                        let response = client
+                            .execute(
+                                query,
+                                &[
+                                    &user_address,
+                                    &token_address,
+                                    &chain_id,
+                                    &amount,
+                                    &timestamp,
+                                    &transaction_hash.to_string(),
+                                    &message_id,
+                                    &status
+                                ],
+                            )
+                            .await
+                            .unwrap();
+                        info!(
+                            "IntentLib::DepositedFunds inserted response {:?}",
+                            response
+                        );
+                    },
+                    _ => continue
+                }
             }
             Some(&solidity_structs::DebridgeOrderCreated::SIGNATURE_HASH) => {
                 let solidity_structs::DebridgeOrderCreated {

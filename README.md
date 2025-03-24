@@ -94,7 +94,10 @@ deposit_received (
     token_address TEXT NOT NULL,
     chain_id TEXT NOT NULL,
     amount TEXT NOT NULL,
-    timestamp TIMESTAMP NOT NULL
+    timestamp TIMESTAMP NOT NULL,
+    source_transaction_hash TEXT NOT NULL,
+    message_id TEXT UNIQUE DEFAULT NULL,
+    status INTEGER
 )
 ```
 
