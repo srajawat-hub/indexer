@@ -99,6 +99,10 @@ deposit_received (
     message_id TEXT UNIQUE DEFAULT NULL,
     status INTEGER
 )
+sanction_address_list (
+    id BIGSERIAL PRIMARY KEY,
+    address TEXT NOT NULL
+)
 ```
 
 # APIs

@@ -204,6 +204,7 @@ async fn main() {
                 "/get_deposit_history/{user_address}",
                 web::get().to(get_deposit_history),
             )
+            .route("/check_ofac_list/{user_address}", web::get().to(check_ofac_list))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -1108,5 +1109,37 @@ async fn get_deposit_history(
             HttpResponse::Ok().json(data) // Return JSON response
         }
         Err(_e) => HttpResponse::InternalServerError().finish(),
+    }
+}
+
+#[derive(Serialize)]
+struct OFACResponse {
+    block_request: bool
+}
+
+async fn check_ofac_list(
+    client: web::Data<Arc<tokio_postgres::Client>>,
+    user_address: web::Path<String>,
+) -> impl Responder {
+    let query = "SELECT address FROM sanction_address_list WHERE address = $1";
+    println!("printing query");
+    match client.query(query, &[&user_address.to_string()]).await {
+        Ok(ofac_row) => {
+            let data: OFACResponse;
+            if ofac_row.len() > 0 {
+                data = OFACResponse {
+                    block_request: true
+                }
+            } else {
+                data = OFACResponse {
+                    block_request: false
+                } 
+            }
+            HttpResponse::Ok().json(data) // Return JSON response
+        }
+        Err(_e) => {
+            println!("Error {:?}", _e);
+            HttpResponse::InternalServerError().finish()
+        },
     }
 }
