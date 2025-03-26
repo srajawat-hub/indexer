@@ -319,10 +319,15 @@ pub async fn process_evm_events(
 
                 // fetching intent id
                 let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
-                let intent_id_response = client
+                let intent_id_response = match client
                     .query_one(intent_id_query, &[&order_id])
-                    .await
-                    .unwrap();
+                    .await {
+                        Ok(row) => row,
+                        Err(_e) => {
+                            error!("Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, _e);
+                            continue;
+                        }
+                    };
                 let intent_id: i64 = intent_id_response.get("intent_id");
 
                 let query =
@@ -654,10 +659,15 @@ pub async fn process_evm_events(
         
                         // fetch intent_id
                         let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
-                        let intent_id_response = client
+                        let intent_id_response = match client
                             .query_one(intent_id_query, &[&order_id])
-                            .await
-                            .unwrap();
+                            .await {
+                                Ok(row) => row,
+                                Err(_e) => {
+                                    error!("Error in Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, _e);
+                                    continue;
+                                }
+                            };
                         let intent_id: i64 = intent_id_response.get("intent_id");
         
                         let query =
