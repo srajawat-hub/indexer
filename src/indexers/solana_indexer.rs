@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    events::event_processor::{IntentStage, IntentVersions},
+    events::event_processor::{DepositStatus, IntentStage, IntentVersions},
     solidity_structs::{
         IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData,
         SolidityIntentProcessorBoundMessage,
@@ -395,6 +395,41 @@ impl SolanaIndexer {
                             )
                             .await;
                         }
+                        Event::DepositedFunds(event) => {
+                            let DepositFundsEvent {
+                                user_address,
+                                token_address,
+                                amount,
+                                message_id,
+                            } = event;
+                            log::info!(target: "solana_indexer", "message_id from source {:?}", message_id);
+                            log::info!(target: "solana_indexer", "user_address from source {:?}", user_address);
+
+                             
+                            let timestamp = std::time::SystemTime::now();
+                            let status = DepositStatus::Initialized as i32;
+
+                            let amount = amount as i64;
+
+                            let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                            let response = database_client
+                                .execute(
+                                    query,
+                                    &[
+                                        &user_address,
+                                        &token_address,
+                                        &self.chain_id,
+                                        &amount,
+                                        &timestamp,
+                                        &transaction_hash.to_string(),
+                                        &message_id,
+                                        &status,
+                                    ],
+                                )
+                                .await
+                                .unwrap();
+                            log::info!(target: "solana_indexer", "IntentLib::DepositedFunds inserted response {:?}", response);
+                        }
                         _ => unimplemented!(),
                     };
                 }
@@ -476,7 +511,7 @@ pub fn get_events_from_logs(logs: Vec<String>) -> Vec<Event> {
             }
         })
         .collect();
-    let events: Vec<Event> = serialized_events
+    let mut events: Vec<Event> = serialized_events
         .iter()
         .filter_map(|event| {
             let decoded_event = base64::prelude::BASE64_STANDARD.decode(event);
@@ -494,6 +529,49 @@ pub fn get_events_from_logs(logs: Vec<String>) -> Vec<Event> {
             None
         })
         .collect();
+    // If the instruction is `transfer_funds_to_vault`, then we need to get the message_id from the data
+    // and then we need to get the message from the message_id
+    if logs.iter().any(|log| log.contains("TransferFundsToVault")) {
+        let dispatch_message_log = logs
+            .iter()
+            .find(|log| log.contains("Dispatched message to"));
+        if let Some(dispatch_message_log) = dispatch_message_log {
+            let message_id = dispatch_message_log
+                .split("Program log: Dispatched message to 18082, ID ")
+                .nth(1)
+                .unwrap();
+            let message_id = message_id.to_string();
+            // Also unpack the message that was sent.
+            let deposit_event = match events.first() {
+                Some(Event::MessageDispatchedFromVault(event)) => {
+                    let message = event.message.clone();
+                    let decoded_message =
+                        SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true)
+                            .unwrap();
+                    let deposit_message = IntentProcessorBoundMessageDepositData::abi_decode(
+                        decoded_message.data.as_ref(),
+                        true,
+                    )
+                    .unwrap();
+                    let deposit_event = DepositFundsEvent {
+                        user_address: format!("0x{}", hex::encode(deposit_message.userAddress)),
+                        token_address: format!("0x{}", hex::encode(deposit_message.tokenAddress)),
+                        amount: u64::from_be_bytes(
+                            deposit_message.amount.to_be_bytes::<32>()[24..32]
+                                .try_into()
+                                .unwrap(),
+                        ),
+                        message_id,
+                    };
+                    Some(deposit_event)
+                }
+                _ => None,
+            };
+            if let Some(deposit_event) = deposit_event {
+                events.push(Event::DepositedFunds(deposit_event));
+            }
+        }
+    }
     events
 }
 
@@ -508,9 +586,10 @@ pub enum Event {
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct DepositFundsEvent {
     // The 20 byte evm address of the user for whom the deposit is being made
-    pub user_address: Vec<u8>,
-    pub token_address: Pubkey,
+    pub user_address: String,
+    pub token_address: String,
     pub amount: u64,
+    pub message_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -565,4 +644,33 @@ pub struct Response {
     jsonrpc: String,
     id: u64,
     result: EncodedConfirmedTransactionWithStatusMeta,
+}
+
+#[tokio::test]
+pub async fn test_get_events_from_logs() {
+    let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
+    let tx_hash = Signature::from_str("3BZfM9oJdmvP1MXNfCUToEmHQHwf5trV8vhGZrN4xnn7kdymcAotGLQsoosLx1L9qc7KAk4yktYZtzMmvzRhn5UH").expect("Failed to parse transaction hash");
+    let logs = rpc_client.get_transaction(&tx_hash, UiTransactionEncoding::Base64).await.expect("Failed to get transaction logs");
+    let logs = logs.transaction.meta.unwrap().log_messages;
+    let logs = match logs {
+        solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => logs,
+        _ => Vec::new(),
+    };
+    let events = get_events_from_logs(logs);
+
+    let user_address = "0xfCE5eEBff30d36121D965dcB862270D700f3b687";
+    let token_address = "0xc6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61";
+    let amount = 10000000;
+    let message_id = "0x3466d9c67793ef637dd6beb3ec91a572295e5085b63ffbdb959bdb829b87dafd";
+
+    // 2nd event is deposit event
+    let deposit_event = events[1].clone();
+    let deposit_event = match deposit_event {
+        Event::DepositedFunds(event) => event,
+        _ => panic!("Expected deposit event"),
+    };
+    assert_eq!(deposit_event.user_address.to_ascii_lowercase(), user_address.to_ascii_lowercase());
+    assert_eq!(deposit_event.token_address.to_ascii_lowercase(), token_address.to_ascii_lowercase());
+    assert_eq!(deposit_event.amount, amount);
+    assert_eq!(deposit_event.message_id, message_id);
 }
