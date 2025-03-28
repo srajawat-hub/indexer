@@ -410,6 +410,7 @@ impl SolanaIndexer {
                             let status = DepositStatus::Initialized as i32;
 
                             let amount = amount as i64;
+                            let chain_id = self.chain_id.to_string();
 
                             let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
                             let response = database_client
@@ -418,10 +419,10 @@ impl SolanaIndexer {
                                     &[
                                         &user_address,
                                         &token_address,
-                                        &self.chain_id,
+                                        &chain_id,
                                         &amount,
                                         &timestamp,
-                                        &transaction_hash.to_string(),
+                                        &transaction_hash,
                                         &message_id,
                                         &status,
                                     ],
@@ -649,8 +650,8 @@ pub struct Response {
 #[tokio::test]
 pub async fn test_get_events_from_logs() {
     let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
-    let tx_hash = Signature::from_str("3BZfM9oJdmvP1MXNfCUToEmHQHwf5trV8vhGZrN4xnn7kdymcAotGLQsoosLx1L9qc7KAk4yktYZtzMmvzRhn5UH").expect("Failed to parse transaction hash");
-    let logs = rpc_client.get_transaction(&tx_hash, UiTransactionEncoding::Base64).await.expect("Failed to get transaction logs");
+    let tx_hash = Signature::from_str("3BZfM9oJdmvP1MXNfCUToEmHQHwf5trV8vhGZrN4xnn7kdymcAotGLQsoosLx1L9qc7KAk4yktYZtzMmvzRhn5UH").unwrap();
+    let logs = rpc_client.get_transaction(&tx_hash, UiTransactionEncoding::Base64).await.unwrap();
     let logs = logs.transaction.meta.unwrap().log_messages;
     let logs = match logs {
         solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => logs,
