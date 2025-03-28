@@ -409,7 +409,7 @@ impl SolanaIndexer {
                             let timestamp = std::time::SystemTime::now();
                             let status = DepositStatus::Initialized as i32;
 
-                            let amount = amount as i64;
+                            let amount = amount.to_string();
                             let chain_id = self.chain_id.to_string();
 
                             let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
