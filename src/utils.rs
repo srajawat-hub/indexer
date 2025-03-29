@@ -584,3 +584,24 @@ pub async fn structure_intent_orders(
         intent_type,
     )
 }
+
+/// Displays the error if present, waits for few seconds and
+/// retries execution.
+///
+/// The error is usually due to load on rpc which is solved
+/// by waiting a few seconds.
+#[macro_export]
+macro_rules! skip_fail {
+    ($res:expr) => {
+        match $res {
+            Ok(val) => val,
+            Err(e) => {
+                log::error!("{:?}", e);
+                sleep(Duration::from_secs(2));
+                continue;
+            }
+        }
+    };
+}
+
+pub use skip_fail;
