@@ -1080,7 +1080,7 @@ async fn get_deposit_history(
     client: web::Data<Arc<tokio_postgres::Client>>,
     user_address: web::Path<String>,
 ) -> impl Responder {
-    let query = "SELECT * FROM deposit_received WHERE user_address = $1";
+    let query = "SELECT * FROM deposit_received WHERE LOWER(user_address) = LOWER($1)";
 
     match client.query(query, &[&user_address.to_string()]).await {
         Ok(deposit_row) => {
