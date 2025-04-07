@@ -271,6 +271,69 @@
     },
     {
         "type": "function",
+        "name": "getFeeForOperation",
+        "inputs": [
+            {
+                "name": "raw_intent",
+                "type": "tuple",
+                "internalType": "struct IntentTypesLib.SolidityRawIntent",
+                "components": [
+                    {
+                        "name": "id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "intentOwner",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "creationUnixTimestampInSeconds",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "feesTaken",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "intentPayload",
+                        "type": "tuple",
+                        "internalType": "struct IntentTypesLib.SolidityIntentPayload",
+                        "components": [
+                            {
+                                "name": "enumVariant",
+                                "type": "uint8",
+                                "internalType": "enum IntentTypesLib.IntentPayloadEnum"
+                            },
+                            {
+                                "name": "data",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "amount_in_usd",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "feeAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "getUnsettledIntents",
         "inputs": [
             {
@@ -1173,6 +1236,11 @@
                         "internalType": "bytes"
                     }
                 ]
+            },
+            {
+                "name": "amount_in_usd",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
         "outputs": [],
@@ -1241,6 +1309,19 @@
                 "name": "newFeeBasisPoints",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "updateFeeCollector",
+        "inputs": [
+            {
+                "name": "_feeCollector",
+                "type": "address",
+                "internalType": "address"
             }
         ],
         "outputs": [],
@@ -1354,6 +1435,25 @@
                 "type": "uint64",
                 "indexed": false,
                 "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "IntentFees",
+        "inputs": [
+            {
+                "name": "intentId",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "feeAmount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
             }
         ],
         "anonymous": false

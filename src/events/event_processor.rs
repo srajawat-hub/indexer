@@ -161,6 +161,28 @@ pub async fn process_evm_events(
                 )
                 .await;
             }
+            Some(&IntentProcessorV2::IntentFees::SIGNATURE_HASH) => {
+                let IntentProcessorV2::IntentFees {intentId, feeAmount} = log.log_decode().unwrap().inner.data;
+                info!("IntentProcessorV2::IntentFees with intent_id {intentId} and feeAmount {feeAmount}");
+
+                let fee_amount = feeAmount.to_string();
+                let intent_id: i64 = intentId.try_into().expect("Conversion failed");
+                let query = "UPDATE intent SET feeAmount = $1 WHERE intent_id = &2";
+
+                let intent_rows_updated = match client
+                    .execute(query, &[&fee_amount, &intent_id])
+                    .await {
+                        Ok(res) => res,
+                        Err(_e) => {
+                            error!("Failed to update intent feeAmount {:?}", _e);
+                            continue;
+                        }
+                    };
+                info!(
+                    "updated actual amount for order, updated rows count {:?}",
+                    intent_rows_updated
+                );
+            }
             Some(&IntentLibV2::SolutionSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::SolutionSubmitted { intentId, solver } =
                     log.log_decode().unwrap().inner.data;
