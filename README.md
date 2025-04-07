@@ -6,7 +6,7 @@ intent (
     transaction_hash VARCHAR(88) NOT NULL,
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
-    feeAmount TEXT
+    feeamount TEXT
 );
 solution (
     id BIGSERIAL PRIMARY KEY,

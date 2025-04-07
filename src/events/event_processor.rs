@@ -167,7 +167,7 @@ pub async fn process_evm_events(
 
                 let fee_amount = feeAmount.to_string();
                 let intent_id: i64 = intentId.try_into().expect("Conversion failed");
-                let query = "UPDATE intent SET feeAmount = $1 WHERE intent_id = &2";
+                let query = "UPDATE intent SET feeamount = $1 WHERE intent_id = &2";
 
                 let intent_rows_updated = match client
                     .execute(query, &[&fee_amount, &intent_id])
