@@ -1,19 +1,20 @@
 use std::sync::Arc;
 
-use alloy::primitives::{Bytes, FixedBytes};
+use alloy::primitives::FixedBytes;
 use alloy::providers::Provider;
 use alloy::rpc::types::Log;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use futures_util::stream::StreamExt;
 use log::{debug, info, error};
+use serde_json::json;
 use tokio_postgres::Client;
 
 use crate::solidity_structs::{
-    self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, CreatedOrder, Dispatch, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, ProcessId, ReceiverUserAddressData, ReceiverVaultData, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData
+    self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, AmountTypes, CreatedOrder, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, ProcessId, QuoteApiResponse, ReceiverUserAddressData, ReceiverVaultData, ResultCosts, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, ThirdPartyFeeResult, VaultBoundMessagePlaceOrderData
 };
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault, intent_lib::{IntentLib, IntentTypesLib}
+    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault
 };
 
 pub enum IntentVersions {
@@ -49,6 +50,8 @@ impl ToString for IntentStage {
         }
     }
 }
+
+const SOLANA_CHAIN_ID: &str = "1399811149";
 
 pub async fn update_intent_state(
     intent_id: &i64,
@@ -100,6 +103,76 @@ pub async fn fetch_intent_initiator(intent_id: i64, client: &Arc<Client>) -> Str
     let response = client.query_one(query, &[&intent_id]).await.unwrap();
     let initiator_address: String = response.get("owner_address");
     initiator_address
+}
+
+
+async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_in: &str, token_out: &str, amount_in: &str) -> ResultCosts {
+    let request_client = reqwest::Client::new();
+
+    let mut payload_token_in = String::from(token_in);
+    let mut payload_token_out = String::from(token_out);
+
+    if source_chain_id != SOLANA_CHAIN_ID {
+        let without_prefix = token_in.trim_start_matches("0x"); // Remove "0x" prefix
+        let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
+        payload_token_in = format!("0x{}", trimmed)
+    }
+
+    if destination_chain_id != SOLANA_CHAIN_ID {
+        let without_prefix = token_out.trim_start_matches("0x"); // Remove "0x" prefix
+        let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
+        payload_token_out = format!("0x{}", trimmed)
+    }
+
+
+    let fees_request_payload = json!({
+        "from_chain": source_chain_id,
+        "to_chain": destination_chain_id,
+        "from_token": payload_token_in, // bytes32
+        "to_token": payload_token_out, // bytes32
+        "from_amount": amount_in,
+        "from_address": ""
+    });
+    let url = "http://143.244.173.82:18893/quote";
+    let fee_data_response = match request_client.post(url).json(&fees_request_payload).send().await {
+        Ok(res) => {
+            let fee_data = match res.json::<QuoteApiResponse>().await {
+                Ok(data) => {
+                    data.fee_data
+                },
+                Err(_e) => {
+                    error!("Error in parsing response of fetching fees from the quotation service {:?}", _e);
+                    ResultCosts {
+                        destination_cost: AmountTypes { value: None, value_type: None },
+                        inclusive_layer_fee: AmountTypes { value: None, value_type: None },
+                        provider_fee: ThirdPartyFeeResult {
+                            flat_fee: AmountTypes { value: None, value_type: None },
+                            provider: None,
+                            solver_fee: AmountTypes { value: None, value_type: None },
+                            variable_fee: AmountTypes { value: None, value_type: None },
+                        },
+                        source_cost: AmountTypes { value: None, value_type: None },
+                    }
+                }
+            };
+            fee_data
+        },
+        Err(_e) => {
+            info!("Error in fetching fees from the quotation service {:?}", _e);
+            ResultCosts {
+                destination_cost: AmountTypes { value: None, value_type: None },
+                inclusive_layer_fee: AmountTypes { value: None, value_type: None },
+                provider_fee: ThirdPartyFeeResult {
+                    flat_fee: AmountTypes { value: None, value_type: None },
+                    provider: None,
+                    solver_fee: AmountTypes { value: None, value_type: None },
+                    variable_fee: AmountTypes { value: None, value_type: None },
+                },
+                source_cost: AmountTypes { value: None, value_type: None },
+            }
+        }
+    };
+    fee_data_response
 }
 
 // Function to listen to events from a specific RPC and contract
@@ -240,7 +313,6 @@ pub async fn process_evm_events(
                 } = log.log_decode().unwrap().inner.data;
                 info!("\nIntentLibV2::OrderCreated for {intentId}, with order Id {orderId}");
 
-                debug!("order data {order}");
                 let order_slice = order.as_ref();
                 let order_struct = SolidityOrder::abi_decode(order_slice, true).unwrap();
 
@@ -305,6 +377,7 @@ pub async fn process_evm_events(
                 info!("IntentLibV2::OrderCreated inserted response {:?}", response);
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+                
 
                 update_intent_state(
                     &intent_id,
@@ -318,6 +391,25 @@ pub async fn process_evm_events(
                     initiator_address,
                 )
                 .await;
+
+                let intent_fees: ResultCosts = get_fees_data(&source_chain_id, &destination_chain_id, &token_in, &token_out, &amount_in).await;
+                let fee_data_json = match serde_json::to_value(&intent_fees) {
+                    Ok(value) => value,
+                    Err(_e) => {
+                        error!("Error in getting fees data from quotation service: {:?}", _e);
+                        continue;
+                    }
+                };
+                let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2)";
+                match client.execute(intent_fee_add_query, &[&intent_id, &fee_data_json]).await {
+                    Ok(res) => {
+                        info!("intent_fee_add_res {:?}", res);
+                    },
+                    Err(_e) => {
+                        error!("error in posting to intent_fees table {:?}", _e);
+                        continue;
+                    }
+                };
             }
             Some(&IntentProcessorV2::AcknowledgementReceived::SIGNATURE_HASH) => {
                 debug!("\nAcknowledgementReceived log - {:?}", log);
@@ -398,10 +490,10 @@ pub async fn process_evm_events(
 
                 let decoded_ack_metadata =
                     SolidityAcknowledgementMetadata::abi_decode(metadata.as_ref(), true).unwrap();
-                if (decoded_ack_metadata.data.len() > 0) {
+                if decoded_ack_metadata.data.len() > 0 {
                     let mut actual_amount = String::new();
                     let metadata_variant = decoded_ack_metadata.enumVariant as u8;
-                    if (metadata_variant == 1) {
+                    if metadata_variant == 1 {
                         // stake
                         let metadata_data = AcknowledgementMetadataStake::abi_decode(
                             decoded_ack_metadata.data.as_ref(),

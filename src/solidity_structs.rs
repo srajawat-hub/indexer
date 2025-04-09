@@ -1,4 +1,5 @@
 use alloy::sol;
+use serde::{Deserialize, Serialize};
 
 pub mod intent_processor {
     use alloy::sol;
@@ -531,4 +532,31 @@ sol! {
     
     #[derive(Debug)]
     event ProcessId(bytes32 indexed messageId);
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ResultCosts {
+    pub destination_cost: AmountTypes,
+    pub inclusive_layer_fee: AmountTypes,
+    pub provider_fee: ThirdPartyFeeResult,
+    pub source_cost: AmountTypes,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmountTypes {
+    pub value: Option<String>,
+    pub value_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ThirdPartyFeeResult {
+    pub flat_fee: AmountTypes,
+    pub provider: Option<String>,
+    pub solver_fee: AmountTypes,
+    pub variable_fee: AmountTypes,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct QuoteApiResponse {
+    pub fee_data: ResultCosts
 }

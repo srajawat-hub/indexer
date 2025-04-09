@@ -61,7 +61,8 @@ order_created (
     order_payload TEXT NOT NULL,
     solution_type INTEGER,
     receiver_type INTEGER,
-    receiver_address TEXT
+    receiver_address TEXT,
+    
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,
@@ -102,6 +103,11 @@ deposit_received (
 sanction_address_list (
     id BIGSERIAL PRIMARY KEY,
     address TEXT NOT NULL
+)
+intent_fees (
+    id SERIAL PRIMARY KEY,
+    intent_id BIGINT NOT NULL UNIQUE,
+    fees JSONB NOT NULL
 )
 ```
 

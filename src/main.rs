@@ -18,9 +18,7 @@ use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
-    AcknowledgementMetadataStake, IntentPayloadEnum,
-    IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum,
-    SolidityIntentProcessorBoundMessage, SolidityOrder,
+    AcknowledgementMetadataStake, IntentPayloadEnum, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum, ResultCosts, SolidityIntentProcessorBoundMessage, SolidityOrder
 };
 use std::collections::HashMap;
 use std::fs;
@@ -205,6 +203,7 @@ async fn main() {
                 web::get().to(get_deposit_history),
             )
             .route("/check_ofac_list/{user_address}", web::get().to(check_ofac_list))
+            .route("/get_fee_data", web::get().to(get_fee_data))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -895,8 +894,8 @@ async fn fetch_contract_balance(
             let mut contract_balances: Vec<TokenBalance> = vec![];
 
             for token_address in svm_meta_data.token_address {
-                if (&token_address
-                    == "0x1111111111111111111111111111111111111111111111111111111111111111")
+                if &token_address
+                    == "0x1111111111111111111111111111111111111111111111111111111111111111"
                 {
                     let native_token_mint = Pubkey::from_str(&String::from(
                         "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2",
@@ -917,10 +916,10 @@ async fn fetch_contract_balance(
                         .await
                     {
                         Ok(balance) => {
-                            if (balance >= SOLANA_ACCOUNT_RENT) {
+                            if balance >= SOLANA_ACCOUNT_RENT {
                                 balance - SOLANA_ACCOUNT_RENT
                             } else {
-                                if (balance < 1000000) {
+                                if balance < 1000000 {
                                     let res: u64 = 0;
                                     res
                                 } else {
@@ -1144,5 +1143,28 @@ async fn check_ofac_list(
             println!("Error {:?}", _e);
             HttpResponse::InternalServerError().finish()
         },
+    }
+}
+
+async fn get_fee_data(
+    client: web::Data<Arc<tokio_postgres::Client>>
+) -> impl Responder {
+    // let query_intent = "SELECT intent_id, feeAmount FROM intent";
+    let query_fees = "SELECT intent_id, fees FROM intent_fees";
+    match client.query(query_fees, &[]).await {
+        Ok(rows) => {
+            let fee_data: Vec<ResultCosts> = rows
+                .into_iter()
+                .filter_map(|row| {
+                    let json: Option<serde_json::Value> = row.get("fees");
+                    json.and_then(|v| serde_json::from_value(v).ok())
+                })
+                .collect();
+            HttpResponse::Ok().json(fee_data) // Return JSON response
+        },
+        Err(_e) => {
+            error!("Error {:?}", _e);
+            HttpResponse::NotFound().finish()
+        }
     }
 }
