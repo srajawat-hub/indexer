@@ -73,13 +73,14 @@ pub async fn update_intent_state(
         Ok(receipt) => {
             let txn = receipt.unwrap();
             let gas_used = txn.gas_used as i64;
-            let transaction_cost = txn.effective_gas_price.to_string();
+            let gas_price = txn.effective_gas_price;
+            let transaction_cost = ((gas_used as u128) * gas_price).to_string();
             (gas_used, transaction_cost)
         }
         Err(_e) => (0 as i64, String::from("0")),
     };
     let txn_hash_str = transaction_hash.to_string();
-    let _intent_state_response = client
+    let _intent_state_response = match client
         .execute(
             query,
             &[
@@ -95,15 +96,28 @@ pub async fn update_intent_state(
                 &transaction_cost
             ],
         )
-        .await
-        .unwrap();
-    info!("Intent State Updated for intent id: {intent_id} to version: {version}");
+        .await {
+            Ok(res) => {
+                info!(target: "EVM update_intent_state", "Intent State Updated for intent id: {intent_id} to version: {version}");
+            },
+            Err(e) => {
+                error!(target: "EVM update_intent_state", "Failed to update intent state for intent id: {intent_id} to version: {version}: {:?}", e);
+            }
+        };
 }
 
 pub async fn fetch_intent_initiator(intent_id: i64, client: &Arc<Client>) -> String {
     let query = "SELECT owner_address FROM intent WHERE intent_id = $1";
-    let response = client.query_one(query, &[&intent_id]).await.unwrap();
-    let initiator_address: String = response.get("owner_address");
+    let initiator_address = match client.query_one(query, &[&intent_id]).await {
+        Ok(res) => {
+            let owner_address: String = res.get("owner_address");
+            owner_address
+        },
+        Err(e) => {
+            error!(target: "EVM Fetch intent owner", "Failed to fetch intent owner: {:?}", e);
+            String::new()
+        }
+    };
     initiator_address
 }
 
@@ -189,7 +203,9 @@ pub async fn process_evm_events(
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
                 let IntentLibV2::IntentSubmitted { intentId, owner, feeAmount } =
                     log.log_decode().unwrap().inner.data;
-                info!("IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
+
+                let log_target = "IntentSubmitted";
+                info!(target: log_target, "IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
 
                 let intent_transaction_hash = log.transaction_hash.unwrap();
                 let intent_block_number = log.block_number.unwrap();
@@ -216,7 +232,7 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!(
+                info!(target: log_target, 
                     "IntentLibV2::IntentSubmitted inserted response {:?}",
                     response
                 );
@@ -238,7 +254,9 @@ pub async fn process_evm_events(
             }
             Some(&IntentProcessorV2::IntentFees::SIGNATURE_HASH) => {
                 let IntentProcessorV2::IntentFees {intentId, feeAmount} = log.log_decode().unwrap().inner.data;
-                info!("IntentProcessorV2::IntentFees with intent_id {intentId} and feeAmount {feeAmount}");
+
+                let log_target = "IntentFees";
+                info!(target: log_target, "IntentProcessorV2::IntentFees with intent_id {intentId} and feeAmount {feeAmount}");
 
                 let fee_amount = feeAmount.to_string();
                 let intent_id = intentId as i64;
@@ -249,11 +267,11 @@ pub async fn process_evm_events(
                     .await {
                         Ok(res) => res,
                         Err(_e) => {
-                            error!("Failed to update intent feeAmount {:?}", _e);
+                            error!(target: log_target, "Failed to update intent feeAmount {:?}", _e);
                             continue;
                         }
                     };
-                info!(
+                info!(target: log_target, 
                     "updated actual amount for order, updated rows count {:?}",
                     intent_rows_updated
                 );
@@ -262,7 +280,8 @@ pub async fn process_evm_events(
                 let IntentLibV2::SolutionSubmitted { intentId, solver } =
                     log.log_decode().unwrap().inner.data;
 
-                info!("IntentLibV2::SolutionSubmitted from {solver} with intentId {intentId}");
+                let log_target = "SolutionSubmitted";
+                info!(target: log_target, "IntentLibV2::SolutionSubmitted from {solver} with intentId {intentId}");
 
                 let solution_transaction_hash = log.transaction_hash.unwrap();
                 let intent_block_number = log.block_number.unwrap();
@@ -286,7 +305,7 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!(
+                info!(target: log_target, 
                     "IntentLibV2::SolutionSubmitted inserted response {:?}",
                     response
                 );
@@ -313,7 +332,9 @@ pub async fn process_evm_events(
                     orderId,
                     order,
                 } = log.log_decode().unwrap().inner.data;
-                info!("\nIntentLibV2::OrderCreated for {intentId}, with order Id {orderId}");
+
+                let log_target = "OrderCreated";
+                info!(target: log_target, "IntentLibV2::OrderCreated for {intentId}, with order Id {orderId}");
 
                 let order_slice = order.as_ref();
                 let order_struct = SolidityOrder::abi_decode(order_slice, true).unwrap();
@@ -376,11 +397,10 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!("IntentLibV2::OrderCreated inserted response {:?}", response);
+                info!(target: log_target, "IntentLibV2::OrderCreated inserted response {:?}", response);
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
                 
-
                 update_intent_state(
                     &intent_id,
                     IntentVersions::OrderCreated as i32,
@@ -398,23 +418,22 @@ pub async fn process_evm_events(
                 let fee_data_json = match serde_json::to_value(&intent_fees) {
                     Ok(value) => value,
                     Err(_e) => {
-                        error!("Error in getting fees data from quotation service: {:?}", _e);
+                        error!(target: log_target, "Error in getting fees data from quotation service: {:?}", _e);
                         continue;
                     }
                 };
                 let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2)";
                 match client.execute(intent_fee_add_query, &[&intent_id, &fee_data_json]).await {
                     Ok(res) => {
-                        info!("intent_fee_add_res {:?}", res);
+                        info!(target: log_target, "intent_fee_add_res {:?}", res);
                     },
                     Err(_e) => {
-                        error!("error in posting to intent_fees table {:?}", _e);
+                        error!(target: log_target, "error in posting to intent_fees table {:?}", _e);
                         continue;
                     }
                 };
             }
             Some(&IntentProcessorV2::AcknowledgementReceived::SIGNATURE_HASH) => {
-                debug!("\nAcknowledgementReceived log - {:?}", log);
                 let IntentProcessorV2::AcknowledgementReceived {
                     orderId,
                     sender,
@@ -422,7 +441,9 @@ pub async fn process_evm_events(
                     errorMessage,
                     metadata,
                 } = log.log_decode().unwrap().inner.data;
-                info!("IntentProcessorV2::AcknowledgementReceived for orderId - {orderId} from {sender} with result {result}");
+
+                let log_target = "AcknowledgementReceived";
+                info!(target: log_target, "IntentProcessorV2::AcknowledgementReceived for orderId - {orderId} from {sender} with result {result}");
 
                 let transaction_hash = log.transaction_hash.unwrap().to_string();
                 let block_number = log.block_number.unwrap() as i64;
@@ -440,7 +461,7 @@ pub async fn process_evm_events(
                     .await {
                         Ok(row) => row,
                         Err(_e) => {
-                            error!("Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, _e);
+                            error!(target: log_target, "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, _e);
                             continue;
                         }
                     };
@@ -465,7 +486,7 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!(
+                info!(target: log_target, 
                     "IntentProcessorV2::AcknowledgementReceived inserted response {:?}",
                     response
                 );
@@ -524,7 +545,7 @@ pub async fn process_evm_events(
                         .execute(update_order_query, &[&actual_amount, &order_id])
                         .await
                         .unwrap();
-                    info!(
+                    info!(target: log_target, 
                         "updated actual amount for order, updated rows count {:?}",
                         order_rows_updated
                     );
@@ -538,7 +559,8 @@ pub async fn process_evm_events(
                     amount,
                 } = log.log_decode().unwrap().inner.data;
 
-                info!("IntentProcessorV2::DepositReceived from user {userAddress}");
+                let log_target = "DepositReceived";
+                info!(target: log_target, "IntentProcessorV2::DepositReceived from user {userAddress}");
                 let chain_id = chainId.to_string();
                 let amount = amount.to_string();
                 let user_address = userAddress.to_string();
@@ -595,10 +617,10 @@ pub async fn process_evm_events(
                                 &deposit_status
                             ]).await {
                             Ok(row) => {
-                                info!("Successfully updated deposit status with message_id {:?}", message_id);
+                                info!(target: log_target, "Successfully updated deposit status with message_id {:?}", message_id);
                             },
                             Err(_e) => {
-                                error!("Error updating deposit status with message_id {:?} with error {:?}", message_id, _e);
+                                error!(target: log_target, "Error updating deposit status with message_id {:?} with error {:?}", message_id, _e);
                             }
                         };
                     },
@@ -621,7 +643,7 @@ pub async fn process_evm_events(
                             .await
                             .unwrap();
                         info!(
-                            "IntentProcessorV2::DepositReceived inserted response {:?}",
+                            target: log_target, "IntentProcessorV2::DepositReceived inserted a fallback response {:?}",
                             response
                         );
                     }
@@ -635,16 +657,29 @@ pub async fn process_evm_events(
                     provider,
                 } = log.log_decode().unwrap().inner.data;
 
-                info!("Vault::ReceivedMessageOnVault from id {origin} by {sender}, message = {message}, using provider = {provider}");
+                let log_target = "EVM Vault::ReceivedMessageOnVault";
+                info!(target: log_target, "Vault::ReceivedMessageOnVault from id {origin} by {sender}, message = {message}, using provider = {provider}");
 
                 let message_slice = message.as_ref();
                 let decoded_message =
-                    SolidityVaultBoundMessage::abi_decode(message_slice, true).unwrap();
-                let decoded_message_data = VaultBoundMessagePlaceOrderData::abi_decode(
+                    match SolidityVaultBoundMessage::abi_decode(message_slice, true) {
+                        Ok(res) => res,
+                        Err(e) => {
+                            error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
+                            continue;
+                        }
+                    };
+
+                let decoded_message_data = match VaultBoundMessagePlaceOrderData::abi_decode(
                     decoded_message.data.as_ref(),
                     true,
-                )
-                .unwrap();
+                ) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        error!(target: log_target, "Failed to decode VaultBoundMessagePlaceOrderData in Vault::ReceivedMessageOnVault: {:?}", e);
+                        continue;
+                    }
+                };
 
                 let timeout_unix_timestamp_in_sec =
                     decoded_message_data.order.timeoutUnixTimestampInSec as i64;
@@ -691,7 +726,7 @@ pub async fn process_evm_events(
                 };
 
                 let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
-                let response = client
+                match client
                     .execute(
                         query,
                         &[
@@ -709,12 +744,19 @@ pub async fn process_evm_events(
                             &timeout_unix_timestamp_in_sec,
                         ],
                     )
-                    .await
-                    .unwrap();
-                info!(
-                    "Vault::ReceivedMessageOnVault inserted response {:?}",
-                    response
-                );
+                    .await {
+                        Ok(res) => {
+                            info!(
+                                target: log_target,
+                                "Vault::ReceivedMessageOnVault inserted response {:?}",
+                                res
+                            );
+                        },
+                        Err(e) => {
+                            error!(target: log_target, "Failed to add data into data");
+                        }
+                    };
+ 
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
 
@@ -738,18 +780,24 @@ pub async fn process_evm_events(
                     provider,
                     message,
                 } = log.log_decode().unwrap().inner.data;
-                debug!("\nMessageDispatchedFromVault log - {:?}", log);
+                debug!(target: "EVM Vault::MessageDispatchedFromVault", "\nMessageDispatchedFromVault log - {:?}", log);
                 // have to get intentId here.
-                info!("Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
+                info!(target: "EVM Vault::MessageDispatchedFromVault", "Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
                 
                 let decoded_message =
-                    SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true)
-                        .unwrap();
+                    match SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true) {
+                        Ok(res) => res,
+                        Err(e) => {
+                            error!(target: "EVM Vault::MessageDispatchedFromVault", "Failed to decode SolidityIntentProcessorBoundMessage in Vault::MessageDispatchedFromVault: {:?}", e);
+                            continue;
+                        }
+                    };;
 
                 let message_variant = decoded_message.enumVariant as u8;
 
                 match message_variant {
                     2 => {
+                        let log_target = "EVM Vault::MessageDispatchedFromVault Ack";
                         // ack
                         let decoded_message_data =
                             IntentProcessorBoundMessageAcknowledgementData::abi_decode(
@@ -759,7 +807,7 @@ pub async fn process_evm_events(
                         let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
                             decoded_message_data
                         } else {
-                            debug!("Error decoding message data");
+                            error!(target: log_target, "Error decoding IntentProcessorBoundMessageAcknowledgement message data");
                             continue;
                         };
         
@@ -780,7 +828,7 @@ pub async fn process_evm_events(
                             .await {
                                 Ok(row) => row,
                                 Err(_e) => {
-                                    error!("Error in Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, _e);
+                                    error!(target: log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, _e);
                                     continue;
                                 }
                             };
@@ -788,7 +836,7 @@ pub async fn process_evm_events(
         
                         let query =
                             "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
-                        let response = client
+                        match client
                             .execute(
                                 query,
                                 &[
@@ -803,12 +851,18 @@ pub async fn process_evm_events(
                                     &order_id,
                                 ],
                             )
-                            .await
-                            .unwrap();
-                        info!(
-                            "Vault::MessageDispatchedFromVault inserted response {:?}",
-                            response
-                        );
+                            .await {
+                                Ok(res) => {
+                                    info!(
+                                        target: log_target,
+                                        "Vault::MessageDispatchedFromVault inserted response {:?}",
+                                        res
+                                    );
+                                },
+                                Err(e) => {
+                                    error!(target: log_target, "Failed to add data into data");
+                                }
+                            };
         
                         let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
         
@@ -826,6 +880,7 @@ pub async fn process_evm_events(
                         .await;
                     },
                     3 => {
+                        let log_target = "EVM Vault::MessageDispatchedFromVault Deposit";
                         let deposit_message_data = IntentProcessorBoundMessageDepositData::abi_decode(&decoded_message.data, true).unwrap();
                         let deposit_user_address = deposit_message_data.userAddress;
                         let user_address = deposit_user_address.to_string();
@@ -865,21 +920,14 @@ pub async fn process_evm_events(
                             },
                             Err(_e) => None,
                         };
-                        // let user_address = match user_address {
-                        //     Some(address) => address.to_string(),
-                        //     None => String::new()
-                        // };
-                        // let message_id = match message_id {
-                        //     Some(id) => id.to_string(),
-                        //     None => String::new()
-                        // };
-                        println!("message_id from source {:?}", message_id);
-                        println!("user_address from source {:?}", user_address);
+
+                        info!(target: log_target, "message_id from source {:?}", message_id);
+                        info!(target: log_target, "user_address from source {:?}", user_address);
 
                         let chain_id = match chain_provider.get_chain_id().await {
                             Ok(id) => id.to_string(),
                             Err(_e) => {
-                                error!("Error fetching the chain id for deposit message source {:?}", _e);
+                                error!(target: log_target, "Error fetching the chain id for deposit message source {:?}", _e);
                                 String::new()
                             }
                         };
@@ -887,7 +935,7 @@ pub async fn process_evm_events(
                         let status = DepositStatus::Initialized as i32;
 
                         let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
-                        let response = client
+                        match client
                             .execute(
                                 query,
                                 &[
@@ -901,22 +949,30 @@ pub async fn process_evm_events(
                                     &status
                                 ],
                             )
-                            .await
-                            .unwrap();
-                        info!(
-                            "IntentLib::DepositedFunds inserted response {:?}",
-                            response
-                        );
+                            .await {
+                                Ok(res) => {
+                                    info!(
+                                        target: log_target,
+                                        "IntentLib::DepositedFunds inserted response {:?}",
+                                        res
+                                    );
+                                },
+                                Err(e) => {
+                                    error!(target: log_target, "Failed to insert data for deposit with message_id: {:?}", &message_id);
+                                }
+                            };
+
                     },
                     _ => continue
                 }
             }
             Some(&solidity_structs::DebridgeOrderCreated::SIGNATURE_HASH) => {
+                let log_target = "EVM DebridgeOrderCreated";
                 let solidity_structs::DebridgeOrderCreated {
                     orderId,
                     debridgeOrderId,
                 } = log.log_decode().unwrap().inner.data;
-                info!("solidity_structs::DebridgeOrderCreated from {orderId} with debridgeOrderId {debridgeOrderId}");
+                info!(target: log_target, "solidity_structs::DebridgeOrderCreated from {orderId} with debridgeOrderId {debridgeOrderId}");
 
                 let order_id = orderId as i64;
 
@@ -928,7 +984,7 @@ pub async fn process_evm_events(
                     .execute(query, &[&debridge_order_id, &order_id])
                     .await
                     .unwrap();
-                info!(
+                info!(target: log_target,
                     "solidity_structs::DebridgeOrderCreated updated response {:?}",
                     response
                 );
