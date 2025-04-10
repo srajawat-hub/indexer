@@ -87,7 +87,8 @@ intent_state (
     gas_token TEXT,
     order_id BIGINT,
     chain_id BIGINT NOT NULL,
-    initiator_address VARCHAR(66) NOT NULL
+    initiator_address VARCHAR(66) NOT NULL,
+    transaction_cost TEXT
 );
 deposit_received (
     id BIGSERIAL PRIMARY KEY,

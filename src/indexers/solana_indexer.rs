@@ -49,29 +49,32 @@ pub async fn update_intent_state(
     chain_id: &i64,
     initiator_address: String,
     client: &Arc<Client>,
+    compute_units_consumed: &i64,
+    transaction_cost: &str
 ) {
     // let gas_fees = 1 as i64; // updating gas token
-    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
+    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
     let timestamp = std::time::SystemTime::now();
 
-    let txn_hash_str = transaction_hash.to_string();
     let initiator_address_str = initiator_address.to_string();
-    info!("Tx hash length {:?}", txn_hash_str.len());
+    info!("Tx hash length {:?}", transaction_hash.len());
     info!("Initiator address length {:?}", initiator_address_str.len());
+    
     let _intent_state_response = client
         .execute(
             query,
             &[
                 &intent_id,
                 &version,
-                &txn_hash_str,
+                &transaction_hash,
                 &stage,
                 &timestamp,
-                &0i64,
+                compute_units_consumed,
                 &"SOL".to_string(),
                 &order_id,
                 &chain_id,
                 &initiator_address,
+                &transaction_cost
             ],
         )
         .await
@@ -197,6 +200,16 @@ impl SolanaIndexer {
                 } else {
                     Local::now().timestamp()
                 };
+
+                let (tx_cost, compute_units_used) = match &tx.result.transaction.meta{
+                    Some(metadata) => {
+                        let tx_cost = metadata.fee.to_string();
+                        let compute_units = metadata.compute_units_consumed.clone().unwrap_or(0) as i64;
+                        (tx_cost, compute_units)
+                    },
+                    None => (String::from("0"), 0i64)
+                };
+
                 let system_time = SystemTime::UNIX_EPOCH + Duration::from_millis(timestamp as u64);
                 let block_height = tx.result.slot as i64;
                 let signatures = &tx.result.transaction.transaction;
@@ -296,6 +309,8 @@ impl SolanaIndexer {
                                 &self.chain_id,
                                 sender_address,
                                 &database_client,
+                                &compute_units_used,
+                                &tx_cost
                             )
                             .await;
                         }
@@ -397,6 +412,8 @@ impl SolanaIndexer {
                                 &self.chain_id,
                                 creator_address,
                                 &database_client,
+                                &compute_units_used,
+                                &tx_cost
                             )
                             .await;
                         }

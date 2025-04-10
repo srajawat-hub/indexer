@@ -66,16 +66,17 @@ pub async fn update_intent_state(
 ) {
     // let gas_fees = 1 as i64; // updating gas token
     let query =
-        "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9)";
+        "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9, $10)";
     let timestamp = std::time::SystemTime::now();
 
-    let gas_used: i64 = match provider.get_transaction_receipt(transaction_hash).await {
+    let (gas_used, transaction_cost) = match provider.get_transaction_receipt(transaction_hash).await {
         Ok(receipt) => {
             let txn = receipt.unwrap();
             let gas_used = txn.gas_used as i64;
-            gas_used
+            let transaction_cost = txn.effective_gas_price.to_string();
+            (gas_used, transaction_cost)
         }
-        Err(_e) => 0 as i64,
+        Err(_e) => (0 as i64, String::from("0")),
     };
     let txn_hash_str = transaction_hash.to_string();
     let _intent_state_response = client
@@ -91,6 +92,7 @@ pub async fn update_intent_state(
                 &order_id,
                 &chain_id,
                 &initiator_address,
+                &transaction_cost
             ],
         )
         .await
