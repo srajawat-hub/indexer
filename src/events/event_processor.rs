@@ -9,6 +9,7 @@ use futures_util::stream::StreamExt;
 use log::{debug, info, error};
 use serde_json::json;
 use tokio_postgres::Client;
+use solana_sdk::pubkey::Pubkey;
 
 use crate::solidity_structs::{
     self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, AmountTypes, CreatedOrder, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, ProcessId, QuoteApiResponse, ReceiverUserAddressData, ReceiverVaultData, ResultCosts, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, ThirdPartyFeeResult, VaultBoundMessagePlaceOrderData
@@ -132,12 +133,38 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         let without_prefix = token_in.trim_start_matches("0x"); // Remove "0x" prefix
         let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
         payload_token_in = format!("0x{}", trimmed)
+    } else {
+        if (token_in.starts_with("0x")) {
+            let without_prefix = token_in.trim_start_matches("0x"); // Remove "0x" prefix
+            if let Ok(token_bytes) = hex::decode(without_prefix) {
+                if token_bytes.len() == 32 {
+                    if let Ok(array) = <[u8; 32]>::try_from(token_bytes) {
+                        let pubkey_token = solana_sdk::pubkey::Pubkey::from(array);
+                        println!("pubkey token {:?}", pubkey_token.to_string());
+                        payload_token_in = pubkey_token.to_string();
+                    }
+                }
+            }
+        }
     }
 
     if destination_chain_id != SOLANA_CHAIN_ID {
         let without_prefix = token_out.trim_start_matches("0x"); // Remove "0x" prefix
         let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
         payload_token_out = format!("0x{}", trimmed)
+    } else {
+        if (token_out.starts_with("0x")) {
+            let without_prefix = token_out.trim_start_matches("0x"); // Remove "0x" prefix
+            if let Ok(token_bytes) = hex::decode(without_prefix) {
+                if token_bytes.len() == 32 {
+                    if let Ok(array) = <[u8; 32]>::try_from(token_bytes) {
+                        let pubkey_token = Pubkey::from(array);
+                        println!("pubkey token {:?}", pubkey_token.to_string());
+                        payload_token_out = pubkey_token.to_string();
+                    }
+                }
+            }
+        }
     }
 
 
