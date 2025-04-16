@@ -9,7 +9,7 @@ use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use futures_util::stream::StreamExt;
 use log::{debug, info, error};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio_postgres::Client;
 use solana_sdk::pubkey::Pubkey;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
@@ -57,18 +57,18 @@ impl ToString for IntentStage {
 
 const SOLANA_CHAIN_ID: &str = "1399811149";
 
-fn get_native_token_symbol(chain_id: i64) -> (String, u32) {
+fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
     match chain_id {
-        137 => (String::from("POL"), 18),
-        1399811149 => (String::from("SOL"), 9),
-        18082 => (String::from("USDC"), 18),
-        _ => (String::from("ETH"), 18)
+        137 => (String::from("28321"), 18), // pol
+        1399811149 => (String::from("5426"), 9), // sol
+        18082 => (String::from("3408"), 18), // usdc
+        _ => (String::from("1027"), 18) // ETH
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct ApiResponse {
-    data: HashMap<String, Vec<TokenInfo>>,
+    data: HashMap<String, TokenInfo>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,24 +85,46 @@ struct Quote {
     market_cap: Option<f64>,
 }
 
-pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) -> String {
-
+pub async fn get_usd_value_of_native(
+    chain_id: &i64, 
+    transaction_cost: &u128, 
+    cmc_id: Option<String>,
+    symbol: Option<String>,
+    decimals: Option<i32>
+) -> String {
     let cmc_api_key = std::env::var("CMC_API_KEY")
     .expect("CMC_API_KEY must be set")
     .parse::<String>()
     .unwrap();
 
-    let (token_symbol, token_decimals) = get_native_token_symbol(*chain_id);
+    let mut token_symbol = String::new();
+    let mut token_decimals = 0_u32;
 
-    let cmc_api = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol={}", token_symbol);
+    let cmc_api = match cmc_id.clone() {
+        Some(id) => {
+            if (symbol == None || decimals == None) {
+                return String::from("0");
+            }
+            token_symbol = symbol.unwrap();
+            token_decimals = decimals.unwrap() as u32;
+            let cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", id);
+            cmc_api_url
+        },
+        None => {
+            (token_symbol, token_decimals) = get_native_token_cmc_id(*chain_id);
+            let cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", token_symbol);
+            cmc_api_url
+        }
+    };
+
     let mut headers = HeaderMap::new();
     match HeaderValue::from_str(&cmc_api_key) {
         Ok(header_value) => {
             headers.insert("X-CMC_PRO_API_KEY", header_value);
         }
         Err(e) => {
-            println!("Invalid header value: {}", e);
-            return String::from("0"); // or handle the error accordingly
+            error!("Invalid header value: {}", e);
+            return String::from("0");
         }
     }
 
@@ -115,37 +137,41 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
 
     match response_result {
         Ok(response) => {
+            let mut token_getter = String::new();
+            if cmc_id == None {
+                token_getter = token_symbol;
+            } else {
+                token_getter = cmc_id.unwrap();
+            }
+
             let json_result = response.json::<ApiResponse>().await;
+
             match json_result {
                 Ok(api_response) => {
-                    if let Some((tokens)) = api_response.data.get(&token_symbol) {
-                        if let Some(first_token) = tokens.first() {
-                            if let Some(quote) = first_token.quote.get("USD") {
-                                match quote.price {
-                                    Some(price) => {
-                                        println!("Price of {}: ${}", token_symbol, price);
-                                        transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
-                                        println!("Transaction fee in usd {:?}", transaction_fees_usd);
-                                    },
-                                    None => println!("Price not available for {}", token_symbol),
-                                }
-                            } else {
-                                println!("USD quote not available.");
+                    if let Some((tokens)) = api_response.data.get(&token_getter) {
+                        if let Some(quote) = tokens.quote.get("USD") {
+                            match quote.price {
+                                Some(price) => {
+                                    info!("Price of {}: ${}", token_getter, price);
+                                    transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
+                                    info!("Transaction fee in usd {:?}", transaction_fees_usd);
+                                },
+                                None => error!("Price not available for {}", token_getter),
                             }
                         } else {
-                            println!("No token info found.");
+                            error!("USD quote not available.");
                         }
                     } else {
-                        println!("No data found in response.");
+                        error!("No data found in response.");
                     }
                 }
                 Err(e) => {
-                    println!("Failed to parse JSON: {}", e);
+                    error!("Failed to parse JSON: {}", e);
                 }
-            }
+            };
         }
         Err(e) => {
-            println!("Request failed: {}", e);
+            error!("Request failed: {}", e);
         }
     };
 
@@ -163,7 +189,6 @@ pub async fn update_intent_state(
     chain_id: i64,
     initiator_address: String,
 ) {
-    // let gas_fees = 1 as i64; // updating gas token
     let query =
         "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9, $10, $11)";
     let timestamp = std::time::SystemTime::now();
@@ -180,7 +205,7 @@ pub async fn update_intent_state(
     };
     let txn_hash_str = transaction_hash.to_string();
 
-    let transaction_cost_usd = get_usd_value_of_native(&chain_id, &transaction_cost).await;
+    let transaction_cost_usd = get_usd_value_of_native(&chain_id, &transaction_cost, None, None, None).await;
 
     let _intent_state_response = match client
         .execute(
@@ -544,13 +569,52 @@ pub async fn process_evm_events(
                 .await;
 
                 let intent_fees: ResultCosts = get_fees_data(&source_chain_id, &destination_chain_id, &token_in, &token_out, &amount_in).await;
-                let fee_data_json = match serde_json::to_value(&intent_fees) {
+
+                // get cmc_id
+                let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32 
+                    FROM tokens t 
+                    JOIN token_chains tc ON t.id = tc.token_id 
+                    JOIN chain_metadata cm ON cm.network_name = tc.network 
+                    WHERE LOWER(tc.address_bytes32) = LOWER($1) AND chain_id = $2";
+
+                let inclusive_layer_fee_usd = match &intent_fees.inclusive_layer_fee.value {
+                    Some(fee) => {
+                        let token_data = match client.query_one(tokens_query, &[&token_in, &source_chain_id]).await {
+                            Ok(res) => {
+                                let cmc_id: String = res.get("cmc_id");
+                                let symbol: String = res.get("ticker");
+                                let decimals: i32 = res.get("decimals");
+                                let inclusive_layer_fee_usd = get_usd_value_of_native(&source_chain_id.parse::<i64>().unwrap(), &fee.parse::<u128>().unwrap(), Some(cmc_id), Some(symbol), Some(decimals)).await;
+                                inclusive_layer_fee_usd
+                            },
+                            Err(_e) => {
+                                error!(target: log_target, "Failed to get inclusive_layer_fee_usd for intent id {}, error: {:?}", &intent_id, _e);
+                                String::from("0.0")
+                            }
+                        };
+                        token_data
+                    },
+                    None => String::from("0.0")
+                };
+
+                let mut fee_data_json = match serde_json::to_value(&intent_fees) {
                     Ok(value) => value,
                     Err(_e) => {
                         error!(target: log_target, "Error in getting fees data from quotation service: {:?}", _e);
                         continue;
                     }
                 };
+
+                let inclusive_layer_fee_usd_json = serde_json::json!({
+                    "value": Some(inclusive_layer_fee_usd),
+                    "value_type": Some(String::from("USD"))
+                });
+
+                // Insert the new field into the object
+                if let serde_json::Value::Object(ref mut map) = fee_data_json {
+                    map.insert("inclusive_layer_fee_usd".to_string(), inclusive_layer_fee_usd_json);
+                }
+
                 let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2)";
                 match client.execute(intent_fee_add_query, &[&intent_id, &fee_data_json]).await {
                     Ok(res) => {
