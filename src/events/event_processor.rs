@@ -61,7 +61,7 @@ fn get_native_token_symbol(chain_id: i64) -> (String, u32) {
     match chain_id {
         137 => (String::from("POL"), 18),
         1399811149 => (String::from("SOL"), 9),
-        18082 => (String::from("USDC"), 6),
+        18082 => (String::from("USDC"), 18),
         _ => (String::from("ETH"), 18)
     }
 }
