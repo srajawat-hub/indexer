@@ -1,8 +1,5 @@
 use std::{
-    str::FromStr,
-    sync::Arc,
-    thread::sleep,
-    time::{Duration, SystemTime},
+    collections::HashMap, str::FromStr, sync::Arc, thread::sleep, time::{Duration, SystemTime}
 };
 
 use crate::{
@@ -21,6 +18,7 @@ use base64::Engine as Base64Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Local;
 use log::{error, info};
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use solana_client::{
     client_error::reqwest, nonblocking::rpc_client::RpcClient,
@@ -40,6 +38,100 @@ pub struct SolanaIndexer {
     program_id: Pubkey,
 }
 
+fn get_native_token_symbol(chain_id: i64) -> (String, u32) {
+    match chain_id {
+        137 => (String::from("POL"), 18),
+        1399811149 => (String::from("SOL"), 9),
+        18082 => (String::from("USDC"), 6),
+        _ => (String::from("ETH"), 18)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiResponse {
+    data: HashMap<String, Vec<TokenInfo>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenInfo {
+    id: u64,
+    name: String,
+    symbol: String,
+    quote: HashMap<String, Quote>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Quote {
+    price: Option<f64>,
+    market_cap: Option<f64>,
+}
+
+pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) -> String {
+
+    let cmc_api_key = std::env::var("CMC_API_KEY")
+    .expect("CMC_API_KEY must be set")
+    .parse::<String>()
+    .unwrap();
+
+    let (token_symbol, token_decimals) = get_native_token_symbol(*chain_id);
+
+    let cmc_api = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol={}", token_symbol);
+    let mut headers = HeaderMap::new();
+    match HeaderValue::from_str(&cmc_api_key) {
+        Ok(header_value) => {
+            headers.insert("X-CMC_PRO_API_KEY", header_value);
+        }
+        Err(e) => {
+            eprintln!("Invalid header value: {}", e);
+            return String::from("0"); // or handle the error accordingly
+        }
+    }
+
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    
+    let api_client = reqwest::Client::new();
+    let mut transaction_fees_usd = String::from("0");
+
+    let response_result = api_client.get(&cmc_api).headers(headers).send().await;
+
+    match response_result {
+        Ok(response) => {
+            let json_result = response.json::<ApiResponse>().await;
+            match json_result {
+                Ok(api_response) => {
+                    if let Some((tokens)) = api_response.data.get(&token_symbol) {
+                        if let Some(first_token) = tokens.first() {
+                            if let Some(quote) = first_token.quote.get("USD") {
+                                match quote.price {
+                                    Some(price) => {
+                                        println!("Price of {}: ${}", token_symbol, price);
+                                        transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string()
+                                    },
+                                    None => println!("Price not available for {}", token_symbol),
+                                }
+                            } else {
+                                println!("USD quote not available.");
+                            }
+                        } else {
+                            println!("No token info found.");
+                        }
+                    } else {
+                        println!("No data found in response.");
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to parse JSON: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            println!("Request failed: {}", e);
+        }
+    };
+
+    transaction_fees_usd
+}
+
 pub async fn update_intent_state(
     intent_id: &i64,
     version: i32,
@@ -53,8 +145,10 @@ pub async fn update_intent_state(
     transaction_cost: &str
 ) {
     // let gas_fees = 1 as i64; // updating gas token
-    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+    let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
     let timestamp = std::time::SystemTime::now();
+
+    let transaction_cost_usd = get_usd_value_of_native(chain_id, &transaction_cost.parse::<u128>().unwrap()).await;
 
     let initiator_address_str = initiator_address.to_string();
     info!("Tx hash length {:?}", transaction_hash.len());
@@ -74,7 +168,8 @@ pub async fn update_intent_state(
                 &order_id,
                 &chain_id,
                 &initiator_address,
-                &transaction_cost
+                &transaction_cost,
+                &transaction_cost_usd
             ],
         )
         .await

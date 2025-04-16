@@ -89,6 +89,7 @@ intent_state (
     chain_id BIGINT NOT NULL,
     initiator_address VARCHAR(66) NOT NULL,
     transaction_cost TEXT
+    transaction_cost_usd TEXT
 );
 deposit_received (
     id BIGSERIAL PRIMARY KEY,
