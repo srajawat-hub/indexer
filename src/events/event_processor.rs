@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use alloy::primitives::FixedBytes;
 use alloy::providers::Provider;
@@ -85,12 +86,34 @@ struct Quote {
     market_cap: Option<f64>,
 }
 
+// =========== Historical
+#[derive(Debug, Deserialize)]
+struct ApiResponseHistory {
+    data: HashMap<String, TokenInfoHistory>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenInfoHistory {
+    quotes: Vec<QuoteEntryHistory>,
+}
+
+#[derive(Debug, Deserialize)]
+struct QuoteEntryHistory {
+    quote: HashMap<String, QuoteDetail>,
+}
+
+#[derive(Debug, Deserialize)]
+struct QuoteDetail {
+    price: Option<f64>,
+} 
+
 pub async fn get_usd_value_of_native(
     chain_id: &i64, 
     transaction_cost: &u128, 
     cmc_id: Option<String>,
     symbol: Option<String>,
-    decimals: Option<i32>
+    decimals: Option<i32>,
+    timestamp: Option<String>
 ) -> String {
     let cmc_api_key = std::env::var("CMC_API_KEY")
     .expect("CMC_API_KEY must be set")
@@ -107,12 +130,28 @@ pub async fn get_usd_value_of_native(
             }
             token_symbol = symbol.unwrap();
             token_decimals = decimals.unwrap() as u32;
-            let cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", id);
+            let mut cmc_api_url = String::new();
+            match timestamp {
+                Some(ref time) => {
+                    cmc_api_url = format!("https://pro-api.coinmarketcap.com/v3/cryptocurrency/quotes/historical?id={}&time_start={}&count=1", id, time);
+                }
+                None => {
+                    cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", id);
+                }
+            };
             cmc_api_url
         },
         None => {
             (token_symbol, token_decimals) = get_native_token_cmc_id(*chain_id);
-            let cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", token_symbol);
+            let mut cmc_api_url = String::new();
+            match timestamp {
+                Some(ref time) => {
+                    cmc_api_url = format!("https://pro-api.coinmarketcap.com/v3/cryptocurrency/quotes/historical?id={}&time_start={}&count=1", token_symbol, time);
+                }
+                None => {
+                    cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", token_symbol);
+                }
+            };
             cmc_api_url
         }
     };
@@ -143,32 +182,62 @@ pub async fn get_usd_value_of_native(
             } else {
                 token_getter = cmc_id.unwrap();
             }
+            match timestamp {
+                Some(time) => {
+                    let json_result = response.json::<ApiResponseHistory>().await;
 
-            let json_result = response.json::<ApiResponse>().await;
-
-            match json_result {
-                Ok(api_response) => {
-                    if let Some((tokens)) = api_response.data.get(&token_getter) {
-                        if let Some(quote) = tokens.quote.get("USD") {
-                            match quote.price {
-                                Some(price) => {
-                                    info!("Price of {}: ${}", token_getter, price);
-                                    transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
-                                    info!("Transaction fee in usd {:?}", transaction_fees_usd);
-                                },
-                                None => error!("Price not available for {}", token_getter),
+                    match json_result {
+                        Ok(api_response) => {
+                            if let Some((tokens)) = api_response.data.get(&token_getter) {
+                                if let Some(quote) = tokens.quotes[0].quote.get("USD") {
+                                    match quote.price {
+                                        Some(price) => {
+                                            info!("Price of {}: ${}", token_getter, price);
+                                            transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
+                                            info!("Transaction fee in usd {:?}", transaction_fees_usd);
+                                        },
+                                        None => error!("Price not available for {}", token_getter),
+                                    }
+                                } else {
+                                    error!("USD quote not available.");
+                                }
+                            } else {
+                                error!("No data found in response.");
                             }
-                        } else {
-                            error!("USD quote not available.");
                         }
-                    } else {
-                        error!("No data found in response.");
-                    }
+                        Err(e) => {
+                            error!("Failed to parse JSON: {}", e);
+                        }
+                    };
+                },
+                None => {
+                    let json_result = response.json::<ApiResponse>().await;
+
+                    match json_result {
+                        Ok(api_response) => {
+                            if let Some((tokens)) = api_response.data.get(&token_getter) {
+                                if let Some(quote) = tokens.quote.get("USD") {
+                                    match quote.price {
+                                        Some(price) => {
+                                            info!("Price of {}: ${}", token_getter, price);
+                                            transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
+                                            info!("Transaction fee in usd {:?}", transaction_fees_usd);
+                                        },
+                                        None => error!("Price not available for {}", token_getter),
+                                    }
+                                } else {
+                                    error!("USD quote not available.");
+                                }
+                            } else {
+                                error!("No data found in response.");
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to parse JSON: {}", e);
+                        }
+                    };
                 }
-                Err(e) => {
-                    error!("Failed to parse JSON: {}", e);
-                }
-            };
+            }
         }
         Err(e) => {
             error!("Request failed: {}", e);
@@ -205,7 +274,7 @@ pub async fn update_intent_state(
     };
     let txn_hash_str = transaction_hash.to_string();
 
-    let transaction_cost_usd = get_usd_value_of_native(&chain_id, &transaction_cost, None, None, None).await;
+    let transaction_cost_usd = get_usd_value_of_native(&chain_id, &transaction_cost, None, None, None, None).await;
 
     let _intent_state_response = match client
         .execute(
@@ -343,6 +412,37 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         }
     };
     fee_data_response
+}
+
+pub async fn get_amount_usd_value(token_in: String, chain_id: String, amount: Option<String>, client: &Arc<Client>, timestamp: Option<String>) -> String {
+    let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32 
+        FROM tokens t 
+        JOIN token_chains tc ON t.id = tc.token_id 
+        JOIN chain_metadata cm ON cm.network_name = tc.network 
+        WHERE LOWER(tc.address_bytes32) = LOWER($1) AND chain_id = $2";
+
+    let log_target = "Amount USD Value";
+
+    let inclusive_layer_fee_usd = match &amount {
+        Some(fee) => {
+            let token_data = match client.query_one(tokens_query, &[&token_in, &chain_id]).await {
+                Ok(res) => {
+                    let cmc_id: String = res.get("cmc_id");
+                    let symbol: String = res.get("ticker");
+                    let decimals: i32 = res.get("decimals");
+                    let inclusive_layer_fee_usd = get_usd_value_of_native(&chain_id.parse::<i64>().unwrap(), &fee.parse::<u128>().unwrap(), Some(cmc_id), Some(symbol), Some(decimals), timestamp).await;
+                    inclusive_layer_fee_usd
+                },
+                Err(_e) => {
+                    error!(target: log_target, "Failed to get inclusive_layer_fee_usd, error: {:?}", _e);
+                    String::from("0.0")
+                }
+            };
+            token_data
+        },
+        None => String::from("0.0")
+    };
+    inclusive_layer_fee_usd
 }
 
 // Function to listen to events from a specific RPC and contract
@@ -524,8 +624,11 @@ pub async fn process_evm_events(
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
+                let amount_in_usd = get_amount_usd_value(token_in.clone(), source_chain_id.clone(), Some(amount_in.clone()), &client, None).await;
+                let amount_out_usd = get_amount_usd_value(token_out.clone(), destination_chain_id.clone(), Some(amount_out.clone()), &client, None).await;
+
                 let query: &str =
-                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)";
+                    "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)";
                 let response = client
                     .execute(
                         query,
@@ -547,6 +650,8 @@ pub async fn process_evm_events(
                             &solution_type,
                             &receiver_type,
                             &receiver_address,
+                            &amount_in_usd,
+                            &amount_out_usd
                         ],
                     )
                     .await
@@ -570,32 +675,7 @@ pub async fn process_evm_events(
 
                 let intent_fees: ResultCosts = get_fees_data(&source_chain_id, &destination_chain_id, &token_in, &token_out, &amount_in).await;
 
-                // get cmc_id
-                let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32 
-                    FROM tokens t 
-                    JOIN token_chains tc ON t.id = tc.token_id 
-                    JOIN chain_metadata cm ON cm.network_name = tc.network 
-                    WHERE LOWER(tc.address_bytes32) = LOWER($1) AND chain_id = $2";
-
-                let inclusive_layer_fee_usd = match &intent_fees.inclusive_layer_fee.value {
-                    Some(fee) => {
-                        let token_data = match client.query_one(tokens_query, &[&token_in, &source_chain_id]).await {
-                            Ok(res) => {
-                                let cmc_id: String = res.get("cmc_id");
-                                let symbol: String = res.get("ticker");
-                                let decimals: i32 = res.get("decimals");
-                                let inclusive_layer_fee_usd = get_usd_value_of_native(&source_chain_id.parse::<i64>().unwrap(), &fee.parse::<u128>().unwrap(), Some(cmc_id), Some(symbol), Some(decimals)).await;
-                                inclusive_layer_fee_usd
-                            },
-                            Err(_e) => {
-                                error!(target: log_target, "Failed to get inclusive_layer_fee_usd for intent id {}, error: {:?}", &intent_id, _e);
-                                String::from("0.0")
-                            }
-                        };
-                        token_data
-                    },
-                    None => String::from("0.0")
-                };
+                let inclusive_layer_fee_usd = get_amount_usd_value(token_in.clone(), source_chain_id.clone(),intent_fees.inclusive_layer_fee.value.clone(), &client, None).await;
 
                 let mut fee_data_json = match serde_json::to_value(&intent_fees) {
                     Ok(value) => value,
@@ -648,7 +728,7 @@ pub async fn process_evm_events(
                 let ack_metadata: String = metadata.to_string();
 
                 // fetching intent id
-                let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
+                let intent_id_query = "SELECT intent_id, token_out, destination_chain_id, timestamp FROM order_created WHERE order_id = $1";
                 let intent_id_response = match client
                     .query_one(intent_id_query, &[&order_id])
                     .await {
@@ -659,6 +739,11 @@ pub async fn process_evm_events(
                         }
                     };
                 let intent_id: i64 = intent_id_response.get("intent_id");
+                let token_out: String = intent_id_response.get("token_out");
+                let destination_chain_id: String = intent_id_response.get("destination_chain_id");
+                let order_timestamp: SystemTime = intent_id_response.get("timestamp");
+                let time = order_timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs().to_string();
+
 
                 let query =
                     "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
@@ -729,13 +814,21 @@ pub async fn process_evm_events(
 
                     let update_order_query = "
                     UPDATE order_created
-                    SET amount_out = $1
-                    WHERE order_id = $2
-                    AND (SELECT COUNT(*) FROM order_created WHERE order_id = $2) = 1
+                    SET amount_out = $1, amount_out_usd = $2
+                    WHERE order_id = $3
+                    AND (SELECT COUNT(*) FROM order_created WHERE order_id = $3) = 1
                     ";
 
+                    // TODO: update amount_out_usd here as well in order_created
+                    let amount_out_usd = get_amount_usd_value(
+                        token_out, 
+                        destination_chain_id, 
+                        Some(actual_amount.clone()), 
+                        &client, 
+                        Some(time)).await;
+
                     let order_rows_updated = client
-                        .execute(update_order_query, &[&actual_amount, &order_id])
+                        .execute(update_order_query, &[&actual_amount, &amount_out_usd, &order_id])
                         .await
                         .unwrap();
                     info!(target: log_target, 

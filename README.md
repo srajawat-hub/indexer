@@ -61,7 +61,9 @@ order_created (
     order_payload TEXT NOT NULL,
     solution_type INTEGER,
     receiver_type INTEGER,
-    receiver_address TEXT
+    receiver_address TEXT,
+    amount_in_usd TEXT,
+    amount_out_usd TEXT
 );
 message_dispatched_from_vault (
     id BIGSERIAL PRIMARY KEY,
