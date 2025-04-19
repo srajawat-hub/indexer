@@ -189,17 +189,21 @@ pub async fn get_usd_value_of_native(
                     match json_result {
                         Ok(api_response) => {
                             if let Some((tokens)) = api_response.data.get(&token_getter) {
-                                if let Some(quote) = tokens.quotes[0].quote.get("USD") {
-                                    match quote.price {
-                                        Some(price) => {
-                                            info!("Price of {}: ${}", token_getter, price);
-                                            transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
-                                            info!("Transaction fee in usd {:?}", transaction_fees_usd);
-                                        },
-                                        None => error!("Price not available for {}", token_getter),
+                                if tokens.quotes.len() > 0 {
+                                    if let Some(quote) = tokens.quotes[0].quote.get("USD") {
+                                        match quote.price {
+                                            Some(price) => {
+                                                info!("Price of {}: ${}", token_getter, price);
+                                                transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
+                                                info!("Transaction fee in usd {:?}", transaction_fees_usd);
+                                            },
+                                            None => error!("Price not available for {}", token_getter),
+                                        }
+                                    } else {
+                                        error!("USD quote not available.");
                                     }
                                 } else {
-                                    error!("USD quote not available.");
+                                    error!("CMC Api failed to fetch historical price of the token with cmc_id {:?}", token_getter);
                                 }
                             } else {
                                 error!("No data found in response.");
