@@ -126,6 +126,7 @@ pub async fn get_usd_value_of_native(
     let cmc_api = match cmc_id.clone() {
         Some(id) => {
             if (symbol == None || decimals == None) {
+                error!("CMC_ID not found");
                 return String::from("0");
             }
             token_symbol = symbol.unwrap();
@@ -829,7 +830,7 @@ pub async fn process_evm_events(
                         destination_chain_id, 
                         Some(actual_amount.clone()), 
                         &client, 
-                        Some(time)).await;
+                        None).await;
 
                     let order_rows_updated = client
                         .execute(update_order_query, &[&actual_amount, &amount_out_usd, &order_id])
