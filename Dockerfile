@@ -1,5 +1,5 @@
 # Runtime stage
-FROM debian:bookworm-slim
+FROM debian:bullseye-slim
 
 # Install OpenSSL - required for HTTPS requests
 RUN apt-get update && apt-get install -y \
