@@ -418,10 +418,15 @@ async fn fetch_transaction_history(
 
     for intent_row in intent_rows {
         let intent_id: i64 = intent_row.get("intent_id");
-        let intent_state = client
+        let intent_state = match client
             .query_one(query_intent_state, &[&intent_id])
-            .await
-            .unwrap();
+            .await {
+                Ok(state) => state,
+                Err(_e) => {
+                    error!("Error fetching intent state for intent_id: {}, error {:?}", intent_id, _e);
+                    continue
+                },
+            };
         let stage: String = intent_state.get("stage");
         let intent_version: i32 = intent_state.get("version");
 

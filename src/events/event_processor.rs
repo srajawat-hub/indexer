@@ -269,9 +269,17 @@ pub async fn update_intent_state(
 
     let (gas_used, transaction_cost) = match provider.get_transaction_receipt(transaction_hash).await {
         Ok(receipt) => {
-            let txn = receipt.unwrap();
-            let gas_used = txn.gas_used as i64;
-            let gas_price = txn.effective_gas_price;
+            let (gas_used, gas_price) = match receipt {
+                Some(tx_receipt) => {
+                    let gas_used = tx_receipt.gas_used as i64;
+                    let gas_price = tx_receipt.effective_gas_price;
+                    (gas_used, gas_price)
+                },
+                None => {
+                    error!("Transaction receipt not found");
+                    (0 as i64, 0u128)
+                }
+            };
             let transaction_cost = ((gas_used as u128) * gas_price);
             (gas_used, transaction_cost)
         }

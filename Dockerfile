@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy the binary from builder
 COPY target/release/indexer /usr/local/bin/indexer
+COPY config.toml /usr/local/bin/config.toml
 
 ENV RUST_LOG=info
 
