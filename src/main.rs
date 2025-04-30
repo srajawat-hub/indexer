@@ -12,6 +12,8 @@ use chrono::{DateTime, Utc};
 use dotenv::dotenv;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{error, info};
+use openssl::ssl::{SslConnector, SslMethod};
+use postgres_openssl::MakeTlsConnector;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -125,13 +127,20 @@ async fn main() {
         })
         .init();
 
-    let connect_statement = std::env::var("DB_CONNECTION_STRING")
-        .expect("DB_CONNECTION_STRING must be set")
-        .parse::<String>()
-        .unwrap();
-    let (client, connection) = tokio_postgres::connect(&connect_statement, NoTls)
-        .await
-        .unwrap();
+        let connect_statement = std::env::var("DB_CONNECTION_STRING")
+        .expect("DB_CONNECTION_STRING must be set");
+    
+        let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
+
+        builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
+    
+        let mut connector = MakeTlsConnector::new(builder.build());
+
+        let (client, connection) =
+            tokio_postgres::connect(&connect_statement, connector)
+                .await
+                .unwrap();
+
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             error!("DB Connection error {:?}", e);
