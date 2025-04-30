@@ -214,6 +214,7 @@ async fn main() {
             )
             .route("/check_ofac_list/{user_address}", web::get().to(check_ofac_list))
             .route("/get_fee_data", web::get().to(get_fee_data))
+            .route("/health_check", web::get().to(health_check))
     })
     .bind("0.0.0.0:8085")
     .unwrap()
@@ -1182,4 +1183,13 @@ async fn get_fee_data(
             HttpResponse::NotFound().finish()
         }
     }
+}
+
+async fn health_check(
+    client: web::Data<Arc<tokio_postgres::Client>>
+) -> impl Responder {
+    HttpResponse::Ok().json(json!({
+        "status": "ok",
+        "message": "Indexer connection is healthy"
+    }))
 }
