@@ -585,6 +585,19 @@ pub async fn structure_intent_orders(
     )
 }
 
+// Add this helper function to handle number deserialization
+pub fn deserialize_number<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: serde_json::Value = serde::Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(n) => Ok(n.as_f64()),
+        serde_json::Value::Null => Ok(None),
+        _ => Err(serde::de::Error::custom("expected number or null")),
+    }
+}
+
 /// Displays the error if present, waits for few seconds and
 /// retries execution.
 ///

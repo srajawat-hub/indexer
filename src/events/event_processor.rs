@@ -21,6 +21,7 @@ use crate::solidity_structs::{
 use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault
 };
+use crate::SOLANA_CHAIN_ID;
 
 pub enum IntentVersions {
     IntentSubmitted,
@@ -56,7 +57,6 @@ impl ToString for IntentStage {
     }
 }
 
-const SOLANA_CHAIN_ID: &str = "1399811149";
 
 fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
     match chain_id {
@@ -343,7 +343,7 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
         payload_token_in = format!("0x{}", trimmed)
     } else {
-        if (token_in.starts_with("0x")) {
+        if token_in.starts_with("0x") {
             let without_prefix = token_in.trim_start_matches("0x"); // Remove "0x" prefix
             if let Ok(token_bytes) = hex::decode(without_prefix) {
                 if token_bytes.len() == 32 {

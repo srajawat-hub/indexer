@@ -1,5 +1,6 @@
 use alloy::sol;
 use serde::{Deserialize, Serialize};
+use crate::utils::deserialize_number;
 
 pub mod intent_processor {
     use alloy::sol;
@@ -559,4 +560,86 @@ pub struct ThirdPartyFeeResult {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct QuoteApiResponse {
     pub fee_data: ResultCosts
+}
+
+// Add these structs near other struct definitions
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OrderId {
+    pub bytesValue: Option<String>,
+    pub bytesArrayValue: Option<String>,
+    pub stringValue: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ChainId {
+    bytesValue: Option<String>,
+    bytesArrayValue: Option<String>,
+    #[serde(deserialize_with = "deserialize_number")]
+    bigIntegerValue: Option<f64>,
+    stringValue: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct TokenAddress {
+    Base64Value: Option<String>,
+    bytesArrayValue: Option<String>,
+    stringValue: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Amount {
+    bytesValue: Option<String>,
+    bytesArrayValue: Option<String>,
+    #[serde(deserialize_with = "deserialize_number")]
+    bigIntegerValue: Option<f64>,
+    stringValue: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct TokenMetadata {
+    decimals: Option<i32>,
+    name: Option<String>,
+    symbol: Option<String>,
+    logoURI: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct OfferWithMetadata {
+    chainId: ChainId,
+    tokenAddress: TokenAddress,
+    amount: Amount,
+    finalAmount: Amount,
+    metadata: TokenMetadata,
+    decimals: Option<i32>,
+    name: Option<String>,
+    symbol: Option<String>,
+    logoURI: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AffiliateFee {
+    beneficiarySrc: Option<TokenAddress>,
+    amount: Option<Amount>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Order {
+    pub orderId: OrderId,
+    pub creationTimestamp: i64,
+    pub giveOfferWithMetadata: OfferWithMetadata,
+    pub takeOfferWithMetadata: OfferWithMetadata,
+    pub state: String,
+    pub externalCallState: String,
+    pub finalPercentFee: Amount,
+    pub fixFee: Amount,
+    pub affiliateFee: AffiliateFee,
+    pub unlockAuthorityDst: Option<TokenAddress>,
+    pub createEventTransactionHash: Option<TokenAddress>,
+    pub preswapData: Option<serde_json::Value>,
+    pub orderMetadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OrdersResponse {
+    pub orders: Vec<Order>,
 }

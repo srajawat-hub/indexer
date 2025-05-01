@@ -20,16 +20,23 @@ use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
-    AcknowledgementMetadataStake, IntentPayloadEnum, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum, ResultCosts, SolidityIntentProcessorBoundMessage, SolidityOrder
+    AcknowledgementMetadataStake, IntentPayloadEnum,
+    IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageEnum,
+    OrdersResponse, ResultCosts, SolidityIntentProcessorBoundMessage, SolidityOrder,
 };
 use std::collections::HashMap;
 use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::thread::sleep;
+use std::time::{Duration, SystemTime};
 use tokio::signal;
-use tokio_postgres::NoTls;
 use utils::{get_api_url, structure_intent_orders};
+
+pub const DEFAULT_ORDER_ID: &str =
+    "0xa4afcf3ebbcb201aee94cde46dc61e70ef31a98cfd8457bc48243238f5598eb2";
+pub const DEBRIDGE_ORDER_MAKER_ADDRESS: &str = "2iqe742BvvymavtgyywmW2iqTdbaUDsyRK3SZJnqNnEk";
+pub const SOLANA_CHAIN_ID: &str = "1399811149";
 
 #[derive(Deserialize)]
 struct IndexerConfig {
@@ -109,6 +116,11 @@ struct TimedOutOrder {
     destination_chain_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct OrderNonceResponse {
+    makerOrderNonce: u64,
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -127,19 +139,18 @@ async fn main() {
         })
         .init();
 
-        let connect_statement = std::env::var("DB_CONNECTION_STRING")
-        .expect("DB_CONNECTION_STRING must be set");
-    
-        let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
+    let connect_statement =
+        std::env::var("DB_CONNECTION_STRING").expect("DB_CONNECTION_STRING must be set");
 
-        builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
-    
-        let mut connector = MakeTlsConnector::new(builder.build());
+    let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
 
-        let (client, connection) =
-            tokio_postgres::connect(&connect_statement, connector)
-                .await
-                .unwrap();
+    builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
+
+    let mut connector = MakeTlsConnector::new(builder.build());
+
+    let (client, connection) = tokio_postgres::connect(&connect_statement, connector)
+        .await
+        .unwrap();
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
@@ -185,6 +196,9 @@ async fn main() {
         handles.push(handle);
     }
 
+    let handle = tokio::spawn(async move { fetch_solana_debridge_orders(db_client.clone()).await });
+    handles.push(handle);
+
     info!("All tasks started. Press Ctrl+C to exit.");
     info!("total threads {:?}", handles.len());
 
@@ -212,7 +226,10 @@ async fn main() {
                 "/get_deposit_history/{user_address}",
                 web::get().to(get_deposit_history),
             )
-            .route("/check_ofac_list/{user_address}", web::get().to(check_ofac_list))
+            .route(
+                "/check_ofac_list/{user_address}",
+                web::get().to(check_ofac_list),
+            )
             .route("/get_fee_data", web::get().to(get_fee_data))
             .route("/health_check", web::get().to(health_check))
     })
@@ -275,7 +292,114 @@ struct InitialData {
     fulfill_tx_hash: Option<String>,
     intent_version: i32, // check if more needed
     receiver_address: Option<String>,
-    feeAmount: Option<String>
+    feeAmount: Option<String>,
+}
+
+async fn fetch_solana_debridge_orders(db_client: Arc<tokio_postgres::Client>) {
+    loop {
+        sleep(Duration::from_secs(10));
+        let orders = skip_fail!(fetch_orders(db_client.clone()).await);
+        info!(target: "DLN_ORDER_ID_UPDATES", "Orders: {:?}", orders.orders.len());
+    }
+}
+
+async fn fetch_orders(
+    db_client: Arc<tokio_postgres::Client>,
+) -> Result<OrdersResponse, reqwest::Error> {
+    let client = reqwest::Client::new();
+    let request_body = json!({
+        "giveChainIds": [],
+        "takeChainIds": [],
+        "filter": DEBRIDGE_ORDER_MAKER_ADDRESS,
+        "skip": 0,
+        "take": 25
+    });
+
+    let response = client
+        .post("https://stats-api.dln.trade/api/Orders/filteredList")
+        .json(&request_body)
+        .send()
+        .await?;
+
+    let body = response.text().await?;
+    let orders: Result<OrdersResponse, serde_json::Error> = serde_json::from_str(&body);
+    if orders.is_err() {
+        error!(target: "DLN_ORDER_ID_UPDATES", "Error fetching orders: {:?}", orders.err());
+        return Ok(OrdersResponse { orders: vec![] });
+    }
+
+    let orders = orders.unwrap();
+
+    let default_order_id = DEFAULT_ORDER_ID.to_string();
+    let till_order_id = get_latest_solana_dln_order_id(&db_client)
+        .await
+        .map_or(default_order_id.clone(), |id| {
+            id.map_or(default_order_id, |id| id)
+        });
+
+    for order in orders.orders.clone() {
+        let dln_order_id = if let Some(id) = order.orderId.stringValue {
+            id
+        } else {
+            continue;
+        };
+        let order_nonce = skip_fail!(fetch_order_nonce(dln_order_id.clone()).await) as i64;
+        info!(target: "DLN_ORDER_ID_UPDATES", "Order nonce: {:?}", order_nonce);
+        // Update the received_message_on_vault table with the order nonce
+        let update_query =
+            "UPDATE received_message_on_vault SET dln_order_id = $1 WHERE order_id = $2";
+        match db_client
+            .execute(update_query, &[&dln_order_id.to_string(), &order_nonce])
+            .await
+        {
+            Ok(_) => {
+                info!(target: "DLN_ORDER_ID_UPDATES", "Updated order nonce for order_id: {}", dln_order_id)
+            }
+            Err(e) => error!(target: "DLN_ORDER_ID_UPDATES", "Error updating order nonce: {:?}", e),
+        }
+        if dln_order_id == till_order_id {
+            break;
+        }
+    }
+
+    Ok(orders)
+}
+
+async fn get_latest_solana_dln_order_id(
+    client: &Arc<tokio_postgres::Client>,
+) -> Result<Option<String>, tokio_postgres::Error> {
+    let query = "SELECT dln_order_id FROM received_message_on_vault WHERE chain_id = $1 AND dln_order_id IS NOT NULL ORDER BY timestamp DESC LIMIT 1";
+
+    match client.query_opt(query, &[&SOLANA_CHAIN_ID]).await {
+        Ok(row) => Ok(row.and_then(|r| r.get("dln_order_id"))),
+        Err(e) => {
+            error!("Error fetching latest dln_order_id: {:?}", e);
+            Err(e)
+        }
+    }
+}
+
+async fn fetch_order_nonce(order_id: String) -> Result<u64, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&format!(
+            "https://stats-api.dln.trade/api/Orders/{}",
+            order_id
+        ))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let body = response.text().await.map_err(|e| e.to_string())?;
+    let order_nonce: Result<OrderNonceResponse, serde_json::Error> = serde_json::from_str(&body);
+    if let Err(e) = order_nonce {
+        error!(target: "DLN_ORDER_ID_UPDATES", "Error fetching order nonce: {:?}", e);
+        return Err(e.to_string());
+    }
+
+    let order_nonce = order_nonce.unwrap();
+
+    Ok(order_nonce.makerOrderNonce)
 }
 
 // Handler to fetch data from the database
@@ -428,15 +552,16 @@ async fn fetch_transaction_history(
 
     for intent_row in intent_rows {
         let intent_id: i64 = intent_row.get("intent_id");
-        let intent_state = match client
-            .query_one(query_intent_state, &[&intent_id])
-            .await {
-                Ok(state) => state,
-                Err(_e) => {
-                    error!("Error fetching intent state for intent_id: {}, error {:?}", intent_id, _e);
-                    continue
-                },
-            };
+        let intent_state = match client.query_one(query_intent_state, &[&intent_id]).await {
+            Ok(state) => state,
+            Err(_e) => {
+                error!(
+                    "Error fetching intent state for intent_id: {}, error {:?}",
+                    intent_id, _e
+                );
+                continue;
+            }
+        };
         let stage: String = intent_state.get("stage");
         let intent_version: i32 = intent_state.get("version");
 
@@ -890,7 +1015,7 @@ async fn fetch_contract_balance(
         }
         ContractBalanceRequest::SVM(svm_meta_data) => {
             let mut rpc_url = "";
-            let mut chain_id = "1399811149";
+            let mut chain_id = SOLANA_CHAIN_ID;
             match network.to_string().as_ref() {
                 "testnet" => {
                     rpc_url = "http://api.devnet.solana.com";
@@ -1088,7 +1213,7 @@ struct DepositHistory {
     timestamp: Option<DateTime<Utc>>,
     transaction_hash: Option<String>,
     message_id: Option<String>,
-    status: Option<i32>
+    status: Option<i32>,
 }
 
 async fn get_deposit_history(
@@ -1120,7 +1245,7 @@ async fn get_deposit_history(
                     timestamp: Some(datetime),
                     transaction_hash,
                     message_id,
-                    status
+                    status,
                 };
                 data.push(txn);
             }
@@ -1132,7 +1257,7 @@ async fn get_deposit_history(
 
 #[derive(Serialize)]
 struct OFACResponse {
-    block_request: bool
+    block_request: bool,
 }
 
 async fn check_ofac_list(
@@ -1146,25 +1271,23 @@ async fn check_ofac_list(
             let data: OFACResponse;
             if ofac_row.len() > 0 {
                 data = OFACResponse {
-                    block_request: true
+                    block_request: true,
                 }
             } else {
                 data = OFACResponse {
-                    block_request: false
-                } 
+                    block_request: false,
+                }
             }
             HttpResponse::Ok().json(data) // Return JSON response
         }
         Err(_e) => {
             println!("Error {:?}", _e);
             HttpResponse::InternalServerError().finish()
-        },
+        }
     }
 }
 
-async fn get_fee_data(
-    client: web::Data<Arc<tokio_postgres::Client>>
-) -> impl Responder {
+async fn get_fee_data(client: web::Data<Arc<tokio_postgres::Client>>) -> impl Responder {
     // let query_intent = "SELECT intent_id, feeAmount FROM intent";
     let query_fees = "SELECT intent_id, fees FROM intent_fees";
     match client.query(query_fees, &[]).await {
@@ -1177,7 +1300,7 @@ async fn get_fee_data(
                 })
                 .collect();
             HttpResponse::Ok().json(fee_data) // Return JSON response
-        },
+        }
         Err(_e) => {
             error!("Error {:?}", _e);
             HttpResponse::NotFound().finish()
@@ -1185,9 +1308,7 @@ async fn get_fee_data(
     }
 }
 
-async fn health_check(
-    client: web::Data<Arc<tokio_postgres::Client>>
-) -> impl Responder {
+async fn health_check(client: web::Data<Arc<tokio_postgres::Client>>) -> impl Responder {
     HttpResponse::Ok().json(json!({
         "status": "ok",
         "message": "Indexer connection is healthy"
