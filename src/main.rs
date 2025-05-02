@@ -11,7 +11,7 @@ use alloy::sol_types::SolValue;
 use chrono::{DateTime, Utc};
 use dotenv::dotenv;
 use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
-use log::{error, info};
+use log::{debug, error, info};
 use openssl::ssl::{SslConnector, SslMethod};
 use postgres_openssl::MakeTlsConnector;
 use serde::{Deserialize, Serialize};
@@ -336,6 +336,8 @@ async fn fetch_orders(
         .map_or(default_order_id.clone(), |id| {
             id.map_or(default_order_id, |id| id)
         });
+    
+    let mut updates = 0;
 
     for order in orders.orders.clone() {
         let dln_order_id = if let Some(id) = order.orderId.stringValue {
@@ -344,7 +346,7 @@ async fn fetch_orders(
             continue;
         };
         let order_nonce = skip_fail!(fetch_order_nonce(dln_order_id.clone()).await) as i64;
-        info!(target: "DLN_ORDER_ID_UPDATES", "Order nonce: {:?}", order_nonce);
+        debug!(target: "DLN_ORDER_ID_UPDATES", "Order nonce: {:?}", order_nonce);
         // Update the received_message_on_vault table with the order nonce
         let update_query =
             "UPDATE received_message_on_vault SET dln_order_id = $1 WHERE order_id = $2";
@@ -353,14 +355,17 @@ async fn fetch_orders(
             .await
         {
             Ok(_) => {
-                info!(target: "DLN_ORDER_ID_UPDATES", "Updated order nonce for order_id: {}", dln_order_id)
+                debug!(target: "DLN_ORDER_ID_UPDATES", "Updated order nonce for order_id: {}", dln_order_id)
             }
             Err(e) => error!(target: "DLN_ORDER_ID_UPDATES", "Error updating order nonce: {:?}", e),
         }
+        updates += 1;
         if dln_order_id == till_order_id {
             break;
         }
     }
+
+    info!(target: "DLN_ORDER_ID_UPDATES", "Updated {} order nonces", updates);
 
     Ok(orders)
 }
@@ -370,7 +375,9 @@ async fn get_latest_solana_dln_order_id(
 ) -> Result<Option<String>, tokio_postgres::Error> {
     let query = "SELECT dln_order_id FROM received_message_on_vault WHERE chain_id = $1 AND dln_order_id IS NOT NULL ORDER BY timestamp DESC LIMIT 1";
 
-    match client.query_opt(query, &[&SOLANA_CHAIN_ID]).await {
+    let solana_chain_id_i64 = SOLANA_CHAIN_ID.parse::<i64>().unwrap();
+
+    match client.query_opt(query, &[&solana_chain_id_i64]).await {
         Ok(row) => Ok(row.and_then(|r| r.get("dln_order_id"))),
         Err(e) => {
             error!("Error fetching latest dln_order_id: {:?}", e);

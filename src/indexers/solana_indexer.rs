@@ -198,7 +198,10 @@ impl SolanaIndexer {
         let mut last_searched_hash_val: Option<Signature> = None;
         let rpc_client = RpcClient::new(self.rpc_url.clone());
         let mut total_transactions = 0;
-        let mut current_slot = rpc_client.get_slot().await.unwrap();
+        let mut current_slot = loop {
+            let slot = skip_fail!(rpc_client.get_slot().await);
+            break slot;
+        };
         let mut fetched_previous_slots = true;
         if current_slot < previously_fetched_slot {
             fetched_previous_slots = false;
@@ -230,11 +233,11 @@ impl SolanaIndexer {
             };
             if sigs.is_empty() {
                 info!("Breaking because sigs length is 0");
-                current_slot = rpc_client.get_slot().await.unwrap();
+                current_slot = skip_fail!(rpc_client.get_slot().await);
                 continue;
             }
             if last_searched_hash_val.is_none() {
-                latest_tx = Some(Signature::from_str(&sigs.first().unwrap().signature).unwrap());
+                latest_tx = Some(skip_fail!(Signature::from_str(&sigs.first().unwrap().signature)));
                 info!("latest hash is {:?}", latest_tx);
             }
             info!("Got signatures");
@@ -559,12 +562,12 @@ impl SolanaIndexer {
             if current_slot < (previously_fetched_slot - 10) || fetched_previous_slots {
                 // If the current slot is less than the previously fetched slot, then we have fetched all the transactions
                 last_searched_hash_val = None;
-                current_slot = rpc_client.get_slot().await.unwrap();
+                current_slot = skip_fail!(rpc_client.get_slot().await);
                 fetched_previous_slots = true;
             } else {
                 // Fetches the last signatures from the batch of signatures which are fetched. Used for getting
                 // the signatures before the signature below.
-                last_searched_hash_val = Some(Signature::from_str(&last_sig.signature)?);
+                last_searched_hash_val = Some(skip_fail!(Signature::from_str(&last_sig.signature)));
                 current_slot = last_sig.slot;
             }
         }
