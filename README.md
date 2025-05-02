@@ -117,7 +117,7 @@ intent_fees (
 # APIs
 
 **Base url Devnet - http://192.241.245.190:18891**
-**Base url Mainnet - http://143.244.173.82:18891**
+**Base url Mainnet - https://indexer.inclusivelayer.com**
 
 ## All transactions
 

@@ -385,7 +385,7 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         "from_amount": amount_in,
         "from_address": ""
     });
-    let url = "http://143.244.173.82:18893/quote";
+    let url = "https://price-feed.inclusivelayer.com/quote";
     let fee_data_response = match request_client.post(url).json(&fees_request_payload).send().await {
         Ok(res) => {
             let fee_data = match res.json::<QuoteApiResponse>().await {
