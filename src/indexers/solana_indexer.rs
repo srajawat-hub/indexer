@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, str::FromStr, sync::Arc, thread::sleep, time::{Duration, SystemTime}
+    collections::HashMap, str::FromStr, sync::Arc, thread::sleep, time::{Duration, SystemTime, UNIX_EPOCH}
 };
 
 use crate::{
@@ -373,7 +373,14 @@ impl SolanaIndexer {
                             let provider = interop_provider as i32;
                             let tx_hash = sigs[index].signature.clone();
 
-                            let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
+                            // 5 mins from current time as default for intent timeout
+                            let timeout_unix_timestamp_in_seconds: i64 = SystemTime::now()
+                                .checked_add(Duration::from_secs(300))
+                                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                                .map(|d| d.as_secs() as i64)
+                                .unwrap_or(0);
+
+                            let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
                             let response = skip_fail!(
                                 database_client
                                     .execute(
@@ -389,6 +396,8 @@ impl SolanaIndexer {
                                             &system_time,
                                             &self.chain_id,
                                             &order_id,
+                                            &"0x".to_string(), // placeholder for dln_order_id
+                                            &timeout_unix_timestamp_in_seconds
                                         ],
                                     )
                                     .await
