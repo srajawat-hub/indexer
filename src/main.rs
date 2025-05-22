@@ -38,7 +38,10 @@ use utils::{get_api_url, structure_intent_orders};
 
 const DEFAULT_ORDER_ID: &str = "0xa4afcf3ebbcb201aee94cde46dc61e70ef31a98cfd8457bc48243238f5598eb2";
 const DEBRIDGE_ORDER_MAKER_ADDRESS: &str = "2iqe742BvvymavtgyywmW2iqTdbaUDsyRK3SZJnqNnEk";
-const DEBRIDGE_ORDER_AUTHORITY: Pubkey = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
+#[cfg(not(feature = "testnet"))] // production
+const VAULT_PROGRAM_ID: Pubkey = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
+#[cfg(feature = "testnet")]
+const VAULT_PROGRAM_ID: Pubkey = pubkey!("2RBS3DPck8CoF9b31nQDRE3j9xsx5io1STAk2irhgoBC");
 const SOLANA_CHAIN_ID: &str = "1399811149";
 const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
@@ -1054,7 +1057,7 @@ async fn fetch_contract_balance(
                             user_address.as_slice(),
                             native_token_mint.as_ref(),
                         ],
-                        &DEBRIDGE_ORDER_AUTHORITY,
+                        &VAULT_PROGRAM_ID,
                     )
                     .0;
 
@@ -1100,7 +1103,7 @@ async fn fetch_contract_balance(
                             user_address.as_slice(),
                             token_mint.as_ref(),
                         ],
-                        &DEBRIDGE_ORDER_AUTHORITY,
+                        &VAULT_PROGRAM_ID,
                     )
                     .0;
 
