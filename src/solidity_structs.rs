@@ -1,6 +1,6 @@
+use crate::utils::deserialize_number;
 use alloy::sol;
 use serde::{Deserialize, Serialize};
-use crate::utils::deserialize_number;
 
 pub mod intent_processor {
     use alloy::sol;
@@ -71,7 +71,6 @@ pub mod intent_lib {
         "abi/IntentLib.json"
     );
 }
-
 
 // Define our intent payload enum using Alloy's sol! macro
 sol! {
@@ -530,7 +529,7 @@ sol! {
 
     #[derive(Debug)]
     event DispatchId(bytes32 indexed messageId);
-    
+
     #[derive(Debug)]
     event ProcessId(bytes32 indexed messageId);
 }
@@ -559,7 +558,7 @@ pub struct ThirdPartyFeeResult {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct QuoteApiResponse {
-    pub fee_data: ResultCosts
+    pub fee_data: ResultCosts,
 }
 
 // Add these structs near other struct definitions

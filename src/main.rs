@@ -1,3 +1,5 @@
+#![allow(non_snake_case)] // TODO: fix the identifiers and use `serde(rename_all = "snakeCase")` to properly name the fields
+
 // src/main.rs
 mod events;
 mod indexers;
@@ -18,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::pubkey;
 use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
     AcknowledgementMetadataStake, IntentPayloadEnum,
@@ -33,10 +36,10 @@ use std::time::{Duration, SystemTime};
 use tokio::signal;
 use utils::{get_api_url, structure_intent_orders};
 
-pub const DEFAULT_ORDER_ID: &str =
-    "0xa4afcf3ebbcb201aee94cde46dc61e70ef31a98cfd8457bc48243238f5598eb2";
-pub const DEBRIDGE_ORDER_MAKER_ADDRESS: &str = "2iqe742BvvymavtgyywmW2iqTdbaUDsyRK3SZJnqNnEk";
-pub const SOLANA_CHAIN_ID: &str = "1399811149";
+const DEFAULT_ORDER_ID: &str = "0xa4afcf3ebbcb201aee94cde46dc61e70ef31a98cfd8457bc48243238f5598eb2";
+const DEBRIDGE_ORDER_MAKER_ADDRESS: &str = "2iqe742BvvymavtgyywmW2iqTdbaUDsyRK3SZJnqNnEk";
+const DEBRIDGE_ORDER_AUTHORITY: Pubkey = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
+const SOLANA_CHAIN_ID: &str = "1399811149";
 const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
 #[derive(Deserialize)]
@@ -145,7 +148,7 @@ async fn main() {
 
     builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
 
-    let mut connector = MakeTlsConnector::new(builder.build());
+    let connector = MakeTlsConnector::new(builder.build());
 
     let (client, connection) = tokio_postgres::connect(&connect_statement, connector)
         .await
@@ -914,9 +917,6 @@ async fn fetch_contract_balance(
         .parse::<String>()
         .unwrap();
 
-    let SOLANA_PROGRAM_ID: Pubkey =
-        Pubkey::from_str("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz").unwrap();
-
     match req.0 {
         ContractBalanceRequest::EVM(contracts) => {
             for contract in contracts.token_address {
@@ -1054,7 +1054,7 @@ async fn fetch_contract_balance(
                             user_address.as_slice(),
                             native_token_mint.as_ref(),
                         ],
-                        &SOLANA_PROGRAM_ID,
+                        &DEBRIDGE_ORDER_AUTHORITY,
                     )
                     .0;
 
@@ -1100,7 +1100,7 @@ async fn fetch_contract_balance(
                             user_address.as_slice(),
                             token_mint.as_ref(),
                         ],
-                        &SOLANA_PROGRAM_ID,
+                        &DEBRIDGE_ORDER_AUTHORITY,
                     )
                     .0;
 

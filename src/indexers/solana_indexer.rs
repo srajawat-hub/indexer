@@ -1,5 +1,9 @@
 use std::{
-    collections::HashMap, str::FromStr, sync::Arc, thread::sleep, time::{Duration, SystemTime}
+    collections::HashMap,
+    str::FromStr,
+    sync::Arc,
+    thread::sleep,
+    time::{Duration, SystemTime},
 };
 
 use crate::{
@@ -43,7 +47,7 @@ fn get_native_token_symbol(chain_id: i64) -> (String, u32) {
         137 => (String::from("POL"), 18),
         1399811149 => (String::from("SOL"), 9),
         18082 => (String::from("USDC"), 18),
-        _ => (String::from("ETH"), 18)
+        _ => (String::from("ETH"), 18),
     }
 }
 
@@ -67,15 +71,17 @@ struct Quote {
 }
 
 pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) -> String {
-
     let cmc_api_key = std::env::var("CMC_API_KEY")
-    .expect("CMC_API_KEY must be set")
-    .parse::<String>()
-    .unwrap();
+        .expect("CMC_API_KEY must be set")
+        .parse::<String>()
+        .unwrap();
 
     let (token_symbol, token_decimals) = get_native_token_symbol(*chain_id);
 
-    let cmc_api = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol={}", token_symbol);
+    let cmc_api = format!(
+        "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol={}",
+        token_symbol
+    );
     let mut headers = HeaderMap::new();
     match HeaderValue::from_str(&cmc_api_key) {
         Ok(header_value) => {
@@ -99,14 +105,17 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
             let json_result = response.json::<ApiResponse>().await;
             match json_result {
                 Ok(api_response) => {
-                    if let Some((tokens)) = api_response.data.get(&token_symbol) {
+                    if let Some(tokens) = api_response.data.get(&token_symbol) {
                         if let Some(first_token) = tokens.first() {
                             if let Some(quote) = first_token.quote.get("USD") {
                                 match quote.price {
                                     Some(price) => {
                                         info!("Price of {}: ${}", token_symbol, price);
-                                        transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string()
-                                    },
+                                        transaction_fees_usd = ((*transaction_cost as f64
+                                            / 10_f64.powf(token_decimals as f64))
+                                            * price)
+                                            .to_string()
+                                    }
                                     None => info!("Price not available for {}", token_symbol),
                                 }
                             } else {
@@ -142,13 +151,14 @@ pub async fn update_intent_state(
     initiator_address: String,
     client: &Arc<Client>,
     compute_units_consumed: &i64,
-    transaction_cost: &str
+    transaction_cost: &str,
 ) {
     // let gas_fees = 1 as i64; // updating gas token
     let query = "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
     let timestamp = std::time::SystemTime::now();
 
-    let transaction_cost_usd = get_usd_value_of_native(chain_id, &transaction_cost.parse::<u128>().unwrap()).await;
+    let transaction_cost_usd =
+        get_usd_value_of_native(chain_id, &transaction_cost.parse::<u128>().unwrap()).await;
 
     let initiator_address_str = initiator_address.to_string();
     info!("Tx hash length {:?}", transaction_hash.len());
@@ -169,7 +179,7 @@ pub async fn update_intent_state(
                 &chain_id,
                 &initiator_address,
                 &transaction_cost,
-                &transaction_cost_usd
+                &transaction_cost_usd,
             ],
         )
         .await
@@ -237,7 +247,9 @@ impl SolanaIndexer {
                 continue;
             }
             if last_searched_hash_val.is_none() {
-                latest_tx = Some(skip_fail!(Signature::from_str(&sigs.first().unwrap().signature)));
+                latest_tx = Some(skip_fail!(Signature::from_str(
+                    &sigs.first().unwrap().signature
+                )));
                 info!("latest hash is {:?}", latest_tx);
             }
             info!("Got signatures");
@@ -299,13 +311,14 @@ impl SolanaIndexer {
                     Local::now().timestamp()
                 };
 
-                let (tx_cost, compute_units_used) = match &tx.result.transaction.meta{
+                let (tx_cost, compute_units_used) = match &tx.result.transaction.meta {
                     Some(metadata) => {
                         let tx_cost = metadata.fee.to_string();
-                        let compute_units = metadata.compute_units_consumed.clone().unwrap_or(0) as i64;
+                        let compute_units =
+                            metadata.compute_units_consumed.clone().unwrap_or(0) as i64;
                         (tx_cost, compute_units)
-                    },
-                    None => (String::from("0"), 0i64)
+                    }
+                    None => (String::from("0"), 0i64),
                 };
 
                 let system_time = SystemTime::UNIX_EPOCH + Duration::from_millis(timestamp as u64);
@@ -408,7 +421,7 @@ impl SolanaIndexer {
                                 sender_address,
                                 &database_client,
                                 &compute_units_used,
-                                &tx_cost
+                                &tx_cost,
                             )
                             .await;
                         }
@@ -511,7 +524,7 @@ impl SolanaIndexer {
                                 creator_address,
                                 &database_client,
                                 &compute_units_used,
-                                &tx_cost
+                                &tx_cost,
                             )
                             .await;
                         }

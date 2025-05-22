@@ -8,18 +8,23 @@ use alloy::rpc::types::Log;
 use alloy::sol_types::SolValue;
 use alloy::{pubsub::SubscriptionStream, sol_types::SolEvent};
 use futures_util::stream::StreamExt;
-use log::{debug, info, error};
-use serde::Deserialize;
-use serde_json::{json, Value};
-use tokio_postgres::Client;
-use solana_sdk::pubkey::Pubkey;
+use log::{debug, error, info};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use serde::Deserialize;
+use serde_json::json;
+use solana_sdk::pubkey::Pubkey;
+use tokio_postgres::Client;
 
 use crate::solidity_structs::{
-    self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, AmountTypes, CreatedOrder, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, ProcessId, QuoteApiResponse, ReceiverUserAddressData, ReceiverVaultData, ResultCosts, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, ThirdPartyFeeResult, VaultBoundMessagePlaceOrderData
+    self, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, AmountTypes, CreatedOrder,
+    DispatchId, IntentProcessorBoundMessageAcknowledgementData,
+    IntentProcessorBoundMessageDepositData, ProcessId, QuoteApiResponse, ReceiverUserAddressData,
+    ReceiverVaultData, ResultCosts, SolidityAcknowledgementMetadata,
+    SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage,
+    ThirdPartyFeeResult, VaultBoundMessagePlaceOrderData,
 };
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault
+    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
 use crate::SOLANA_CHAIN_ID;
 
@@ -43,7 +48,7 @@ pub enum IntentStage {
 #[derive(Debug)]
 pub enum DepositStatus {
     Initialized,
-    Done
+    Done,
 }
 
 impl ToString for IntentStage {
@@ -57,13 +62,12 @@ impl ToString for IntentStage {
     }
 }
 
-
 fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
     match chain_id {
-        137 => (String::from("28321"), 18), // pol
+        137 => (String::from("28321"), 18),      // pol
         1399811149 => (String::from("5426"), 9), // sol
-        18082 => (String::from("3408"), 18), // usdc
-        _ => (String::from("1027"), 18) // ETH
+        18082 => (String::from("3408"), 18),     // usdc
+        _ => (String::from("1027"), 18),         // ETH
     }
 }
 
@@ -113,19 +117,19 @@ pub async fn get_usd_value_of_native(
     cmc_id: Option<String>,
     symbol: Option<String>,
     decimals: Option<i32>,
-    timestamp: Option<String>
+    timestamp: Option<String>,
 ) -> String {
     let cmc_api_key = std::env::var("CMC_API_KEY")
-    .expect("CMC_API_KEY must be set")
-    .parse::<String>()
-    .unwrap();
+        .expect("CMC_API_KEY must be set")
+        .parse::<String>()
+        .unwrap();
 
     let mut token_symbol = String::new();
     let mut token_decimals = 0_u32;
 
     let cmc_api = match cmc_id.clone() {
         Some(id) => {
-            if (symbol == None || decimals == None) {
+            if symbol == None || decimals == None {
                 error!("CMC_ID not found");
                 return String::from("0");
             }
@@ -137,11 +141,14 @@ pub async fn get_usd_value_of_native(
                     cmc_api_url = format!("https://pro-api.coinmarketcap.com/v3/cryptocurrency/quotes/historical?id={}&time_start={}&count=1", id, time);
                 }
                 None => {
-                    cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", id);
+                    cmc_api_url = format!(
+                        "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}",
+                        id
+                    );
                 }
             };
             cmc_api_url
-        },
+        }
         None => {
             (token_symbol, token_decimals) = get_native_token_cmc_id(*chain_id);
             let mut cmc_api_url = String::new();
@@ -150,7 +157,10 @@ pub async fn get_usd_value_of_native(
                     cmc_api_url = format!("https://pro-api.coinmarketcap.com/v3/cryptocurrency/quotes/historical?id={}&time_start={}&count=1", token_symbol, time);
                 }
                 None => {
-                    cmc_api_url = format!("https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}", token_symbol);
+                    cmc_api_url = format!(
+                        "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}",
+                        token_symbol
+                    );
                 }
             };
             cmc_api_url
@@ -189,16 +199,24 @@ pub async fn get_usd_value_of_native(
 
                     match json_result {
                         Ok(api_response) => {
-                            if let Some((tokens)) = api_response.data.get(&token_getter) {
+                            if let Some(tokens) = api_response.data.get(&token_getter) {
                                 if tokens.quotes.len() > 0 {
                                     if let Some(quote) = tokens.quotes[0].quote.get("USD") {
                                         match quote.price {
                                             Some(price) => {
                                                 info!("Price of {}: ${}", token_getter, price);
-                                                transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
-                                                info!("Transaction fee in usd {:?}", transaction_fees_usd);
-                                            },
-                                            None => error!("Price not available for {}", token_getter),
+                                                transaction_fees_usd = ((*transaction_cost as f64
+                                                    / 10_f64.powf(token_decimals as f64))
+                                                    * price)
+                                                    .to_string();
+                                                info!(
+                                                    "Transaction fee in usd {:?}",
+                                                    transaction_fees_usd
+                                                );
+                                            }
+                                            None => {
+                                                error!("Price not available for {}", token_getter)
+                                            }
                                         }
                                     } else {
                                         error!("USD quote not available.");
@@ -214,20 +232,26 @@ pub async fn get_usd_value_of_native(
                             error!("Failed to parse JSON: {}", e);
                         }
                     };
-                },
+                }
                 None => {
                     let json_result = response.json::<ApiResponse>().await;
 
                     match json_result {
                         Ok(api_response) => {
-                            if let Some((tokens)) = api_response.data.get(&token_getter) {
+                            if let Some(tokens) = api_response.data.get(&token_getter) {
                                 if let Some(quote) = tokens.quote.get("USD") {
                                     match quote.price {
                                         Some(price) => {
                                             info!("Price of {}: ${}", token_getter, price);
-                                            transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string();
-                                            info!("Transaction fee in usd {:?}", transaction_fees_usd);
-                                        },
+                                            transaction_fees_usd = ((*transaction_cost as f64
+                                                / 10_f64.powf(token_decimals as f64))
+                                                * price)
+                                                .to_string();
+                                            info!(
+                                                "Transaction fee in usd {:?}",
+                                                transaction_fees_usd
+                                            );
+                                        }
                                         None => error!("Price not available for {}", token_getter),
                                     }
                                 } else {
@@ -267,27 +291,29 @@ pub async fn update_intent_state(
         "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9, $10, $11)";
     let timestamp = std::time::SystemTime::now();
 
-    let (gas_used, transaction_cost) = match provider.get_transaction_receipt(transaction_hash).await {
-        Ok(receipt) => {
-            let (gas_used, gas_price) = match receipt {
-                Some(tx_receipt) => {
-                    let gas_used = tx_receipt.gas_used as i64;
-                    let gas_price = tx_receipt.effective_gas_price;
-                    (gas_used, gas_price)
-                },
-                None => {
-                    error!("Transaction receipt not found");
-                    (0 as i64, 0u128)
-                }
-            };
-            let transaction_cost = ((gas_used as u128) * gas_price);
-            (gas_used, transaction_cost)
-        }
-        Err(_e) => (0 as i64, 0u128),
-    };
+    let (gas_used, transaction_cost) =
+        match provider.get_transaction_receipt(transaction_hash).await {
+            Ok(receipt) => {
+                let (gas_used, gas_price) = match receipt {
+                    Some(tx_receipt) => {
+                        let gas_used = tx_receipt.gas_used as i64;
+                        let gas_price = tx_receipt.effective_gas_price;
+                        (gas_used, gas_price)
+                    }
+                    None => {
+                        error!("Transaction receipt not found");
+                        (0 as i64, 0u128)
+                    }
+                };
+                let transaction_cost = (gas_used as u128) * gas_price;
+                (gas_used, transaction_cost)
+            }
+            Err(_e) => (0 as i64, 0u128),
+        };
     let txn_hash_str = transaction_hash.to_string();
 
-    let transaction_cost_usd = get_usd_value_of_native(&chain_id, &transaction_cost, None, None, None, None).await;
+    let transaction_cost_usd =
+        get_usd_value_of_native(&chain_id, &transaction_cost, None, None, None, None).await;
 
     let _intent_state_response = match client
         .execute(
@@ -303,17 +329,18 @@ pub async fn update_intent_state(
                 &chain_id,
                 &initiator_address,
                 &transaction_cost.to_string(),
-                &transaction_cost_usd
+                &transaction_cost_usd,
             ],
         )
-        .await {
-            Ok(res) => {
-                info!(target: "EVM update_intent_state", "Intent State Updated for intent id: {intent_id} to version: {version}");
-            },
-            Err(e) => {
-                error!(target: "EVM update_intent_state", "Failed to update intent state for intent id: {intent_id} to version: {version}: {:?}", e);
-            }
-        };
+        .await
+    {
+        Ok(res) => {
+            info!(target: "EVM update_intent_state", "Intent State Updated for intent id: {intent_id} to version: {version}");
+        }
+        Err(e) => {
+            error!(target: "EVM update_intent_state", "Failed to update intent state for intent id: {intent_id} to version: {version}: {:?}", e);
+        }
+    };
 }
 
 pub async fn fetch_intent_initiator(intent_id: i64, client: &Arc<Client>) -> String {
@@ -322,7 +349,7 @@ pub async fn fetch_intent_initiator(intent_id: i64, client: &Arc<Client>) -> Str
         Ok(res) => {
             let owner_address: String = res.get("owner_address");
             owner_address
-        },
+        }
         Err(e) => {
             error!(target: "EVM Fetch intent owner", "Failed to fetch intent owner: {:?}", e);
             String::new()
@@ -331,8 +358,13 @@ pub async fn fetch_intent_initiator(intent_id: i64, client: &Arc<Client>) -> Str
     initiator_address
 }
 
-
-async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_in: &str, token_out: &str, amount_in: &str) -> ResultCosts {
+async fn get_fees_data(
+    source_chain_id: &str,
+    destination_chain_id: &str,
+    token_in: &str,
+    token_out: &str,
+    amount_in: &str,
+) -> ResultCosts {
     let request_client = reqwest::Client::new();
 
     let mut payload_token_in = String::from(token_in);
@@ -362,7 +394,7 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
         payload_token_out = format!("0x{}", trimmed)
     } else {
-        if (token_out.starts_with("0x")) {
+        if token_out.starts_with("0x") {
             let without_prefix = token_out.trim_start_matches("0x"); // Remove "0x" prefix
             if let Ok(token_bytes) = hex::decode(without_prefix) {
                 if token_bytes.len() == 32 {
@@ -376,7 +408,6 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         }
     }
 
-
     let fees_request_payload = json!({
         "from_chain": source_chain_id,
         "to_chain": destination_chain_id,
@@ -386,48 +417,93 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
         "from_address": ""
     });
     let url = "https://price-feed.inclusivelayer.com/quote";
-    let fee_data_response = match request_client.post(url).json(&fees_request_payload).send().await {
+    let fee_data_response = match request_client
+        .post(url)
+        .json(&fees_request_payload)
+        .send()
+        .await
+    {
         Ok(res) => {
             let fee_data = match res.json::<QuoteApiResponse>().await {
-                Ok(data) => {
-                    data.fee_data
-                },
+                Ok(data) => data.fee_data,
                 Err(_e) => {
                     error!("Error in parsing response of fetching fees from the quotation service {:?}", _e);
                     ResultCosts {
-                        destination_cost: AmountTypes { value: None, value_type: None },
-                        inclusive_layer_fee: AmountTypes { value: None, value_type: None },
-                        provider_fee: ThirdPartyFeeResult {
-                            flat_fee: AmountTypes { value: None, value_type: None },
-                            provider: None,
-                            solver_fee: AmountTypes { value: None, value_type: None },
-                            variable_fee: AmountTypes { value: None, value_type: None },
+                        destination_cost: AmountTypes {
+                            value: None,
+                            value_type: None,
                         },
-                        source_cost: AmountTypes { value: None, value_type: None },
+                        inclusive_layer_fee: AmountTypes {
+                            value: None,
+                            value_type: None,
+                        },
+                        provider_fee: ThirdPartyFeeResult {
+                            flat_fee: AmountTypes {
+                                value: None,
+                                value_type: None,
+                            },
+                            provider: None,
+                            solver_fee: AmountTypes {
+                                value: None,
+                                value_type: None,
+                            },
+                            variable_fee: AmountTypes {
+                                value: None,
+                                value_type: None,
+                            },
+                        },
+                        source_cost: AmountTypes {
+                            value: None,
+                            value_type: None,
+                        },
                     }
                 }
             };
             fee_data
-        },
+        }
         Err(_e) => {
             info!("Error in fetching fees from the quotation service {:?}", _e);
             ResultCosts {
-                destination_cost: AmountTypes { value: None, value_type: None },
-                inclusive_layer_fee: AmountTypes { value: None, value_type: None },
-                provider_fee: ThirdPartyFeeResult {
-                    flat_fee: AmountTypes { value: None, value_type: None },
-                    provider: None,
-                    solver_fee: AmountTypes { value: None, value_type: None },
-                    variable_fee: AmountTypes { value: None, value_type: None },
+                destination_cost: AmountTypes {
+                    value: None,
+                    value_type: None,
                 },
-                source_cost: AmountTypes { value: None, value_type: None },
+                inclusive_layer_fee: AmountTypes {
+                    value: None,
+                    value_type: None,
+                },
+                provider_fee: ThirdPartyFeeResult {
+                    flat_fee: AmountTypes {
+                        value: None,
+                        value_type: None,
+                    },
+                    provider: None,
+                    solver_fee: AmountTypes {
+                        value: None,
+                        value_type: None,
+                    },
+                    variable_fee: AmountTypes {
+                        value: None,
+                        value_type: None,
+                    },
+                },
+                source_cost: AmountTypes {
+                    value: None,
+                    value_type: None,
+                },
             }
         }
     };
     fee_data_response
 }
 
-pub async fn get_amount_usd_value(token_in: String, chain_id: String, amount: Option<String>, client: &Arc<Client>, timestamp: Option<String>) -> String {
+pub async fn get_amount_usd_value(
+    token_in: String,
+    chain_id: String,
+    amount: Option<String>,
+    client: &Arc<Client>,
+    timestamp: Option<String>,
+) -> String {
     let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32
         FROM tokens t
         JOIN token_chains tc ON t.id = tc.token_id
@@ -438,22 +514,33 @@ pub async fn get_amount_usd_value(token_in: String, chain_id: String, amount: Op
 
     let inclusive_layer_fee_usd = match &amount {
         Some(fee) => {
-            let token_data = match client.query_one(tokens_query, &[&token_in, &chain_id]).await {
+            let token_data = match client
+                .query_one(tokens_query, &[&token_in, &chain_id])
+                .await
+            {
                 Ok(res) => {
                     let cmc_id: String = res.get("cmc_id");
                     let symbol: String = res.get("ticker");
                     let decimals: i32 = res.get("decimals");
-                    let inclusive_layer_fee_usd = get_usd_value_of_native(&chain_id.parse::<i64>().unwrap(), &fee.parse::<u128>().unwrap(), Some(cmc_id), Some(symbol), Some(decimals), timestamp).await;
+                    let inclusive_layer_fee_usd = get_usd_value_of_native(
+                        &chain_id.parse::<i64>().unwrap(),
+                        &fee.parse::<u128>().unwrap(),
+                        Some(cmc_id),
+                        Some(symbol),
+                        Some(decimals),
+                        timestamp,
+                    )
+                    .await;
                     inclusive_layer_fee_usd
-                },
+                }
                 Err(_e) => {
                     error!(target: log_target, "Failed to get inclusive_layer_fee_usd, error: {:?}", _e);
                     String::from("0.0")
                 }
             };
             token_data
-        },
-        None => String::from("0.0")
+        }
+        None => String::from("0.0"),
     };
     inclusive_layer_fee_usd
 }
@@ -468,8 +555,11 @@ pub async fn process_evm_events(
     while let Some(log) = stream.next().await {
         match log.topic0() {
             Some(&IntentLibV2::IntentSubmitted::SIGNATURE_HASH) => {
-                let IntentLibV2::IntentSubmitted { intentId, owner, feeAmount } =
-                    log.log_decode().unwrap().inner.data;
+                let IntentLibV2::IntentSubmitted {
+                    intentId,
+                    owner,
+                    feeAmount,
+                } = log.log_decode().unwrap().inner.data;
 
                 let log_target = "IntentSubmitted";
                 info!(target: log_target, "IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
@@ -520,7 +610,10 @@ pub async fn process_evm_events(
                 .await;
             }
             Some(&IntentProcessorV2::IntentFees::SIGNATURE_HASH) => {
-                let IntentProcessorV2::IntentFees {intentId, feeAmount} = log.log_decode().unwrap().inner.data;
+                let IntentProcessorV2::IntentFees {
+                    intentId,
+                    feeAmount,
+                } = log.log_decode().unwrap().inner.data;
 
                 let log_target = "IntentFees";
                 info!(target: log_target, "IntentProcessorV2::IntentFees with intent_id {intentId} and feeAmount {feeAmount}");
@@ -531,13 +624,14 @@ pub async fn process_evm_events(
 
                 let intent_rows_updated = match client
                     .execute(query, &[&fee_amount, &intent_id])
-                    .await {
-                        Ok(res) => res,
-                        Err(_e) => {
-                            error!(target: log_target, "Failed to update intent feeAmount {:?}", _e);
-                            continue;
-                        }
-                    };
+                    .await
+                {
+                    Ok(res) => res,
+                    Err(_e) => {
+                        error!(target: log_target, "Failed to update intent feeAmount {:?}", _e);
+                        continue;
+                    }
+                };
                 info!(target: log_target,
                     "updated actual amount for order, updated rows count {:?}",
                     intent_rows_updated
@@ -637,8 +731,22 @@ pub async fn process_evm_events(
                 let current_timestamp = std::time::SystemTime::now();
                 let timestamp = current_timestamp;
 
-                let amount_in_usd = get_amount_usd_value(token_in.clone(), source_chain_id.clone(), Some(amount_in.clone()), &client, None).await;
-                let amount_out_usd = get_amount_usd_value(token_out.clone(), destination_chain_id.clone(), Some(amount_out.clone()), &client, None).await;
+                let amount_in_usd = get_amount_usd_value(
+                    token_in.clone(),
+                    source_chain_id.clone(),
+                    Some(amount_in.clone()),
+                    &client,
+                    None,
+                )
+                .await;
+                let amount_out_usd = get_amount_usd_value(
+                    token_out.clone(),
+                    destination_chain_id.clone(),
+                    Some(amount_out.clone()),
+                    &client,
+                    None,
+                )
+                .await;
 
                 let query: &str =
                     "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)";
@@ -664,7 +772,7 @@ pub async fn process_evm_events(
                             &receiver_type,
                             &receiver_address,
                             &amount_in_usd,
-                            &amount_out_usd
+                            &amount_out_usd,
                         ],
                     )
                     .await
@@ -686,9 +794,23 @@ pub async fn process_evm_events(
                 )
                 .await;
 
-                let intent_fees: ResultCosts = get_fees_data(&source_chain_id, &destination_chain_id, &token_in, &token_out, &amount_in).await;
+                let intent_fees: ResultCosts = get_fees_data(
+                    &source_chain_id,
+                    &destination_chain_id,
+                    &token_in,
+                    &token_out,
+                    &amount_in,
+                )
+                .await;
 
-                let inclusive_layer_fee_usd = get_amount_usd_value(token_in.clone(), source_chain_id.clone(),intent_fees.inclusive_layer_fee.value.clone(), &client, None).await;
+                let inclusive_layer_fee_usd = get_amount_usd_value(
+                    token_in.clone(),
+                    source_chain_id.clone(),
+                    intent_fees.inclusive_layer_fee.value.clone(),
+                    &client,
+                    None,
+                )
+                .await;
 
                 let mut fee_data_json = match serde_json::to_value(&intent_fees) {
                     Ok(value) => value,
@@ -705,14 +827,20 @@ pub async fn process_evm_events(
 
                 // Insert the new field into the object
                 if let serde_json::Value::Object(ref mut map) = fee_data_json {
-                    map.insert("inclusive_layer_fee_usd".to_string(), inclusive_layer_fee_usd_json);
+                    map.insert(
+                        "inclusive_layer_fee_usd".to_string(),
+                        inclusive_layer_fee_usd_json,
+                    );
                 }
 
                 let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2)";
-                match client.execute(intent_fee_add_query, &[&intent_id, &fee_data_json]).await {
+                match client
+                    .execute(intent_fee_add_query, &[&intent_id, &fee_data_json])
+                    .await
+                {
                     Ok(res) => {
                         info!(target: log_target, "intent_fee_add_res {:?}", res);
-                    },
+                    }
                     Err(_e) => {
                         error!(target: log_target, "error in posting to intent_fees table {:?}", _e);
                         continue;
@@ -742,21 +870,23 @@ pub async fn process_evm_events(
 
                 // fetching intent id
                 let intent_id_query = "SELECT intent_id, token_out, destination_chain_id, timestamp FROM order_created WHERE order_id = $1";
-                let intent_id_response = match client
-                    .query_one(intent_id_query, &[&order_id])
-                    .await {
-                        Ok(row) => row,
-                        Err(_e) => {
-                            error!(target: log_target, "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, _e);
-                            continue;
-                        }
-                    };
+                let intent_id_response = match client.query_one(intent_id_query, &[&order_id]).await
+                {
+                    Ok(row) => row,
+                    Err(_e) => {
+                        error!(target: log_target, "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, _e);
+                        continue;
+                    }
+                };
                 let intent_id: i64 = intent_id_response.get("intent_id");
                 let token_out: String = intent_id_response.get("token_out");
                 let destination_chain_id: String = intent_id_response.get("destination_chain_id");
                 let order_timestamp: SystemTime = intent_id_response.get("timestamp");
-                let time = order_timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs().to_string();
-
+                let time = order_timestamp
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    .to_string();
 
                 let query =
                     "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
@@ -838,10 +968,15 @@ pub async fn process_evm_events(
                         destination_chain_id,
                         Some(actual_amount.clone()),
                         &client,
-                        None).await;
+                        None,
+                    )
+                    .await;
 
                     let order_rows_updated = client
-                        .execute(update_order_query, &[&actual_amount, &amount_out_usd, &order_id])
+                        .execute(
+                            update_order_query,
+                            &[&actual_amount, &amount_out_usd, &order_id],
+                        )
                         .await
                         .unwrap();
                     info!(target: log_target,
@@ -903,26 +1038,30 @@ pub async fn process_evm_events(
                     Some(id) => {
                         let message_id = id.to_string();
                         let query = "INSERT INTO deposit_received VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (message_id) DO UPDATE SET status = EXCLUDED.status WHERE deposit_received.status <> 1;";
-                        let deposit_transaction = match client.execute(
-                            query,
-                            &[
-                                &user_address,
-                                &token_address,
-                                &chain_id,
-                                &amount,
-                                &timestamp,
-                                &transaction_hash.to_string(),
-                                &message_id,
-                                &deposit_status
-                            ]).await {
+                        let deposit_transaction = match client
+                            .execute(
+                                query,
+                                &[
+                                    &user_address,
+                                    &token_address,
+                                    &chain_id,
+                                    &amount,
+                                    &timestamp,
+                                    &transaction_hash.to_string(),
+                                    &message_id,
+                                    &deposit_status,
+                                ],
+                            )
+                            .await
+                        {
                             Ok(row) => {
                                 info!(target: log_target, "Successfully updated deposit status with message_id {:?}", message_id);
-                            },
+                            }
                             Err(_e) => {
                                 error!(target: log_target, "Error updating deposit status with message_id {:?} with error {:?}", message_id, _e);
                             }
                         };
-                    },
+                    }
                     None => {
                         // if not, we will have to add this into history
                         let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
@@ -936,7 +1075,7 @@ pub async fn process_evm_events(
                                     &amount,
                                     &timestamp,
                                     &transaction_hash.to_string(),
-                                    &deposit_status
+                                    &deposit_status,
                                 ],
                             )
                             .await
@@ -960,14 +1099,16 @@ pub async fn process_evm_events(
                 info!(target: log_target, "Vault::ReceivedMessageOnVault from id {origin} by {sender}, message = {message}, using provider = {provider}");
 
                 let message_slice = message.as_ref();
-                let decoded_message =
-                    match SolidityVaultBoundMessage::abi_decode(message_slice, true) {
-                        Ok(res) => res,
-                        Err(e) => {
-                            error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
-                            continue;
-                        }
-                    };
+                let decoded_message = match SolidityVaultBoundMessage::abi_decode(
+                    message_slice,
+                    true,
+                ) {
+                    Ok(res) => res,
+                    Err(e) => {
+                        error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
+                        continue;
+                    }
+                };
 
                 let decoded_message_data = match VaultBoundMessagePlaceOrderData::abi_decode(
                     decoded_message.data.as_ref(),
@@ -1043,19 +1184,19 @@ pub async fn process_evm_events(
                             &timeout_unix_timestamp_in_sec,
                         ],
                     )
-                    .await {
-                        Ok(res) => {
-                            info!(
-                                target: log_target,
-                                "Vault::ReceivedMessageOnVault inserted response {:?}",
-                                res
-                            );
-                        },
-                        Err(e) => {
-                            error!(target: log_target, "Failed to add data into data");
-                        }
-                    };
-
+                    .await
+                {
+                    Ok(res) => {
+                        info!(
+                            target: log_target,
+                            "Vault::ReceivedMessageOnVault inserted response {:?}",
+                            res
+                        );
+                    }
+                    Err(e) => {
+                        error!(target: log_target, "Failed to add data into data");
+                    }
+                };
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
 
@@ -1083,14 +1224,16 @@ pub async fn process_evm_events(
                 // have to get intentId here.
                 info!(target: "EVM Vault::MessageDispatchedFromVault", "Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
 
-                let decoded_message =
-                    match SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true) {
-                        Ok(res) => res,
-                        Err(e) => {
-                            error!(target: "EVM Vault::MessageDispatchedFromVault", "Failed to decode SolidityIntentProcessorBoundMessage in Vault::MessageDispatchedFromVault: {:?}", e);
-                            continue;
-                        }
-                    };;
+                let decoded_message = match SolidityIntentProcessorBoundMessage::abi_decode(
+                    message.as_ref(),
+                    true,
+                ) {
+                    Ok(res) => res,
+                    Err(e) => {
+                        error!(target: "EVM Vault::MessageDispatchedFromVault", "Failed to decode SolidityIntentProcessorBoundMessage in Vault::MessageDispatchedFromVault: {:?}", e);
+                        continue;
+                    }
+                };
 
                 let message_variant = decoded_message.enumVariant as u8;
 
@@ -1103,7 +1246,9 @@ pub async fn process_evm_events(
                                 decoded_message.data.as_ref(),
                                 true,
                             );
-                        let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
+                        let decoded_message_data = if let Ok(decoded_message_data) =
+                            decoded_message_data
+                        {
                             decoded_message_data
                         } else {
                             error!(target: log_target, "Error decoding IntentProcessorBoundMessageAcknowledgement message data");
@@ -1121,16 +1266,18 @@ pub async fn process_evm_events(
                         let timestamp = std::time::SystemTime::now();
 
                         // fetch intent_id
-                        let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
+                        let intent_id_query =
+                            "SELECT intent_id FROM order_created WHERE order_id = $1";
                         let intent_id_response = match client
                             .query_one(intent_id_query, &[&order_id])
-                            .await {
-                                Ok(row) => row,
-                                Err(_e) => {
-                                    error!(target: log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, _e);
-                                    continue;
-                                }
-                            };
+                            .await
+                        {
+                            Ok(row) => row,
+                            Err(_e) => {
+                                error!(target: log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, _e);
+                                continue;
+                            }
+                        };
                         let intent_id: i64 = intent_id_response.get("intent_id");
 
                         let query =
@@ -1150,20 +1297,22 @@ pub async fn process_evm_events(
                                     &order_id,
                                 ],
                             )
-                            .await {
-                                Ok(res) => {
-                                    info!(
-                                        target: log_target,
-                                        "Vault::MessageDispatchedFromVault inserted response {:?}",
-                                        res
-                                    );
-                                },
-                                Err(e) => {
-                                    error!(target: log_target, "Failed to add data into data");
-                                }
-                            };
+                            .await
+                        {
+                            Ok(res) => {
+                                info!(
+                                    target: log_target,
+                                    "Vault::MessageDispatchedFromVault inserted response {:?}",
+                                    res
+                                );
+                            }
+                            Err(e) => {
+                                error!(target: log_target, "Failed to add data into data");
+                            }
+                        };
 
-                        let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
+                        let initiator_address: String =
+                            fetch_intent_initiator(intent_id, &client).await;
 
                         update_intent_state(
                             &intent_id,
@@ -1177,10 +1326,15 @@ pub async fn process_evm_events(
                             initiator_address,
                         )
                         .await;
-                    },
+                    }
                     3 => {
                         let log_target = "EVM Vault::MessageDispatchedFromVault Deposit";
-                        let deposit_message_data = IntentProcessorBoundMessageDepositData::abi_decode(&decoded_message.data, true).unwrap();
+                        let deposit_message_data =
+                            IntentProcessorBoundMessageDepositData::abi_decode(
+                                &decoded_message.data,
+                                true,
+                            )
+                            .unwrap();
                         let deposit_user_address = deposit_message_data.userAddress;
                         let user_address = deposit_user_address.to_string();
                         let amount = deposit_message_data.amount.to_string();
@@ -1207,7 +1361,8 @@ pub async fn process_evm_events(
                                                 data: log.data().clone(),
                                             };
                                             let decoded =
-                                                DispatchId::decode_log(&primitive_log, true).unwrap();
+                                                DispatchId::decode_log(&primitive_log, true)
+                                                    .unwrap();
                                             let message_dispatch_id = decoded.messageId;
                                             Some(message_dispatch_id.to_string())
                                         }
@@ -1245,24 +1400,24 @@ pub async fn process_evm_events(
                                     &timestamp,
                                     &transaction_hash.to_string(),
                                     &message_id,
-                                    &status
+                                    &status,
                                 ],
                             )
-                            .await {
-                                Ok(res) => {
-                                    info!(
-                                        target: log_target,
-                                        "IntentLib::DepositedFunds inserted response {:?}",
-                                        res
-                                    );
-                                },
-                                Err(e) => {
-                                    error!(target: log_target, "Failed to insert data for deposit with message_id: {:?}", &message_id);
-                                }
-                            };
-
-                    },
-                    _ => continue
+                            .await
+                        {
+                            Ok(res) => {
+                                info!(
+                                    target: log_target,
+                                    "IntentLib::DepositedFunds inserted response {:?}",
+                                    res
+                                );
+                            }
+                            Err(e) => {
+                                error!(target: log_target, "Failed to insert data for deposit with message_id: {:?}", &message_id);
+                            }
+                        };
+                    }
+                    _ => continue,
                 }
             }
             Some(&solidity_structs::DebridgeOrderCreated::SIGNATURE_HASH) => {
