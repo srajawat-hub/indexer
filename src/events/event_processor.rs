@@ -105,11 +105,11 @@ struct QuoteEntryHistory {
 #[derive(Debug, Deserialize)]
 struct QuoteDetail {
     price: Option<f64>,
-} 
+}
 
 pub async fn get_usd_value_of_native(
-    chain_id: &i64, 
-    transaction_cost: &u128, 
+    chain_id: &i64,
+    transaction_cost: &u128,
     cmc_id: Option<String>,
     symbol: Option<String>,
     decimals: Option<i32>,
@@ -169,7 +169,7 @@ pub async fn get_usd_value_of_native(
     }
 
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    
+
     let api_client = reqwest::Client::new();
     let mut transaction_fees_usd = String::from("0");
 
@@ -349,7 +349,7 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
                 if token_bytes.len() == 32 {
                     if let Ok(array) = <[u8; 32]>::try_from(token_bytes) {
                         let pubkey_token = solana_sdk::pubkey::Pubkey::from(array);
-                        println!("pubkey token {:?}", pubkey_token.to_string());
+                        info!("pubkey token {:?}", pubkey_token.to_string());
                         payload_token_in = pubkey_token.to_string();
                     }
                 }
@@ -368,7 +368,7 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
                 if token_bytes.len() == 32 {
                     if let Ok(array) = <[u8; 32]>::try_from(token_bytes) {
                         let pubkey_token = Pubkey::from(array);
-                        println!("pubkey token {:?}", pubkey_token.to_string());
+                        info!("pubkey token {:?}", pubkey_token.to_string());
                         payload_token_out = pubkey_token.to_string();
                     }
                 }
@@ -428,10 +428,10 @@ async fn get_fees_data(source_chain_id: &str, destination_chain_id: &str, token_
 }
 
 pub async fn get_amount_usd_value(token_in: String, chain_id: String, amount: Option<String>, client: &Arc<Client>, timestamp: Option<String>) -> String {
-    let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32 
-        FROM tokens t 
-        JOIN token_chains tc ON t.id = tc.token_id 
-        JOIN chain_metadata cm ON cm.network_name = tc.network 
+    let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32
+        FROM tokens t
+        JOIN token_chains tc ON t.id = tc.token_id
+        JOIN chain_metadata cm ON cm.network_name = tc.network
         WHERE LOWER(tc.address_bytes32) = LOWER($1) AND chain_id = $2";
 
     let log_target = "Amount USD Value";
@@ -499,7 +499,7 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!(target: log_target, 
+                info!(target: log_target,
                     "IntentLibV2::IntentSubmitted inserted response {:?}",
                     response
                 );
@@ -538,7 +538,7 @@ pub async fn process_evm_events(
                             continue;
                         }
                     };
-                info!(target: log_target, 
+                info!(target: log_target,
                     "updated actual amount for order, updated rows count {:?}",
                     intent_rows_updated
                 );
@@ -572,7 +572,7 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!(target: log_target, 
+                info!(target: log_target,
                     "IntentLibV2::SolutionSubmitted inserted response {:?}",
                     response
                 );
@@ -672,7 +672,7 @@ pub async fn process_evm_events(
                 info!(target: log_target, "IntentLibV2::OrderCreated inserted response {:?}", response);
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
-                
+
                 update_intent_state(
                     &intent_id,
                     IntentVersions::OrderCreated as i32,
@@ -777,7 +777,7 @@ pub async fn process_evm_events(
                     )
                     .await
                     .unwrap();
-                info!(target: log_target, 
+                info!(target: log_target,
                     "IntentProcessorV2::AcknowledgementReceived inserted response {:?}",
                     response
                 );
@@ -834,17 +834,17 @@ pub async fn process_evm_events(
 
                     // TODO: update amount_out_usd here as well in order_created
                     let amount_out_usd = get_amount_usd_value(
-                        token_out, 
-                        destination_chain_id, 
-                        Some(actual_amount.clone()), 
-                        &client, 
+                        token_out,
+                        destination_chain_id,
+                        Some(actual_amount.clone()),
+                        &client,
                         None).await;
 
                     let order_rows_updated = client
                         .execute(update_order_query, &[&actual_amount, &amount_out_usd, &order_id])
                         .await
                         .unwrap();
-                    info!(target: log_target, 
+                    info!(target: log_target,
                         "updated actual amount for order, updated rows count {:?}",
                         order_rows_updated
                     );
@@ -904,7 +904,7 @@ pub async fn process_evm_events(
                         let message_id = id.to_string();
                         let query = "INSERT INTO deposit_received VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (message_id) DO UPDATE SET status = EXCLUDED.status WHERE deposit_received.status <> 1;";
                         let deposit_transaction = match client.execute(
-                            query, 
+                            query,
                             &[
                                 &user_address,
                                 &token_address,
@@ -1055,7 +1055,7 @@ pub async fn process_evm_events(
                             error!(target: log_target, "Failed to add data into data");
                         }
                     };
- 
+
 
                 let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
 
@@ -1082,7 +1082,7 @@ pub async fn process_evm_events(
                 debug!(target: "EVM Vault::MessageDispatchedFromVault", "\nMessageDispatchedFromVault log - {:?}", log);
                 // have to get intentId here.
                 info!(target: "EVM Vault::MessageDispatchedFromVault", "Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
-                
+
                 let decoded_message =
                     match SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true) {
                         Ok(res) => res,
@@ -1109,17 +1109,17 @@ pub async fn process_evm_events(
                             error!(target: log_target, "Error decoding IntentProcessorBoundMessageAcknowledgement message data");
                             continue;
                         };
-        
+
                         let order_id = decoded_message_data.orderId as i64;
                         let sender_address = log.address().to_string();
                         let destination_domain_id = destinationDomain as i32;
                         let provider = provider as i32;
                         let message = message.to_string();
                         let transaction_hash = log.transaction_hash.unwrap();
-        
+
                         let block_number = log.block_number.unwrap() as i64;
                         let timestamp = std::time::SystemTime::now();
-        
+
                         // fetch intent_id
                         let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
                         let intent_id_response = match client
@@ -1132,7 +1132,7 @@ pub async fn process_evm_events(
                                 }
                             };
                         let intent_id: i64 = intent_id_response.get("intent_id");
-        
+
                         let query =
                             "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
                         match client
@@ -1162,9 +1162,9 @@ pub async fn process_evm_events(
                                     error!(target: log_target, "Failed to add data into data");
                                 }
                             };
-        
+
                         let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
-        
+
                         update_intent_state(
                             &intent_id,
                             IntentVersions::MessageDispatchedFromVault as i32,
@@ -1195,7 +1195,7 @@ pub async fn process_evm_events(
                             Ok(receipt) => match receipt {
                                 Some(tx_receipt) => {
                                     let receipt_logs = tx_receipt.inner.logs();
-                                    
+
                                     let dispatch_id_log = receipt_logs
                                         .iter()
                                         .find(|log| log.topics()[0] == DispatchId::SIGNATURE_HASH);

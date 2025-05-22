@@ -82,13 +82,13 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
             headers.insert("X-CMC_PRO_API_KEY", header_value);
         }
         Err(e) => {
-            eprintln!("Invalid header value: {}", e);
+            error!("Invalid header value: {}", e);
             return String::from("0"); // or handle the error accordingly
         }
     }
 
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    
+
     let api_client = reqwest::Client::new();
     let mut transaction_fees_usd = String::from("0");
 
@@ -104,28 +104,28 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
                             if let Some(quote) = first_token.quote.get("USD") {
                                 match quote.price {
                                     Some(price) => {
-                                        println!("Price of {}: ${}", token_symbol, price);
+                                        info!("Price of {}: ${}", token_symbol, price);
                                         transaction_fees_usd = ((*transaction_cost as f64 / 10_f64.powf(token_decimals as f64)) * price).to_string()
                                     },
-                                    None => println!("Price not available for {}", token_symbol),
+                                    None => info!("Price not available for {}", token_symbol),
                                 }
                             } else {
-                                println!("USD quote not available.");
+                                info!("USD quote not available.");
                             }
                         } else {
-                            println!("No token info found.");
+                            info!("No token info found.");
                         }
                     } else {
-                        println!("No data found in response.");
+                        info!("No data found in response.");
                     }
                 }
                 Err(e) => {
-                    println!("Failed to parse JSON: {}", e);
+                    info!("Failed to parse JSON: {}", e);
                 }
             }
         }
         Err(e) => {
-            println!("Request failed: {}", e);
+            info!("Request failed: {}", e);
         }
     };
 
@@ -153,7 +153,7 @@ pub async fn update_intent_state(
     let initiator_address_str = initiator_address.to_string();
     info!("Tx hash length {:?}", transaction_hash.len());
     info!("Initiator address length {:?}", initiator_address_str.len());
-    
+
     let _intent_state_response = client
         .execute(
             query,

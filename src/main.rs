@@ -37,6 +37,7 @@ pub const DEFAULT_ORDER_ID: &str =
     "0xa4afcf3ebbcb201aee94cde46dc61e70ef31a98cfd8457bc48243238f5598eb2";
 pub const DEBRIDGE_ORDER_MAKER_ADDRESS: &str = "2iqe742BvvymavtgyywmW2iqTdbaUDsyRK3SZJnqNnEk";
 pub const SOLANA_CHAIN_ID: &str = "1399811149";
+const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
 #[derive(Deserialize)]
 struct IndexerConfig {
@@ -95,8 +96,6 @@ struct CalculateStakeInitialDepositParams {
 struct UnbondingBalance {
     user_address: String,
 }
-
-const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
 #[derive(Deserialize)]
 struct TimeoutParams {
@@ -333,10 +332,10 @@ async fn fetch_orders(
     let default_order_id = DEFAULT_ORDER_ID.to_string();
     let till_order_id = get_latest_solana_dln_order_id(&db_client)
         .await
-        .map_or(default_order_id.clone(), |id| {
-            id.map_or(default_order_id, |id| id)
-        });
-    
+        .ok()
+        .flatten()
+        .unwrap_or(default_order_id);
+
     let mut updates = 0;
 
     for order in orders.orders.clone() {
@@ -1166,14 +1165,14 @@ async fn fetch_timed_out_orders(
             WHERE dln_order_id IS NOT NULL
             ORDER BY intent_id, id DESC
          )
-         SELECT r.intent_id, r.order_id, r.dln_order_id, r.timeout_unix_timestamp_in_sec, r.chain_id, o.destination_chain_id 
+         SELECT r.intent_id, r.order_id, r.dln_order_id, r.timeout_unix_timestamp_in_sec, r.chain_id, o.destination_chain_id
          FROM latest_messages r
          LEFT JOIN order_created o ON r.intent_id = o.intent_id
          JOIN (
              SELECT intent_id FROM intent_state GROUP BY intent_id HAVING MAX(version) = 3 ORDER BY intent_id
          ) i ON r.intent_id = i.intent_id
-         WHERE r.timeout_unix_timestamp_in_sec < {} {} 
-         ORDER BY r.timeout_unix_timestamp_in_sec DESC 
+         WHERE r.timeout_unix_timestamp_in_sec < {} {}
+         ORDER BY r.timeout_unix_timestamp_in_sec DESC
          LIMIT {}",
         current_timestamp, chain_id_filter, limit
     );
@@ -1272,7 +1271,7 @@ async fn check_ofac_list(
     user_address: web::Path<String>,
 ) -> impl Responder {
     let query = "SELECT address FROM sanction_address_list WHERE address = $1";
-    println!("printing query");
+    info!("printing query");
     match client.query(query, &[&user_address.to_string()]).await {
         Ok(ofac_row) => {
             let data: OFACResponse;
@@ -1288,7 +1287,7 @@ async fn check_ofac_list(
             HttpResponse::Ok().json(data) // Return JSON response
         }
         Err(_e) => {
-            println!("Error {:?}", _e);
+            info!("Error {:?}", _e);
             HttpResponse::InternalServerError().finish()
         }
     }
