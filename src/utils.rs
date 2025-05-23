@@ -238,7 +238,7 @@ pub async fn structure_intent_orders(
                                 fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
                                 receiver_address,
-                                feeAmount
+                                feeAmount,
                             });
                         }
                         false => {
@@ -291,7 +291,7 @@ pub async fn structure_intent_orders(
                                 fulfill_tx_hash: fulfill_transaction_hash,
                                 intent_version: intent_version,
                                 receiver_address,
-                                feeAmount
+                                feeAmount,
                             });
                         }
                     },
@@ -373,7 +373,7 @@ pub async fn structure_intent_orders(
                             fulfill_tx_hash: fulfill_transaction_hash,
                             intent_version: intent_version,
                             receiver_address,
-                            feeAmount
+                            feeAmount,
                         });
                     }
                 }
@@ -485,7 +485,7 @@ pub async fn structure_intent_orders(
                     fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
                     receiver_address,
-                    feeAmount
+                    feeAmount,
                 });
             }
             _ => {
@@ -528,7 +528,7 @@ pub async fn structure_intent_orders(
                     fulfill_tx_hash: fulfill_transaction_hash,
                     intent_version: intent_version,
                     receiver_address: None,
-                    feeAmount: None
+                    feeAmount: None,
                 });
             }
         },
@@ -572,7 +572,7 @@ pub async fn structure_intent_orders(
                 fulfill_tx_hash: fulfill_transaction_hash,
                 intent_version: intent_version,
                 receiver_address: None,
-                feeAmount: None
+                feeAmount: None,
             });
         }
     }
@@ -616,5 +616,3 @@ macro_rules! skip_fail {
         }
     };
 }
-
-pub use skip_fail;
