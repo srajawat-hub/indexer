@@ -1274,7 +1274,6 @@ async fn check_ofac_list(
     user_address: web::Path<String>,
 ) -> impl Responder {
     let query = "SELECT address FROM sanction_address_list WHERE address = $1";
-    info!("printing query");
     match client.query(query, &[&user_address.to_string()]).await {
         Ok(ofac_row) => {
             let data: OFACResponse;
@@ -1290,7 +1289,7 @@ async fn check_ofac_list(
             HttpResponse::Ok().json(data) // Return JSON response
         }
         Err(_e) => {
-            info!("Error {:?}", _e);
+            error!("Failed to check OFAC list, Error {:?}", _e);
             HttpResponse::InternalServerError().finish()
         }
     }

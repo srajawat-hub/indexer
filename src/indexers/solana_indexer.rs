@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use base64::Engine as Base64Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Local;
-use log::{error, info};
+use log::{error, info, warn};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use solana_client::{
@@ -88,7 +88,7 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
             headers.insert("X-CMC_PRO_API_KEY", header_value);
         }
         Err(e) => {
-            error!("Invalid header value: {}", e);
+            error!("Failed to get USD values from CMC, defaulting to 0. Invalid header value for CMC api: {}", e); 
             return String::from("0"); // or handle the error accordingly
         }
     }
@@ -116,7 +116,7 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
                                             * price)
                                             .to_string()
                                     }
-                                    None => info!("Price not available for {}", token_symbol),
+                                    None => warn!("Price not available for {}", token_symbol),
                                 }
                             } else {
                                 info!("USD quote not available.");
