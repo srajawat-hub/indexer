@@ -15,13 +15,15 @@ use tokio_postgres::Client;
 pub struct EvmIndexer {
     rpc_url: String,
     contract_address: String,
+    solana_chain_id: u64
 }
 
 impl EvmIndexer {
-    pub fn new(rpc_url: String, contract_address: String) -> Self {
+    pub fn new(rpc_url: String, contract_address: String, solana_chain_id: u64) -> Self {
         Self {
             rpc_url,
             contract_address,
+            solana_chain_id,
         }
     }
 }
@@ -82,7 +84,7 @@ impl BlockchainIndexer for EvmIndexer {
 
         let task_id = tokio::task::id();
         info!("Starting {task_id}");
-        event_processor::process_evm_events(stream, client, chain_id, provider).await;
+        event_processor::process_evm_events(stream, client, chain_id, provider, &self.solana_chain_id.to_string()).await;
         Ok(())
     }
 }

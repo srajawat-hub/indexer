@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
-use solana_sdk::pubkey;
 use solana_sdk::pubkey::Pubkey;
 use solidity_structs::{
     AcknowledgementMetadataStake, IntentPayloadEnum,
@@ -37,15 +36,9 @@ use tokio::signal;
 use utils::{get_api_url, structure_intent_orders};
 
 const DEFAULT_ORDER_ID: &str = "0xa4afcf3ebbcb201aee94cde46dc61e70ef31a98cfd8457bc48243238f5598eb2";
-const DEBRIDGE_ORDER_MAKER_ADDRESS: &str = "2iqe742BvvymavtgyywmW2iqTdbaUDsyRK3SZJnqNnEk";
-#[cfg(not(feature = "testnet"))] // production
-const VAULT_PROGRAM_ID: Pubkey = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
-#[cfg(feature = "testnet")]
-const VAULT_PROGRAM_ID: Pubkey = pubkey!("2RBS3DPck8CoF9b31nQDRE3j9xsx5io1STAk2irhgoBC");
-const SOLANA_CHAIN_ID: &str = "1399811149";
 const SOLANA_ACCOUNT_RENT: u64 = 890880;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct IndexerConfig {
     url: String,
     contract: String,
@@ -56,9 +49,12 @@ struct IndexerConfig {
     mockln_contract: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Config {
     indexers: Vec<IndexerConfig>,
+    solana_chain_id: u64,
+    solana_vaults_program_id: String,
+    debridge_order_maker_address: String,
 }
 
 impl Config {
@@ -68,8 +64,8 @@ impl Config {
     }
 }
 
-fn create_evm_indexer(url: &str, address: &str) -> Box<dyn BlockchainIndexer + Send + Sync> {
-    Box::new(EvmIndexer::new(url.to_string(), address.to_string()))
+fn create_evm_indexer(url: &str, address: &str, solana_chain_id: u64) -> Box<dyn BlockchainIndexer + Send + Sync> {
+    Box::new(EvmIndexer::new(url.to_string(), address.to_string(), solana_chain_id))
 }
 
 fn create_solana_indexer(
@@ -126,6 +122,13 @@ struct OrderNonceResponse {
     makerOrderNonce: u64,
 }
 
+#[derive(Clone)]
+struct SolanaConfig {
+    solana_chain_id: u64,
+    solana_vaults_program_id: String,
+    debridge_order_maker_address: String,
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -167,15 +170,15 @@ async fn main() {
     let db_server_client = Arc::clone(&db_client);
 
     let config_path = std::env::var("CONFIG_PATH").unwrap_or("config.toml".to_string());
-    let config = Config::from_file(&config_path);
+    let config = Config::from_file(&config_path).clone();
 
     let mut indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = vec![];
     config.indexers.iter().for_each(|conf| {
         if conf.execution_environment == "EVM" {
             if !conf.mockln_contract.is_empty() {
-                indexers.push(create_evm_indexer(&conf.url, &conf.mockln_contract));
+                indexers.push(create_evm_indexer(&conf.url, &conf.mockln_contract, config.solana_chain_id));
             }
-            indexers.push(create_evm_indexer(&conf.url, &conf.contract));
+            indexers.push(create_evm_indexer(&conf.url, &conf.contract, config.solana_chain_id));
         } else if conf.execution_environment == "SVM" {
             indexers.push(create_solana_indexer(
                 &conf.url,
@@ -201,8 +204,17 @@ async fn main() {
         handles.push(handle);
     }
 
-    let handle = tokio::spawn(async move { fetch_solana_debridge_orders(db_client.clone()).await });
+    let solana_config = SolanaConfig {
+        solana_chain_id: config.solana_chain_id,
+        solana_vaults_program_id: config.solana_vaults_program_id.clone(),
+        debridge_order_maker_address: config.debridge_order_maker_address.clone(),
+    };
+
+    let solana_config_clone = Arc::new(solana_config.clone());
+
+    let handle = tokio::spawn(async move { fetch_solana_debridge_orders(db_client.clone(), &solana_config.clone()).await });
     handles.push(handle);
+    
 
     info!("All tasks started. Press Ctrl+C to exit.");
     info!("total threads {:?}", handles.len());
@@ -211,6 +223,7 @@ async fn main() {
     let _api_server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(Arc::clone(&db_server_client)))
+            .app_data(web::Data::new(Arc::clone(&solana_config_clone)))
             .route("/intents/{intent_id}", web::get().to(fetch_intents))
             .route(
                 "/intents/history/{initiator_address}",
@@ -300,22 +313,23 @@ struct InitialData {
     feeAmount: Option<String>,
 }
 
-async fn fetch_solana_debridge_orders(db_client: Arc<tokio_postgres::Client>) {
+async fn fetch_solana_debridge_orders(db_client: Arc<tokio_postgres::Client>, config: &SolanaConfig) {
     loop {
         sleep(Duration::from_secs(10));
-        let orders = skip_fail!(fetch_orders(db_client.clone()).await);
+        let orders = skip_fail!(fetch_orders(db_client.clone(), &config).await);
         info!(target: "DLN_ORDER_ID_UPDATES", "Orders: {:?}", orders.orders.len());
     }
 }
 
 async fn fetch_orders(
     db_client: Arc<tokio_postgres::Client>,
+    config: &SolanaConfig,
 ) -> Result<OrdersResponse, reqwest::Error> {
     let client = reqwest::Client::new();
     let request_body = json!({
         "giveChainIds": [],
         "takeChainIds": [],
-        "filter": DEBRIDGE_ORDER_MAKER_ADDRESS,
+        "filter": config.debridge_order_maker_address,
         "skip": 0,
         "take": 25
     });
@@ -336,7 +350,7 @@ async fn fetch_orders(
     let orders = orders.unwrap();
 
     let default_order_id = DEFAULT_ORDER_ID.to_string();
-    let till_order_id = get_latest_solana_dln_order_id(&db_client)
+    let till_order_id = get_latest_solana_dln_order_id(&db_client, &config)
         .await
         .ok()
         .flatten()
@@ -377,10 +391,11 @@ async fn fetch_orders(
 
 async fn get_latest_solana_dln_order_id(
     client: &Arc<tokio_postgres::Client>,
+    config: &SolanaConfig,
 ) -> Result<Option<String>, tokio_postgres::Error> {
     let query = "SELECT dln_order_id FROM received_message_on_vault WHERE chain_id = $1 AND dln_order_id IS NOT NULL ORDER BY timestamp DESC LIMIT 1";
 
-    let solana_chain_id_i64 = SOLANA_CHAIN_ID.parse::<i64>().unwrap();
+    let solana_chain_id_i64 = config.solana_chain_id as i64;
 
     match client.query_opt(query, &[&solana_chain_id_i64]).await {
         Ok(row) => Ok(row.and_then(|r| r.get("dln_order_id"))),
@@ -910,6 +925,7 @@ async fn fetch_contract_balance(
     client: web::Data<Arc<tokio_postgres::Client>>,
     network: web::Path<String>,
     req: web::Json<ContractBalanceRequest>,
+    config: web::Data<Arc<SolanaConfig>>,
 ) -> impl Responder {
     let mut balances: ContractBalanceResponse = ContractBalanceResponse {
         data: HashMap::new(),
@@ -1024,11 +1040,11 @@ async fn fetch_contract_balance(
         }
         ContractBalanceRequest::SVM(svm_meta_data) => {
             let mut rpc_url = "";
-            let mut chain_id = SOLANA_CHAIN_ID;
+            let mut chain_id = config.solana_chain_id.to_string();
             match network.to_string().as_ref() {
                 "testnet" => {
                     rpc_url = "http://api.devnet.solana.com";
-                    chain_id = "4294967295";
+                    chain_id = "4294967295".to_string();
                 }
                 "mainnet" => {
                     rpc_url = "https://mainnet.helius-rpc.com/?api-key=d4d3c545-bd81-405c-9e51-3f600e9c25ad";
@@ -1051,13 +1067,14 @@ async fn fetch_contract_balance(
                         "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2",
                     ))
                     .unwrap(); // bs58 of 0x111...
+                    let vault_program_id = Pubkey::from_str(&config.solana_vaults_program_id).unwrap();
                     let native_token_account = Pubkey::find_program_address(
                         &[
                             b"user_deposit_address",
                             user_address.as_slice(),
                             native_token_mint.as_ref(),
                         ],
-                        &VAULT_PROGRAM_ID,
+                        &vault_program_id,
                     )
                     .0;
 
@@ -1097,13 +1114,14 @@ async fn fetch_contract_balance(
                     contract_balances.push(native_balance);
                 } else {
                     let token_mint = Pubkey::from_str(&token_address).unwrap();
+                    let vault_program_id = Pubkey::from_str(&config.solana_vaults_program_id).unwrap();
                     let token_account = Pubkey::find_program_address(
                         &[
                             b"user_deposit_address",
                             user_address.as_slice(),
                             token_mint.as_ref(),
                         ],
-                        &VAULT_PROGRAM_ID,
+                        &vault_program_id,
                     )
                     .0;
 
