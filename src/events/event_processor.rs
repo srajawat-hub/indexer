@@ -26,7 +26,6 @@ use crate::solidity_structs::{
 use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
-use crate::SOLANA_CHAIN_ID;
 
 pub enum IntentVersions {
     IntentSubmitted,
@@ -364,13 +363,14 @@ async fn get_fees_data(
     token_in: &str,
     token_out: &str,
     amount_in: &str,
+    solana_chain_id: &str
 ) -> ResultCosts {
     let request_client = reqwest::Client::new();
 
     let mut payload_token_in = String::from(token_in);
     let mut payload_token_out = String::from(token_out);
 
-    if source_chain_id != SOLANA_CHAIN_ID {
+    if source_chain_id != solana_chain_id {
         let without_prefix = token_in.trim_start_matches("0x"); // Remove "0x" prefix
         let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
         payload_token_in = format!("0x{}", trimmed)
@@ -389,7 +389,7 @@ async fn get_fees_data(
         }
     }
 
-    if destination_chain_id != SOLANA_CHAIN_ID {
+    if destination_chain_id != solana_chain_id {
         let without_prefix = token_out.trim_start_matches("0x"); // Remove "0x" prefix
         let trimmed = &without_prefix[without_prefix.len().saturating_sub(40)..]; // Keep only the last 40 chars
         payload_token_out = format!("0x{}", trimmed)
@@ -551,6 +551,7 @@ pub async fn process_evm_events(
     client: Arc<Client>,
     chain_id: i64,
     chain_provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
+    solana_chain_id: &str
 ) {
     while let Some(log) = stream.next().await {
         match log.topic0() {
@@ -800,6 +801,7 @@ pub async fn process_evm_events(
                     &token_in,
                     &token_out,
                     &amount_in,
+                    solana_chain_id,
                 )
                 .await;
 
