@@ -984,7 +984,7 @@ pub async fn process_evm_events(
                         order_rows_updated
                     );
                 }
-            }
+            } 
             Some(&IntentProcessorV2::DepositReceived::SIGNATURE_HASH) => {
                 let IntentProcessorV2::DepositReceived {
                     userAddress,
