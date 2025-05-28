@@ -1084,14 +1084,15 @@ async fn fetch_contract_balance(
                     {
                         Ok(balance) => {
                             if balance >= SOLANA_ACCOUNT_RENT {
-                                balance - SOLANA_ACCOUNT_RENT
-                            } else {
-                                if balance < 1000000 {
+                                let balance_without_rent = balance - SOLANA_ACCOUNT_RENT;
+                                if balance_without_rent < 1000000 {
                                     let res: u64 = 0;
                                     res
                                 } else {
-                                    balance
+                                    balance_without_rent
                                 }
+                            } else {
+                                0_u64
                             }
                         } // subtract solana rent
                         Err(e) => {
