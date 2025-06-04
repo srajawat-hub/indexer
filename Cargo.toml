@@ -28,3 +28,4 @@ borsh = "1.5.5"
 reqwest = "0.12.12"
 postgres-openssl = "0.5"
 openssl = { version = "0.10", features = ["vendored"] }
+diesel = { version = "2.2.0", features = ["postgres"] }
