@@ -72,6 +72,42 @@ pub mod intent_lib {
     );
 }
 
+pub mod uniswap_v3_factory_lib {
+    use alloy::sol;
+    sol!(
+        #[allow(clippy::too_many_arguments)]
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        UniswapV3FactoryLib,
+        "abi/UniswapV3Factory.json"
+    );
+}
+
+pub mod uniswap_v3_pool_lib {
+    use alloy::sol;
+    use UniswapV3PoolLib::TokenLaunchType;
+
+    sol!(
+        #[allow(clippy::too_many_arguments)]
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        UniswapV3PoolLib,
+        "abi/UniswapV3Pool.json"
+    );
+
+    impl ToString for TokenLaunchType {
+        fn to_string(&self) -> String {
+            match self.clone().into() {
+                0 => "FairLaunch".to_string(),
+                1 => "CuratedLaunch".to_string(),
+                n => panic!("Unsupported token launch type: {}", n),
+            }
+        }
+    }
+}
+
 // Define our intent payload enum using Alloy's sol! macro
 sol! {
     #[derive(Debug)]
@@ -579,7 +615,7 @@ struct ChainId {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct TokenAddress {
+pub struct TokenAddress {
     Base64Value: Option<String>,
     bytesArrayValue: Option<String>,
     stringValue: Option<String>,
@@ -603,7 +639,7 @@ struct TokenMetadata {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct OfferWithMetadata {
+pub struct OfferWithMetadata {
     chainId: ChainId,
     tokenAddress: TokenAddress,
     amount: Amount,

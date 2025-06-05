@@ -134,3 +134,22 @@ BEGIN
 
 END;
 $$;
+
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Schedule one job that runs every minute and calls all four intervals:
+SELECT
+  cron.schedule(
+    'refresh_all_intervals',
+    '*/1 * * * *',
+    $cmd$
+      DO $do$
+      BEGIN
+        CALL public.refresh_ohlc('1m');
+        -- CALL public.refresh_ohlc('5m');
+        CALL public.refresh_ohlc('1h');
+        CALL public.refresh_ohlc('1d');
+      END
+      $do$;
+    $cmd$
+  );

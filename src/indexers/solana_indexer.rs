@@ -16,14 +16,23 @@ use crate::{
 };
 
 use super::BlockchainIndexer;
+use crate::indexers::raydium_events::{
+    AmmConfig, CollectPersonalFeeEvent, CollectProtocolFeeEvent, ConfigChangeEvent,
+    CreatePersonalPositionEvent, DecreaseLiquidityEvent, IncreaseLiquidityEvent, LaunchType,
+    PoolCreatedEvent, PoolCreatedEventWithState, PoolState, SwapEvent, AMM_CONFIG_SEED,
+};
+use crate::utils::unix_to_system_time;
 use alloy::dyn_abi::SolType;
+use anchor_lang::{AccountDeserialize, Discriminator};
 use async_trait::async_trait;
+use base64::prelude::BASE64_STANDARD;
 use base64::Engine as Base64Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Local;
-use log::{error, info, warn};
+use log::{debug, error, info, warn, LevelFilter};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
+use solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature;
 use solana_client::{
     client_error::reqwest, nonblocking::rpc_client::RpcClient,
     rpc_client::GetConfirmedSignaturesForAddress2Config,
@@ -39,7 +48,9 @@ pub struct SolanaIndexer {
     rpc_url: String,
     _ws_url: String,
     chain_id: i64,
-    program_id: Pubkey,
+    vaults_program_id: Pubkey,
+    amm_program_id: Pubkey,
+    rpc_client: RpcClient,
 }
 
 fn get_native_token_symbol(chain_id: i64) -> (String, u32) {
@@ -88,7 +99,7 @@ pub async fn get_usd_value_of_native(chain_id: &i64, transaction_cost: &u128) ->
             headers.insert("X-CMC_PRO_API_KEY", header_value);
         }
         Err(e) => {
-            error!("Failed to get USD values from CMC, defaulting to 0. Invalid header value for CMC api: {}", e); 
+            error!("Failed to get USD values from CMC, defaulting to 0. Invalid header value for CMC api: {}", e);
             return String::from("0"); // or handle the error accordingly
         }
     }
@@ -188,12 +199,21 @@ pub async fn update_intent_state(
 }
 
 impl SolanaIndexer {
-    pub fn new(rpc_url: String, ws_url: String, chain_id: i64, program_id: String) -> Self {
+    pub fn new(
+        rpc_url: String,
+        ws_url: String,
+        chain_id: i64,
+        vaults_program_id: String,
+        amm_program_id: String,
+    ) -> Self {
+        let rpc_client = RpcClient::new(rpc_url.clone());
         Self {
             rpc_url,
             _ws_url: ws_url,
             chain_id,
-            program_id: Pubkey::from_str(&program_id).unwrap(),
+            vaults_program_id: Pubkey::from_str(&vaults_program_id).unwrap(),
+            amm_program_id: Pubkey::from_str(&amm_program_id).unwrap(),
+            rpc_client,
         }
     }
     /// Fetches all the events from the previous slot to the latest slot
@@ -223,9 +243,9 @@ impl SolanaIndexer {
                 "THis is last searched slot {:?} and last searched hash {:?}",
                 current_slot, last_searched_hash_val
             );
-            let sigs = match rpc_client
+            let mut sigs = match rpc_client
                 .get_signatures_for_address_with_config(
-                    &self.program_id,
+                    &self.vaults_program_id,
                     GetConfirmedSignaturesForAddress2Config {
                         before: last_searched_hash_val,
                         until: latest_tx,
@@ -241,6 +261,25 @@ impl SolanaIndexer {
                     continue;
                 }
             };
+            let mut sigs_raydium = match rpc_client
+                .get_signatures_for_address_with_config(
+                    &self.amm_program_id,
+                    GetConfirmedSignaturesForAddress2Config {
+                        before: last_searched_hash_val,
+                        until: latest_tx,
+                        limit: Some(MAX_LIMIT as usize),
+                        ..GetConfirmedSignaturesForAddress2Config::default()
+                    },
+                )
+                .await
+            {
+                Ok(sigs) => sigs,
+                Err(e) => {
+                    error!("Error fetching signatures: {:?}", e);
+                    continue;
+                }
+            };
+            sigs.append(&mut sigs_raydium);
             if sigs.is_empty() {
                 info!("Breaking because sigs length is 0");
                 current_slot = skip_fail!(rpc_client.get_slot().await);
@@ -304,7 +343,10 @@ impl SolanaIndexer {
                     solana_transaction_status::option_serializer::OptionSerializer::Some(e) => e,
                     _ => Vec::new(),
                 };
-                let events = get_events_from_logs(logs);
+                let logs = logs.iter().map(|x| x.as_ref()).collect::<Vec<&str>>();
+                let events = self
+                    .parse_solana_events(&logs, &self.amm_program_id, &self.vaults_program_id)
+                    .await?;
                 let timestamp = if let Some(block_time) = tx.result.block_time {
                     block_time * 1000
                 } else {
@@ -326,7 +368,7 @@ impl SolanaIndexer {
                 let signatures = &tx.result.transaction.transaction;
                 let tx_decoded = match signatures {
                     solana_transaction_status::EncodedTransaction::Binary(data, _) => {
-                        let decoded = base64::decode(data).expect("Invalid base64");
+                        let decoded = BASE64_STANDARD.decode(data).expect("Invalid base64");
                         let tx_decoded = bincode::deserialize::<VersionedTransaction>(&decoded)
                             .expect("Invalid bincode");
                         tx_decoded
@@ -350,222 +392,37 @@ impl SolanaIndexer {
                 let block_number = sigs[index].slot as i64;
                 for event in events {
                     match event {
-                        Event::ReceivedMessageOnVault(event) => {
-                            let ReceivedMessageOnVaultEvent {
-                                sender,
-                                source_domain,
-                                interop_provider,
-                                message,
-                            } = event;
-                            info!(target: "solana_indexer", "Vault::ReceivedMessageOnVault received from {sender:?} to source {source_domain}");
-
-                            let order_id =
-                                (u64::from_be_bytes(skip_fail!(message[24..32].try_into()))) as i64;
-
-                            let query =
-                                "SELECT * FROM received_message_on_vault WHERE order_id = $1";
-                            let response =
-                                skip_fail!(database_client.query(query, &[&order_id]).await);
-                            if response.len() > 0 {
-                                continue;
-                            }
-
-                            let query = "SELECT * FROM order_created WHERE order_id = $1";
-                            let response =
-                                skip_fail!(database_client.query(query, &[&order_id]).await);
-
-                            let (intent_id, sender_address) = match response.len() {
-                                0 => (0i64, "".to_string()),
-                                _ => (
-                                    response[0].get("intent_id"),
-                                    response[0].get("creator_address"),
-                                ),
-                            };
-
-                            let origin_domain_id = source_domain as i32;
-                            let provider = interop_provider as i32;
-                            let tx_hash = sigs[index].signature.clone();
-
-                            let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
-                            let response = skip_fail!(
-                                database_client
-                                    .execute(
-                                        query,
-                                        &[
-                                            &intent_id,
-                                            &origin_domain_id,
-                                            &sender_address,
-                                            &hex::encode(message),
-                                            &provider,
-                                            &tx_hash,
-                                            &block_height,
-                                            &system_time,
-                                            &self.chain_id,
-                                            &order_id,
-                                        ],
-                                    )
-                                    .await
-                            );
-                            info!(
-                                "Vault::ReceivedMessageOnVault inserted response {:?}",
-                                response
-                            );
-
-                            update_intent_state(
-                                &i64::from(intent_id),
-                                IntentVersions::ReceivedMessageOnVault as i32,
-                                &IntentStage::Processing.to_string(),
-                                tx_hash,
-                                &order_id,
-                                &self.chain_id,
-                                sender_address,
+                        Events::Vaults(events) => {
+                            self.process_vaults_events(
                                 &database_client,
-                                &compute_units_used,
+                                &mut sigs,
+                                index,
                                 &tx_cost,
+                                &compute_units_used,
+                                system_time,
+                                block_height,
+                                transaction_hash.clone(),
+                                block_number,
+                                events,
                             )
                             .await;
                         }
-                        Event::MessageDispatchedFromVault(event) => {
-                            let MessageDispatchedFromVaultEvent {
-                                user_address,
-                                destination_domain,
-                                interop_provider,
-                                message,
-                            } = event;
-                            info!(target: "solana_indexer", "Vault::MessageDispatchedFromVault by {user_address:?}, message = {message:?}, using provider = {interop_provider:?}");
-                            let message_slice = message.as_ref();
-                            if message.is_empty() {
-                                continue;
-                            }
-                            let decoded_message =
-                                skip_fail!(SolidityIntentProcessorBoundMessage::abi_decode(
-                                    message_slice,
-                                    true,
-                                ));
-                            let decoded_message_data =
-                                IntentProcessorBoundMessageAcknowledgementData::abi_decode(
-                                    decoded_message.data.as_ref(),
-                                    true,
-                                );
-                            let decoded_message_data = if let Ok(decoded_message_data) =
-                                decoded_message_data
-                            {
-                                decoded_message_data
-                            } else {
-                                let decoded_message_data =
-                                    IntentProcessorBoundMessageDepositData::abi_decode(
-                                        decoded_message.data.as_ref(),
-                                        true,
-                                    );
-                                error!("Error decoding message data: {:?}", decoded_message_data);
-                                continue;
-                            };
-
-                            let order_id = decoded_message_data.orderId as i64;
-                            let origin_domain_id = destination_domain as i32;
-                            let provider = interop_provider as i32;
-                            let tx_hash = sigs[index].signature.clone();
-
-                            let query =
-                                "SELECT * FROM message_dispatched_from_vault WHERE order_id = $1";
-                            let response =
-                                skip_fail!(database_client.query(query, &[&order_id]).await);
-                            if response.len() > 0 {
-                                continue;
-                            }
-
-                            // fetch intent_id
-                            let intent_id_query =
-                                "SELECT intent_id,creator_address FROM order_created WHERE order_id = $1";
-                            let intent_id_response = skip_fail!(
-                                database_client.query(intent_id_query, &[&order_id]).await
-                            );
-                            info!("Intent length {:?}", intent_id_response.len());
-                            info!("intent id response {:?}", intent_id_response);
-                            let (intent_id, creator_address) = match intent_id_response.len() {
-                                0 => (0i64, "".to_string()),
-                                _ => (
-                                    intent_id_response[0].get("intent_id"),
-                                    intent_id_response[0].get("creator_address"),
-                                ),
-                            };
-
-                            let query = "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
-                            let response = skip_fail!(
-                                database_client
-                                    .execute(
-                                        query,
-                                        &[
-                                            &intent_id,
-                                            &creator_address,
-                                            &origin_domain_id,
-                                            &provider,
-                                            &hex::encode(message),
-                                            &transaction_hash,
-                                            &block_number,
-                                            &system_time,
-                                            &order_id,
-                                        ],
-                                    )
-                                    .await
-                            );
-                            info!(
-                                "Vault::ReceivedMessageOnVault inserted response {:?}",
-                                response
-                            );
-
-                            update_intent_state(
-                                &intent_id,
-                                IntentVersions::MessageDispatchedFromVault as i32,
-                                &IntentStage::Processing.to_string(),
-                                tx_hash,
-                                &order_id,
-                                &self.chain_id,
-                                creator_address,
+                        Events::Raydium(events) => {
+                            self.process_raydium_events(
                                 &database_client,
-                                &compute_units_used,
+                                &mut sigs,
+                                index,
                                 &tx_cost,
+                                compute_units_used,
+                                system_time,
+                                block_height,
+                                transaction_hash.clone(),
+                                block_number,
+                                events,
                             )
                             .await;
                         }
-                        Event::DepositedFunds(event) => {
-                            let DepositFundsEvent {
-                                user_address,
-                                token_address,
-                                amount,
-                                message_id,
-                            } = event;
-                            log::info!(target: "solana_indexer", "message_id from source {:?}", message_id);
-                            log::info!(target: "solana_indexer", "user_address from source {:?}", user_address);
-
-                            let timestamp = std::time::SystemTime::now();
-                            let status = DepositStatus::Initialized as i32;
-
-                            let amount = amount.to_string();
-                            let chain_id = self.chain_id.to_string();
-
-                            let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
-                            let response = skip_fail!(
-                                database_client
-                                    .execute(
-                                        query,
-                                        &[
-                                            &user_address,
-                                            &token_address,
-                                            &chain_id,
-                                            &amount,
-                                            &timestamp,
-                                            &transaction_hash,
-                                            &message_id,
-                                            &status,
-                                        ],
-                                    )
-                                    .await
-                            );
-                            log::info!(target: "solana_indexer", "IntentLib::DepositedFunds inserted response {:?}", response);
-                        }
-                        _ => unimplemented!(),
-                    };
+                    }
                 }
             }
             info!(
@@ -583,6 +440,766 @@ impl SolanaIndexer {
                 last_searched_hash_val = Some(skip_fail!(Signature::from_str(&last_sig.signature)));
                 current_slot = last_sig.slot;
             }
+        }
+    }
+
+    async fn process_vaults_events(
+        &self,
+        database_client: &Arc<Client>,
+        sigs: &mut Vec<RpcConfirmedTransactionStatusWithSignature>,
+        index: usize,
+        tx_cost: &String,
+        compute_units_used: &i64,
+        system_time: SystemTime,
+        block_height: i64,
+        transaction_hash: String,
+        block_number: i64,
+        events: Vec<VaultsEvent>,
+    ) {
+        for event in events {
+            match event {
+                VaultsEvent::ReceivedMessageOnVault(event) => {
+                    let ReceivedMessageOnVaultEvent {
+                        sender,
+                        source_domain,
+                        interop_provider,
+                        message,
+                    } = event;
+                    info!(target: "solana_indexer", "Vault::ReceivedMessageOnVault received from {sender:?} to source {source_domain}");
+
+                    let order_id =
+                        (u64::from_be_bytes(skip_fail!(message[24..32].try_into()))) as i64;
+
+                    let query = "SELECT * FROM received_message_on_vault WHERE order_id = $1";
+                    let response = skip_fail!(database_client.query(query, &[&order_id]).await);
+                    if response.len() > 0 {
+                        continue;
+                    }
+
+                    let query = "SELECT * FROM order_created WHERE order_id = $1";
+                    let response = skip_fail!(database_client.query(query, &[&order_id]).await);
+
+                    let (intent_id, sender_address) = match response.len() {
+                        0 => (0i64, "".to_string()),
+                        _ => (
+                            response[0].get("intent_id"),
+                            response[0].get("creator_address"),
+                        ),
+                    };
+
+                    let origin_domain_id = source_domain as i32;
+                    let provider = interop_provider as i32;
+                    let tx_hash = sigs[index].signature.clone();
+
+                    let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
+                    let response = skip_fail!(
+                        database_client
+                            .execute(
+                                query,
+                                &[
+                                    &intent_id,
+                                    &origin_domain_id,
+                                    &sender_address,
+                                    &hex::encode(message),
+                                    &provider,
+                                    &tx_hash,
+                                    &block_height,
+                                    &system_time,
+                                    &self.chain_id,
+                                    &order_id,
+                                ],
+                            )
+                            .await
+                    );
+                    info!(
+                        "Vault::ReceivedMessageOnVault inserted response {:?}",
+                        response
+                    );
+
+                    update_intent_state(
+                        &i64::from(intent_id),
+                        IntentVersions::ReceivedMessageOnVault as i32,
+                        &IntentStage::Processing.to_string(),
+                        tx_hash,
+                        &order_id,
+                        &self.chain_id,
+                        sender_address,
+                        &database_client,
+                        &compute_units_used,
+                        &tx_cost,
+                    )
+                    .await;
+                }
+                VaultsEvent::MessageDispatchedFromVault(event) => {
+                    let MessageDispatchedFromVaultEvent {
+                        user_address,
+                        destination_domain,
+                        interop_provider,
+                        message,
+                    } = event;
+                    info!(target: "solana_indexer", "Vault::MessageDispatchedFromVault by {user_address:?}, message = {message:?}, using provider = {interop_provider:?}");
+                    let message_slice = message.as_ref();
+                    if message.is_empty() {
+                        continue;
+                    }
+                    let decoded_message = skip_fail!(
+                        SolidityIntentProcessorBoundMessage::abi_decode(message_slice, true,)
+                    );
+                    let decoded_message_data =
+                        IntentProcessorBoundMessageAcknowledgementData::abi_decode(
+                            decoded_message.data.as_ref(),
+                            true,
+                        );
+                    let decoded_message_data =
+                        if let Ok(decoded_message_data) = decoded_message_data {
+                            decoded_message_data
+                        } else {
+                            let decoded_message_data =
+                                IntentProcessorBoundMessageDepositData::abi_decode(
+                                    decoded_message.data.as_ref(),
+                                    true,
+                                );
+                            error!("Error decoding message data: {:?}", decoded_message_data);
+                            continue;
+                        };
+
+                    let order_id = decoded_message_data.orderId as i64;
+                    let origin_domain_id = destination_domain as i32;
+                    let provider = interop_provider as i32;
+                    let tx_hash = sigs[index].signature.clone();
+
+                    let query = "SELECT * FROM message_dispatched_from_vault WHERE order_id = $1";
+                    let response = skip_fail!(database_client.query(query, &[&order_id]).await);
+                    if response.len() > 0 {
+                        continue;
+                    }
+
+                    // fetch intent_id
+                    let intent_id_query =
+                        "SELECT intent_id,creator_address FROM order_created WHERE order_id = $1";
+                    let intent_id_response =
+                        skip_fail!(database_client.query(intent_id_query, &[&order_id]).await);
+                    info!("Intent length {:?}", intent_id_response.len());
+                    info!("intent id response {:?}", intent_id_response);
+                    let (intent_id, creator_address) = match intent_id_response.len() {
+                        0 => (0i64, "".to_string()),
+                        _ => (
+                            intent_id_response[0].get("intent_id"),
+                            intent_id_response[0].get("creator_address"),
+                        ),
+                    };
+
+                    let query = "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                    let response = skip_fail!(
+                        database_client
+                            .execute(
+                                query,
+                                &[
+                                    &intent_id,
+                                    &creator_address,
+                                    &origin_domain_id,
+                                    &provider,
+                                    &hex::encode(message),
+                                    &transaction_hash,
+                                    &block_number,
+                                    &system_time,
+                                    &order_id,
+                                ],
+                            )
+                            .await
+                    );
+                    info!(
+                        "Vault::ReceivedMessageOnVault inserted response {:?}",
+                        response
+                    );
+
+                    update_intent_state(
+                        &intent_id,
+                        IntentVersions::MessageDispatchedFromVault as i32,
+                        &IntentStage::Processing.to_string(),
+                        tx_hash,
+                        &order_id,
+                        &self.chain_id,
+                        creator_address,
+                        &database_client,
+                        &compute_units_used,
+                        &tx_cost,
+                    )
+                    .await;
+                }
+                VaultsEvent::DepositedFunds(event) => {
+                    let DepositFundsEvent {
+                        user_address,
+                        token_address,
+                        amount,
+                        message_id,
+                    } = event;
+                    log::info!(target: "solana_indexer", "message_id from source {:?}", message_id);
+                    log::info!(target: "solana_indexer", "user_address from source {:?}", user_address);
+
+                    let timestamp = std::time::SystemTime::now();
+                    let status = DepositStatus::Initialized as i32;
+
+                    let amount = amount.to_string();
+                    let chain_id = self.chain_id.to_string();
+
+                    let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+                    let response = skip_fail!(
+                        database_client
+                            .execute(
+                                query,
+                                &[
+                                    &user_address,
+                                    &token_address,
+                                    &chain_id,
+                                    &amount,
+                                    &timestamp,
+                                    &transaction_hash,
+                                    &message_id,
+                                    &status,
+                                ],
+                            )
+                            .await
+                    );
+                    log::info!(target: "solana_indexer", "IntentLib::DepositedFunds inserted response {:?}", response);
+                }
+                _ => unimplemented!(),
+            }
+        }
+    }
+
+    async fn process_raydium_events(
+        &self,
+        database_client: &Arc<Client>,
+        sigs: &mut Vec<RpcConfirmedTransactionStatusWithSignature>,
+        index: usize,
+        tx_cost: &str,
+        compute_units_used: i64,
+        system_time: SystemTime,
+        block_height: i64,
+        _transaction_hash: String,
+        _block_number: i64,
+        events: Vec<RaydiumEvent>,
+    ) {
+        for event in events {
+            if let Err(e) = self
+                .process_raydium_event(
+                    database_client.clone(),
+                    sigs,
+                    index,
+                    &tx_cost,
+                    compute_units_used,
+                    system_time,
+                    block_height,
+                    event,
+                )
+                .await
+            {
+                error!(target: "solana_indexer", "Error in process_raydium_event: {:?}", e);
+            }
+        }
+    }
+
+    async fn process_raydium_event(
+        &self,
+        database_client: Arc<Client>,
+        sigs: &mut Vec<RpcConfirmedTransactionStatusWithSignature>,
+        index: usize,
+        _tx_cost: &str,
+        _compute_units_used: i64,
+        system_time: SystemTime,
+        block_height: i64,
+        event: RaydiumEvent,
+    ) -> anyhow::Result<()> {
+        match event {
+            RaydiumEvent::PoolCreatedEvent(event) => {
+                let PoolCreatedEventWithState {
+                    inner:
+                        PoolCreatedEvent {
+                            token_mint_0,
+                            token_mint_1,
+                            tick_spacing,
+                            pool_state: pool_state_pk,
+                            sqrt_price_x64,
+                            tick,
+                            token_vault_0: _,
+                            token_vault_1: _,
+                            fee_tier_index,
+                        },
+                    pool_state,
+                    amm_config,
+                } = event;
+                info!(target: "solana_indexer", "RaydiumEvent::PoolCreatedEvent received on {pool_state_pk}");
+
+                let pool_address = pool_state_pk.to_string();
+                let chain_id_i64 = self.chain_id;
+                let token0_addr = token_mint_0.to_string();
+                let token1_addr = token_mint_1.to_string();
+
+                let fee = amm_config.fee_tiers[fee_tier_index as usize].trade_fee_rate as i32;
+                let tick_spacing_i32 = tick_spacing as i32;
+                let pool_type = "SOLANA".to_string();
+                let project_manager = pool_state.project_liquidity_provider.to_string();
+                let timestamp = system_time;
+                let metadata_json = serde_json::Value::Null;
+
+                let etp_start_time =
+                    unix_to_system_time(pool_state.exclusive_trading_period_start_time);
+                let etp_close_time =
+                    unix_to_system_time(pool_state.exclusive_trading_period_end_time);
+                let launch_type = LaunchType::from(pool_state.launch_type).to_string();
+                let initial_sqrt = sqrt_price_x64 as i64;
+                let initial_tick_i32 = tick;
+                let reserve_token_mint =
+                    pool_state.get_reserve_token_mint(&token_mint_0, &token_mint_1);
+                let reserve_token_supply =
+                    self.rpc_client.get_token_supply(reserve_token_mint).await?;
+                let token_supply_i64 = reserve_token_supply.amount.parse::<i64>()?;
+
+                let query = r#"
+                    INSERT INTO pools
+                        (pool_address, chain_id, token_0_address, token_1_address, fee,
+                         tick_spacing, pool_type, project_manager, block_number, created_at,
+                         metadata, etp_start_time, etp_close_time, launch_type, initial_sqrt_price,
+                         initial_tick, token_supply)
+                    VALUES
+                        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                    ON CONFLICT (pool_address) DO NOTHING
+                "#;
+
+                let response = database_client
+                    .execute(
+                        query,
+                        &[
+                            &pool_address,
+                            &chain_id_i64,
+                            &token0_addr,
+                            &token1_addr,
+                            &fee,
+                            &tick_spacing_i32,
+                            &pool_type,
+                            &project_manager,
+                            &block_height,
+                            &timestamp,
+                            &metadata_json,
+                            &etp_start_time,
+                            &etp_close_time,
+                            &launch_type,
+                            &initial_sqrt,
+                            &initial_tick_i32,
+                            &token_supply_i64,
+                        ],
+                    )
+                    .await?;
+                info!(target: "solana_indexer", "RaydiumEvent::PoolCreatedEvent inserted response {:?}", response);
+            }
+            RaydiumEvent::SwapEvent(event) => {
+                let SwapEvent {
+                    pool_state: pool_state_pk,
+                    sender,
+                    token_account_0: _,
+                    token_account_1: _,
+                    amount_0,
+                    transfer_fee_0: _,
+                    amount_1,
+                    transfer_fee_1,
+                    zero_for_one,
+                    sqrt_price_x64,
+                    liquidity,
+                    tick,
+                    via_vault,
+                } = event;
+                info!(target: "solana_indexer", "RaydiumEvent::SwapEvent received from {sender:?} on {pool_state_pk}");
+                let pool_address = pool_state_pk.to_string();
+                let transaction_hash = sigs[index].signature.clone();
+                let block_number = block_height;
+                let timestamp = system_time;
+                let sqrt_price = sqrt_price_x64 as i64;
+                let liquidity_i64 = liquidity as i64;
+                let initiator_user_address = sender.to_string();
+                let chain_id_i64 = self.chain_id;
+
+                // Query pool to get token addresses
+                let pool_query =
+                    "SELECT token_0_address, token_1_address FROM pools WHERE pool_address = $1";
+                let pool_row = database_client
+                    .query_one(pool_query, &[&pool_address])
+                    .await?;
+                let token0_address: String = pool_row.get("token_0_address");
+                let token1_address: String = pool_row.get("token_1_address");
+
+                // Determine token flow based on zero_for_one direction
+                // Include transfer fees in the amounts
+                let (token_in, token_out, amount_in, amount_out) = if zero_for_one {
+                    // Swapping token_0 for token_1
+                    (
+                        token0_address,
+                        token1_address,
+                        amount_0.to_string(),
+                        amount_1.to_string(),
+                    )
+                } else {
+                    // Swapping token_1 for token_0
+                    (
+                        token1_address,
+                        token0_address,
+                        (amount_1 + transfer_fee_1).to_string(), // Include transfer fee
+                        amount_0.to_string(),
+                    )
+                };
+
+                // Calculate price if amounts are valid
+                let price = if let (Ok(amt_in), Ok(amt_out)) =
+                    (amount_in.parse::<f64>(), amount_out.parse::<f64>())
+                {
+                    if amt_in > 0.0 {
+                        Some(amt_out / amt_in)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let is_vault_initiated = via_vault;
+
+                // Calculate USD values for amounts
+                // For Solana, we currently only have SOL/XXX pairs - determine which token is native
+                let sol_token_address = spl_token::native_mint::id().to_string();
+                let native_sol_address = "11111111111111111111111111111111";
+
+                let (native_token, _other_token, native_amount, other_amount) =
+                    if token_in == sol_token_address || token_in == native_sol_address {
+                        (
+                            token_in.clone(),
+                            token_out.clone(),
+                            amount_in.clone(),
+                            amount_out.clone(),
+                        )
+                    } else if token_out == sol_token_address || token_out == native_sol_address {
+                        (
+                            token_out.clone(),
+                            token_in.clone(),
+                            amount_out.clone(),
+                            amount_in.clone(),
+                        )
+                    } else {
+                        // If neither token is SOL, we can't calculate USD values accurately
+                        (
+                            "0".to_string(),
+                            "0".to_string(),
+                            "0".to_string(),
+                            "0".to_string(),
+                        )
+                    };
+
+                let (amount_in_usd, amount_out_usd) = if native_token != "0" {
+                    // Get SOL price in USD
+                    let decimals = 9;
+                    let sol_price_usd =
+                        get_usd_value_of_native(&self.chain_id, &(10_u128.pow(decimals))).await;
+
+                    let sol_price_f64 = sol_price_usd.parse::<f64>().unwrap_or(0.0);
+
+                    if sol_price_f64 > 0.0 && price.is_some() {
+                        let swap_price = price.unwrap();
+
+                        // Calculate USD values using the extracted variables
+                        let native_amount_sol = native_amount.parse::<f64>().unwrap_or(0.0)
+                            / 10_f64.powf(decimals as _);
+                        let other_amount_tokens = other_amount.parse::<f64>().unwrap_or(0.0);
+
+                        let native_usd_val = native_amount_sol * sol_price_f64;
+                        let other_usd_val = if swap_price != 0.0 {
+                            other_amount_tokens / swap_price * sol_price_f64
+                        } else {
+                            0.0
+                        };
+
+                        // Map back to amount_in_usd and amount_out_usd based on which is which
+                        if token_in == native_token {
+                            (native_usd_val.to_string(), other_usd_val.to_string())
+                        } else {
+                            (other_usd_val.to_string(), native_usd_val.to_string())
+                        }
+                    } else {
+                        ("0".to_string(), "0".to_string())
+                    }
+                } else {
+                    ("0".to_string(), "0".to_string())
+                };
+
+                let query = r#"
+                    INSERT INTO swap_amm
+                        (pool_address, token_in, token_out, amount_in, amount_out,
+                         amount_in_usd, amount_out_usd, initiator_user_address, price,
+                         transaction_hash, block_number, timestamp, chain_id, is_vault_initiated,
+                         sqrt_price, liquidity, tick)
+                    VALUES
+                        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                "#;
+
+                let response = database_client
+                    .execute(
+                        query,
+                        &[
+                            &pool_address,
+                            &token_in,
+                            &token_out,
+                            &amount_in,
+                            &amount_out,
+                            &amount_in_usd,
+                            &amount_out_usd,
+                            &initiator_user_address,
+                            &price,
+                            &transaction_hash,
+                            &block_number,
+                            &timestamp,
+                            &chain_id_i64,
+                            &is_vault_initiated,
+                            &sqrt_price,
+                            &liquidity_i64,
+                            &tick,
+                        ],
+                    )
+                    .await?;
+                info!(target: "solana_indexer", "RaydiumEvent::SwapEvent inserted response {:?}", response);
+            }
+            RaydiumEvent::CreatePersonalPositionEvent(event) => {
+                let CreatePersonalPositionEvent {
+                    pool_state,
+                    minter,
+                    nft_owner,
+                    nft_mint,
+                    nft_account: _,
+                    tick_lower_index: _,
+                    tick_upper_index: _,
+                    liquidity,
+                    deposit_amount_0,
+                    deposit_amount_1,
+                    deposit_amount_0_transfer_fee,
+                    deposit_amount_1_transfer_fee,
+                    is_deposited_by_project,
+                    is_deposited_by_vault,
+                } = event;
+
+                info!(target: "solana_indexer", "RaydiumEvent::CreatePersonalPositionEvent from {minter:?} for {nft_owner:?} on {pool_state}");
+
+                let pool_address = pool_state.to_string();
+                let user_address = nft_owner.to_string();
+                let transaction_hash = sigs[index].signature.clone();
+
+                let temp_position_id = nft_mint.to_string();
+                let amount_token0 = deposit_amount_0 as i64;
+                let amount_token1 = deposit_amount_1 as i64;
+                let liquidity_amount = liquidity as i64;
+
+                self.insert_liquidity_event(
+                    &database_client,
+                    pool_address,
+                    user_address,
+                    true,                    // is_add = true for creating position
+                    is_deposited_by_project, // is_manager
+                    Some(temp_position_id),
+                    amount_token0,
+                    amount_token1,
+                    liquidity_amount,
+                    Some(deposit_amount_0_transfer_fee as i64), // fee_amount_0
+                    Some(deposit_amount_1_transfer_fee as i64), // fee_amount_1
+                    transaction_hash,
+                    system_time,
+                    Some(is_deposited_by_vault),
+                    "CreatePersonalPositionEvent",
+                )
+                .await?;
+            }
+            RaydiumEvent::IncreaseLiquidityEvent(event) => {
+                let IncreaseLiquidityEvent {
+                    position_nft_mint,
+                    liquidity,
+                    amount_0,
+                    amount_1,
+                    amount_0_transfer_fee,
+                    amount_1_transfer_fee,
+                } = event;
+
+                info!(target: "solana_indexer", "RaydiumEvent::IncreaseLiquidityEvent for position {position_nft_mint}");
+
+                let position_nft_str = position_nft_mint.to_string();
+                let (is_vault, is_manager, pool_address, user_address) = self
+                    .get_position_flags(&database_client, &position_nft_str)
+                    .await?;
+
+                let transaction_hash = sigs[index].signature.clone();
+                let position_id = position_nft_mint.to_string();
+                let amount_token0 = amount_0 as i64;
+                let amount_token1 = amount_1 as i64;
+                let liquidity_amount = liquidity as i64;
+
+                self.insert_liquidity_event(
+                    &database_client,
+                    pool_address,
+                    user_address,
+                    true, // is_add = true for increasing liquidity
+                    is_manager,
+                    Some(position_id),
+                    amount_token0,
+                    amount_token1,
+                    liquidity_amount,
+                    Some(amount_0_transfer_fee as i64),
+                    Some(amount_1_transfer_fee as i64),
+                    transaction_hash,
+                    system_time,
+                    Some(is_vault),
+                    "IncreaseLiquidityEvent",
+                )
+                .await?;
+            }
+            RaydiumEvent::DecreaseLiquidityEvent(event) => {
+                let DecreaseLiquidityEvent {
+                    position_nft_mint,
+                    liquidity,
+                    decrease_amount_0,
+                    decrease_amount_1,
+                    fee_amount_0,
+                    fee_amount_1,
+                    reward_amounts: _,
+                    transfer_fee_0,
+                    transfer_fee_1,
+                } = event;
+
+                info!(target: "solana_indexer", "RaydiumEvent::DecreaseLiquidityEvent for position {position_nft_mint}");
+
+                let position_nft_str = position_nft_mint.to_string();
+                let (is_vault, is_manager, pool_address, user_address) = self
+                    .get_position_flags(&database_client, &position_nft_str)
+                    .await?;
+
+                let transaction_hash = sigs[index].signature.clone();
+                let position_id = position_nft_mint.to_string();
+                let amount_token0 = decrease_amount_0 as i64;
+                let amount_token1 = decrease_amount_1 as i64;
+                let liquidity_amount = liquidity as i64;
+
+                // Combine fee_amount and transfer_fee for total fees
+                let total_fee_0 = (fee_amount_0 + transfer_fee_0) as i64;
+                let total_fee_1 = (fee_amount_1 + transfer_fee_1) as i64;
+
+                self.insert_liquidity_event(
+                    &database_client,
+                    pool_address,
+                    user_address,
+                    false, // is_add = false for decreasing liquidity
+                    is_manager,
+                    Some(position_id),
+                    amount_token0,
+                    amount_token1,
+                    liquidity_amount,
+                    Some(total_fee_0),
+                    Some(total_fee_1),
+                    transaction_hash,
+                    system_time,
+                    Some(is_vault),
+                    "DecreaseLiquidityEvent",
+                )
+                .await?;
+            }
+            ev => debug!("Skipped event processing {:?}", ev),
+        }
+        Ok(())
+    }
+
+    async fn insert_liquidity_event(
+        &self,
+        database_client: &Arc<Client>,
+        pool_address: String,
+        user_address: String,
+        is_add: bool,
+        is_manager: bool,
+        position_id: Option<String>,
+        amount_token0: i64,
+        amount_token1: i64,
+        liquidity_amount: i64,
+        fee_amount_0: Option<i64>,
+        fee_amount_1: Option<i64>,
+        transaction_hash: String,
+        timestamp: SystemTime,
+        is_vault: Option<bool>,
+        log_target: &str,
+    ) -> anyhow::Result<()> {
+        let query = r#"
+            INSERT INTO liquidity
+                (pool_address, user_address, is_add, position_id, token_0_amount, token_1_amount,
+                 chain_id, timestamp, transaction_hash, is_manager, liquidity, fee_amount_0,
+                 fee_amount_1, is_vault)
+            VALUES
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        "#;
+
+        match database_client
+            .execute(
+                query,
+                &[
+                    &pool_address,
+                    &user_address,
+                    &is_add,
+                    &position_id,
+                    &(amount_token0 as i32),
+                    &(amount_token1 as i32),
+                    &self.chain_id,
+                    &timestamp,
+                    &transaction_hash,
+                    &is_manager,
+                    &(liquidity_amount as i32),
+                    &fee_amount_0.map(|f| f as i32),
+                    &fee_amount_1.map(|f| f as i32),
+                    &is_vault,
+                ],
+            )
+            .await
+        {
+            Ok(rows) => {
+                info!(target: log_target, "Liquidity event inserted: {:?} rows", rows);
+                Ok(())
+            }
+            Err(e) => {
+                error!(target: log_target, "Failed to insert liquidity data: {:?}", e);
+                Err(anyhow::anyhow!("Failed to insert liquidity data: {:?}", e))
+            }
+        }
+    }
+
+    /// Helper function to query the original is_vault and is_manager values for a position
+    async fn get_position_flags(
+        &self,
+        database_client: &Arc<Client>,
+        position_id: &str,
+    ) -> anyhow::Result<(bool, bool, String, String)> {
+        let position_query = r#"
+            SELECT pool_address, user_address, is_vault, is_manager
+            FROM liquidity
+            WHERE position_id = $1
+            ORDER BY timestamp ASC
+            LIMIT 1
+        "#;
+
+        if let Ok(Some(row)) = database_client
+            .query_opt(position_query, &[&position_id])
+            .await
+        {
+            let pool_address: String = row.get("pool_address");
+            let user_address: String = row.get("user_address");
+            let is_vault: Option<bool> = row.get("is_vault");
+            let is_manager: bool = row.get("is_manager");
+
+            Ok((
+                is_vault.unwrap_or(false),
+                is_manager,
+                pool_address,
+                user_address,
+            ))
+        } else {
+            // Default values if position not found
+            Ok((false, false, "unknown".to_string(), "unknown".to_string()))
         }
     }
 }
@@ -623,7 +1240,7 @@ impl BlockchainIndexer for SolanaIndexer {
         // Placeholder logic for listening to Solana program events
         info!(
             "Listening to events for Solana program {} on RPC {}",
-            self.program_id, self.rpc_url
+            self.vaults_program_id, self.rpc_url
         );
 
         // Subscribe to logs
@@ -632,26 +1249,193 @@ impl BlockchainIndexer for SolanaIndexer {
     }
 }
 
+#[derive(Debug, Clone)]
+enum Events {
+    Raydium(Vec<RaydiumEvent>),
+    Vaults(Vec<VaultsEvent>),
+}
+
+impl SolanaIndexer {
+    async fn get_amm_config(&self, config_index: Option<u16>) -> anyhow::Result<AmmConfig> {
+        let (amm_config_pubkey, _bump) = match config_index {
+            Some(idx) => {
+                let idx_bytes = idx.to_be_bytes();
+                let seeds = &[AMM_CONFIG_SEED.as_bytes(), &idx_bytes][..];
+                Pubkey::find_program_address(seeds, &self.amm_program_id)
+            }
+            None => {
+                let seeds = &[AMM_CONFIG_SEED.as_bytes()][..];
+                Pubkey::find_program_address(seeds, &self.amm_program_id)
+            }
+        };
+        let amm_config = AmmConfig::try_deserialize(
+            &mut &self.rpc_client.get_account_data(&amm_config_pubkey).await?[..],
+        )?;
+        Ok(amm_config)
+    }
+
+    async fn parse_raydium_events(&self, logs: &[&str]) -> anyhow::Result<Vec<RaydiumEvent>> {
+        let serialized_events: Vec<&str> = logs
+            .iter()
+            .filter_map(|log| log.strip_prefix("Program data: "))
+            .collect();
+        let mut events = vec![];
+        for event in serialized_events {
+            let decoded_event = base64::prelude::BASE64_STANDARD.decode(event);
+            match decoded_event {
+                Ok(mut decoded_event) => {
+                    if decoded_event.len() < 8 {
+                        warn!(target: "solana_indexer", "Received event with less than 8 bytes");
+                        continue;
+                    }
+                    let data = decoded_event.split_off(8);
+                    let discriminator = decoded_event;
+                    let result = match discriminator.as_ref() {
+                        IncreaseLiquidityEvent::DISCRIMINATOR => {
+                            <IncreaseLiquidityEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                                &data,
+                            )
+                            .map(RaydiumEvent::IncreaseLiquidityEvent)
+                        }
+                        DecreaseLiquidityEvent::DISCRIMINATOR => {
+                            <DecreaseLiquidityEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                                &data,
+                            )
+                            .map(RaydiumEvent::DecreaseLiquidityEvent)
+                        }
+                        SwapEvent::DISCRIMINATOR => {
+                            <SwapEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
+                                .map(RaydiumEvent::SwapEvent)
+                        }
+                        ConfigChangeEvent::DISCRIMINATOR => {
+                            <ConfigChangeEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
+                                .map(RaydiumEvent::ConfigChangeEvent)
+                        }
+                        PoolCreatedEvent::DISCRIMINATOR => {
+                            let event = <PoolCreatedEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)?;
+                            let pool_state = PoolState::try_deserialize(&mut &self.rpc_client.get_account_data(&event.pool_state).await?[..])?;
+                            let amm_config = self.get_amm_config(None).await?;
+                            Ok(RaydiumEvent::PoolCreatedEvent(PoolCreatedEventWithState {
+                                inner: event,
+                                pool_state,
+                                amm_config
+                            }))
+                        }
+                        d => {
+                            debug!(target: "solana_indexer", "Unknown discriminator: {:?}", d);
+                            continue;
+                        }
+                    };
+                    match result {
+                        Ok(event) => {
+                            events.push(event);
+                            continue;
+                        }
+                        Err(e) => {
+                            error!(target: "solana_indexer", "Error parsing event data: {:?}", e);
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "solana_indexer", "Failed to decode event data: {:?}", e);
+                    continue;
+                }
+            }
+        }
+
+        Ok(events)
+    }
+
+    /// Parses a list of Solana program log lines and parses events
+    /// emitted by a specified program ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `logs` – A slice of log lines (`Vec<String>`) from a confirmed transaction.
+    /// * `raydium_program_id` – The public key of the Raydium program whose events we track.
+    /// * `vault_program_id` – The public key of the Vaults program whose events we track.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `Events` structs, in the order they were emitted.
+    async fn parse_solana_events(
+        &self,
+        logs: &[&str],
+        raydium_program_id: &Pubkey,
+        vaults_program_id: &Pubkey,
+    ) -> anyhow::Result<Vec<Events>> {
+        let mut events = Vec::new();
+        let mut current_program = None;
+        let mut event_logs: Vec<&str> = Vec::new();
+
+        for line in logs {
+            // Track callstack for each program to maintain a proper scope for the events
+            if let Some(id_str) = line
+                .strip_prefix("Program ")
+                .and_then(|l| l.split_whitespace().next())
+            {
+                if line.contains(" invoke [") {
+                    if let Ok(pk) = Pubkey::from_str(id_str) {
+                        if current_program.is_none() {
+                            current_program = Some(pk);
+                            event_logs.clear();
+                        }
+                        continue;
+                    }
+                }
+                if *line == format!("Program {} success", id_str) {
+                    if let Some(top) = &current_program {
+                        if top.to_string() == id_str {
+                            if top == raydium_program_id {
+                                events.push(Events::Raydium(
+                                    self.parse_raydium_events(&event_logs).await?,
+                                ));
+                            } else if top == vaults_program_id {
+                                events.push(Events::Vaults(get_events_from_logs(&event_logs)));
+                            }
+
+                            current_program = None;
+                            event_logs.clear();
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            if current_program.as_ref() == Some(raydium_program_id)
+                || current_program.as_ref() == Some(vaults_program_id)
+            {
+                event_logs.push(line.as_ref());
+            } else {
+                debug!(target: "solana_indexer", "Unknown event: {}", line);
+            }
+        }
+        if let Some(program) = current_program {
+            warn!(
+                target: "solana_indexer", "Invoke stack is not empty after events parsing: {}",
+                program.to_string(),
+            )
+        }
+
+        Ok(events)
+    }
+}
+
 /// Traverses the logs and extracts the events by deserializing them from base64
 /// and then again using borsh.
-pub fn get_events_from_logs(logs: Vec<String>) -> Vec<Event> {
+pub fn get_events_from_logs(logs: &[&str]) -> Vec<VaultsEvent> {
     let serialized_events: Vec<&str> = logs
         .iter()
-        .filter_map(|log| {
-            if log.starts_with("Program data: ") {
-                Some(log.strip_prefix("Program data: ").unwrap())
-            } else {
-                None
-            }
-        })
+        .filter_map(|log| log.strip_prefix("Program data: "))
         .collect();
-    let mut events: Vec<Event> = serialized_events
+    let mut events: Vec<VaultsEvent> = serialized_events
         .iter()
         .filter_map(|event| {
             let decoded_event = base64::prelude::BASE64_STANDARD.decode(event);
             if let Ok(decoded_event) = decoded_event {
-                let decoded_event: Result<Event, String> =
-                    borsh::BorshDeserialize::try_from_slice(&decoded_event).map_err(|e| {
+                let decoded_event: Result<VaultsEvent, String> =
+                    BorshDeserialize::try_from_slice(&decoded_event).map_err(|e| {
                         // log::error!("These are logs {:?}", logs);
                         // log::error!("This is decoded event {:?}", decoded_event);
                         e.to_string()
@@ -680,7 +1464,7 @@ pub fn get_events_from_logs(logs: Vec<String>) -> Vec<Event> {
             let message_id = message_id.unwrap().to_string();
             // Also unpack the message that was sent.
             let deposit_event = match events.first() {
-                Some(Event::MessageDispatchedFromVault(event)) => {
+                Some(VaultsEvent::MessageDispatchedFromVault(event)) => {
                     let message = event.message.clone();
                     let decoded_message =
                         SolidityIntentProcessorBoundMessage::abi_decode(message.as_ref(), true);
@@ -713,15 +1497,29 @@ pub fn get_events_from_logs(logs: Vec<String>) -> Vec<Event> {
                 _ => None,
             };
             if let Some(deposit_event) = deposit_event {
-                events.push(Event::DepositedFunds(deposit_event));
+                events.push(VaultsEvent::DepositedFunds(deposit_event));
             }
         }
     }
     events
 }
 
-#[derive(Clone, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
-pub enum Event {
+/// A unified enum of all Raydium events we care about.
+#[derive(Clone, Debug)]
+pub enum RaydiumEvent {
+    IncreaseLiquidityEvent(IncreaseLiquidityEvent),
+    DecreaseLiquidityEvent(DecreaseLiquidityEvent),
+    CollectPersonalFeeEvent(CollectPersonalFeeEvent),
+    CollectProtocolFeeEvent(CollectProtocolFeeEvent),
+    PoolCreatedEvent(PoolCreatedEventWithState),
+    ConfigChangeEvent(ConfigChangeEvent),
+    SwapEvent(SwapEvent),
+    CreatePersonalPositionEvent(CreatePersonalPositionEvent),
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
+pub enum VaultsEvent {
     DepositedFunds(DepositFundsEvent),
     DepositContractCreated(DepositContractCreatedEvent),
     MessageDispatchedFromVault(MessageDispatchedFromVaultEvent),
@@ -729,6 +1527,7 @@ pub enum Event {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
 pub struct DepositFundsEvent {
     // The 20 byte evm address of the user for whom the deposit is being made
     pub user_address: String,
@@ -738,6 +1537,7 @@ pub struct DepositFundsEvent {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
 pub struct DepositContractCreatedEvent {
     // The 20 byte evm address of the user for whom the deposit is being made
     pub user_address: Vec<u8>,
@@ -746,6 +1546,7 @@ pub struct DepositContractCreatedEvent {
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
 pub struct MessageDispatchedFromVaultEvent {
     pub user_address: Vec<u8>,
     pub destination_domain: u32,
@@ -754,6 +1555,7 @@ pub struct MessageDispatchedFromVaultEvent {
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
 pub struct ReceivedMessageOnVaultEvent {
     pub sender: Vec<u8>,
     pub source_domain: u32,
@@ -764,6 +1566,7 @@ pub struct ReceivedMessageOnVaultEvent {
 // Defining a local interop provider so that it can be used to export as a crate
 // and define traits for it.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
 pub enum LocalInteropProvider {
     LayerZero,
     Hyperlane,
@@ -791,43 +1594,154 @@ pub struct Response {
     result: EncodedConfirmedTransactionWithStatusMeta,
 }
 
-#[tokio::test]
-pub async fn test_get_events_from_logs() {
-    let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
-    let tx_hash = Signature::from_str(
-        "3BZfM9oJdmvP1MXNfCUToEmHQHwf5trV8vhGZrN4xnn7kdymcAotGLQsoosLx1L9qc7KAk4yktYZtzMmvzRhn5UH",
-    )
-    .unwrap();
-    let logs = rpc_client
-        .get_transaction(&tx_hash, UiTransactionEncoding::Base64)
-        .await
-        .unwrap();
-    let logs = logs.transaction.meta.unwrap().log_messages;
-    let logs = match logs {
-        solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => logs,
-        _ => Vec::new(),
-    };
-    let events = get_events_from_logs(logs);
+fn init_logger() {
+    let _ = env_logger::builder()
+        .filter_level(LevelFilter::Info)
+        .try_init();
+}
 
-    let user_address = "0xfCE5eEBff30d36121D965dcB862270D700f3b687";
-    let token_address = "0xc6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61";
-    let amount = 10000000;
-    let message_id = "0x3466d9c67793ef637dd6beb3ec91a572295e5085b63ffbdb959bdb829b87dafd";
+#[cfg(test)]
+mod tests {
+    use anchor_lang::pubkey;
+    use solana_client::rpc_config::RpcTransactionConfig;
+    use super::*;
 
-    // 2nd event is deposit event
-    let deposit_event = events[1].clone();
-    let deposit_event = match deposit_event {
-        Event::DepositedFunds(event) => event,
-        _ => panic!("Expected deposit event"),
-    };
-    assert_eq!(
-        deposit_event.user_address.to_ascii_lowercase(),
-        user_address.to_ascii_lowercase()
-    );
-    assert_eq!(
-        deposit_event.token_address.to_ascii_lowercase(),
-        token_address.to_ascii_lowercase()
-    );
-    assert_eq!(deposit_event.amount, amount);
-    assert_eq!(deposit_event.message_id, message_id);
+    #[tokio::test]
+    pub async fn test_get_events_from_logs() {
+        init_logger();
+        let url = "https://api.mainnet-beta.solana.com".to_string();
+        let program_id = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
+        let amm_program_id = pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
+        let indexer = SolanaIndexer::new(
+            url.clone(),
+            String::new(),
+            0,
+            program_id.to_string(),
+            amm_program_id.to_string(),
+        );
+        let rpc_client = RpcClient::new(url);
+        let tx_hash = Signature::from_str(
+            "3BZfM9oJdmvP1MXNfCUToEmHQHwf5trV8vhGZrN4xnn7kdymcAotGLQsoosLx1L9qc7KAk4yktYZtzMmvzRhn5UH",
+        )
+            .unwrap();
+        let logs = rpc_client
+            .get_transaction(&tx_hash, UiTransactionEncoding::Base64)
+            .await
+            .unwrap();
+        let logs = logs.transaction.meta.unwrap().log_messages;
+        let logs = match &logs {
+            solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => {
+                logs.iter().map(|x| x.as_ref()).collect()
+            }
+            _ => Vec::new(),
+        };
+        println!("{}", logs.join("\n"));
+        let mut events = indexer
+            .parse_solana_events(
+                &logs,
+                &pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"),
+                &program_id,
+            )
+            .await
+            .unwrap();
+        dbg!(&events);
+        let events = if let Events::Vaults(events) = events.pop().unwrap() {
+            events
+        } else {
+            panic!()
+        };
+
+        let user_address = "0xfCE5eEBff30d36121D965dcB862270D700f3b687";
+        let token_address = "0xc6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61";
+        let amount = 10000000;
+        let message_id = "0x3466d9c67793ef637dd6beb3ec91a572295e5085b63ffbdb959bdb829b87dafd";
+
+        // 2nd event is deposit event
+        let deposit_event = events[1].clone();
+        let deposit_event = match deposit_event {
+            VaultsEvent::DepositedFunds(event) => event,
+            _ => panic!("Expected deposit event"),
+        };
+        assert_eq!(
+            deposit_event.user_address.to_ascii_lowercase(),
+            user_address.to_ascii_lowercase()
+        );
+        assert_eq!(
+            deposit_event.token_address.to_ascii_lowercase(),
+            token_address.to_ascii_lowercase()
+        );
+        assert_eq!(deposit_event.amount, amount);
+        assert_eq!(deposit_event.message_id, message_id);
+    }
+
+    #[tokio::test]
+    pub async fn test_get_raydium_events_from_logs() {
+        init_logger();
+        let url = "https://api.mainnet-beta.solana.com".to_string();
+        let program_id = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
+        let amm_program_id = pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
+
+        let indexer = SolanaIndexer::new(
+            url.clone(),
+            String::new(),
+            0,
+            program_id.to_string(),
+            amm_program_id.to_string(),
+        );
+        let rpc_client = RpcClient::new(url);
+        let tx_hash = Signature::from_str(
+            "39Zoyu6Wpp5STngzihSa6FVTjr2vT9GT7zUXL2XAv1as6iMYVExZdJbb7SZiX9KvXbFGkzxTaFMg1Eb9XGPChXiQ",
+        )
+            .unwrap();
+        let logs = rpc_client
+            .get_transaction_with_config(
+                &tx_hash,
+                RpcTransactionConfig {
+                    encoding: Some(UiTransactionEncoding::Base64),
+                    commitment: None,
+                    max_supported_transaction_version: Some(0),
+                },
+            )
+            .await
+            .unwrap();
+        let logs = logs.transaction.meta.unwrap().log_messages;
+        let logs = match &logs {
+            solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => {
+                logs.iter().map(|x| x.as_ref()).collect::<Vec<&str>>()
+            }
+            _ => Vec::new(),
+        };
+        println!("{}", logs.join("\n"));
+        let mut events = indexer
+            .parse_solana_events(
+                &logs,
+                &pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"),
+                &pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz"),
+            )
+            .await
+            .unwrap();
+        dbg!(&events);
+        let events = match events.pop().unwrap() {
+            Events::Raydium(events) => events,
+            _ => panic!("Expected raydium events"),
+        };
+        let deposit_event = events[0].clone();
+        let deposit_event = match deposit_event {
+            RaydiumEvent::DecreaseLiquidityEvent(event) => event,
+            _ => panic!("Expected deposit event"),
+        };
+
+        let expected_event = DecreaseLiquidityEvent {
+            position_nft_mint: pubkey!("4UaVjQ5cUunvCaZiyij2K7rfmn8HgBjCn2HExfbpYNL4"),
+            liquidity: 0,
+            decrease_amount_0: 0,
+            decrease_amount_1: 0,
+            fee_amount_0: 0,
+            fee_amount_1: 15008807,
+            reward_amounts: [0, 0, 0],
+            transfer_fee_0: 0,
+            transfer_fee_1: 0,
+        };
+        assert_eq!(deposit_event, expected_event);
+    }
 }
