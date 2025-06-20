@@ -1,4 +1,4 @@
-use alloy::primitives::FixedBytes;
+use alloy::primitives::{Address, FixedBytes};
 use alloy::providers::{Provider, RootProvider};
 use alloy::pubsub::PubSubFrontend;
 use alloy::rpc::types::Log;
@@ -9,31 +9,27 @@ use futures_util::stream::StreamExt;
 use futures_util::Stream;
 use log::{debug, error, info};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::json;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_postgres::Client;
 
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
-use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{
-    TokenLaunchType, UniswapV3PoolLibInstance,
-};
+use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance;
 use crate::solidity_structs::{
-    self, token, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, AmountTypes,
-    CreatedOrder, DispatchId, IntentProcessorBoundMessageAcknowledgementData,
-    IntentProcessorBoundMessageDepositData, ProcessId, QuoteApiResponse, ReceiverUserAddressData,
-    ReceiverVaultData, ResultCosts, SolidityAcknowledgementMetadata,
-    SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage,
-    ThirdPartyFeeResult, VaultBoundMessagePlaceOrderData,
+    self, token, AcknowledgementMetadataLaunchpadAddLiquidity, AcknowledgementMetadataLaunchpadRemoveLiquidity, AcknowledgementMetadataLaunchpadSwap, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, AmountTypes, CreatedOrder, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, PoolType, ProcessId, QuoteApiResponse, ReceiverUserAddressData, ReceiverVaultData, ResultCosts, SolidityAcknowledgementMetadata, SolidityIntentProcessorBoundMessage, SolidityOrder, SolidityVaultBoundMessage, ThirdPartyFeeResult, TokenLaunchType, VaultBoundMessagePlaceOrderData
 };
 use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
-use crate::utils::unix_to_system_time;
+use crate::utils::{chain_id_to_chain_name, unix_to_system_time};
 
 pub enum IntentVersions {
     IntentSubmitted,
@@ -306,7 +302,7 @@ pub async fn update_intent_state(
     initiator_address: String,
 ) {
     let query =
-        "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9, $10, $11)";
+        "INSERT INTO intent_state VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, DEFAULT, $7, $8, $9, $10, $11) ON CONFLICT (intent_id, version, transaction_hash) DO NOTHING";
     let timestamp = std::time::SystemTime::now();
 
     let (gas_used, transaction_cost) =
@@ -617,7 +613,7 @@ async fn try_parse_evm_event(
             let timestamp = current_timestamp;
             let fee_amount = feeAmount.to_string();
 
-            let query = "INSERT INTO intent VALUES(DEFAULT, $1, $2, $3, $4, $5, $6)";
+            let query = "INSERT INTO intent VALUES(DEFAULT, $1, $2, $3, $4, $5, $6) ON CONFLICT (transaction_hash) DO NOTHING";
             let response = client
                 .execute(
                     query,
@@ -693,7 +689,7 @@ async fn try_parse_evm_event(
             let block_number = intent_block_number as i64;
             let timestamp = std::time::SystemTime::now();
 
-            let query = "INSERT INTO solution VALUES(DEFAULT, $1, $2, $3, $4, $5)";
+            let query = "INSERT INTO solution VALUES(DEFAULT, $1, $2, $3, $4, $5) ON CONFLICT (transaction_hash) DO NOTHING";
             let response = client
                 .execute(
                     query,
@@ -790,7 +786,7 @@ async fn try_parse_evm_event(
             .await;
 
             let query: &str =
-                "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)";
+                "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (transaction_hash) DO NOTHING";
             let response = client
                 .execute(
                     query,
@@ -875,7 +871,7 @@ async fn try_parse_evm_event(
                 );
             }
 
-            let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2)";
+            let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2) ON CONFLICT (intent_id) DO NOTHING";
             match client
                 .execute(intent_fee_add_query, &[&intent_id, &fee_data_json])
                 .await
@@ -930,7 +926,7 @@ async fn try_parse_evm_event(
                 .to_string();
 
             let query =
-                "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                "INSERT INTO acknowledgement VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (transaction_hash) DO NOTHING";
             let response = client
                 .execute(
                     query,
@@ -978,6 +974,7 @@ async fn try_parse_evm_event(
             if decoded_ack_metadata.data.len() > 0 {
                 let mut actual_amount = String::new();
                 let metadata_variant = decoded_ack_metadata.enumVariant as u8;
+                // TODO: Add launchpad ack variants as well
                 if metadata_variant == 1 {
                     // stake
                     let metadata_data = AcknowledgementMetadataStake::abi_decode(
@@ -986,6 +983,21 @@ async fn try_parse_evm_event(
                     )
                     .unwrap();
                     actual_amount = metadata_data.amountCredited.to_string();
+                } else if metadata_variant == 2 {
+                    let metadata_data = AcknowledgementMetadataLaunchpadSwap::abi_decode(
+                        decoded_ack_metadata.data.as_ref(), true
+                    ).unwrap();
+                    actual_amount = metadata_data.receivedAmount.to_string();
+                } else if metadata_variant == 3 {
+                    let metadata_data = AcknowledgementMetadataLaunchpadAddLiquidity::abi_decode(
+                        decoded_ack_metadata.data.as_ref(), true
+                    ).unwrap();
+                    actual_amount = metadata_data.amount1.to_string();
+                } else if metadata_variant == 4 {
+                    let metadata_data = AcknowledgementMetadataLaunchpadRemoveLiquidity::abi_decode(
+                        decoded_ack_metadata.data.as_ref(), true
+                    ).unwrap();
+                    actual_amount = metadata_data.amount1.to_string();
                 } else {
                     // transact
                     let metadata_data = AcknowledgementMetadataTransact::abi_decode(
@@ -1202,7 +1214,7 @@ async fn try_parse_evm_event(
                 Err(_e) => None,
             };
 
-            let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
+            let query = "INSERT INTO received_message_on_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (transaction_hash) DO NOTHING";
             match client
                 .execute(
                     query,
@@ -1317,7 +1329,7 @@ async fn try_parse_evm_event(
                     let intent_id: i64 = intent_id_response.get("intent_id");
 
                     let query =
-                        "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9)";
+                        "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (transaction_hash) DO NOTHING";
                     match client
                         .execute(
                             query,
@@ -1487,43 +1499,67 @@ async fn try_parse_evm_event(
                 launchParams,
             } = log.log_decode().unwrap().inner.data;
             let log_target = "PoolCreated";
-            info!(target: log_target, "UniswapV3FactoryLib::PoolCreated: {pool}");
+            info!(target: log_target, "UniswapV3FactoryLib::PoolCreated: {pool}, {token0}, {token1}");
 
             let timestamp = SystemTime::now();
             let block_number_i64 = log.block_number.unwrap() as i64;
 
             let pool_instance = UniswapV3PoolLibInstance::new(pool, chain_provider.clone());
-            let slot = pool_instance.slot0().call().await?;
+            info!("pool instance {:?}", pool_instance);
+            let slot = match pool_instance.slot0().call().await {
+                Ok(slot) => {
+                    info!("slot {:?}", slot);
+                    slot
+                },
+                Err(e) => {
+                    error!(target: log_target, "Error fetching slot0 for pool {}: {:?}", pool, e);
+                    bail!("Error fetching slot0 for pool {}: {:?}", pool, e);
+                }
+            };
             let pool_address = pool.to_string();
             let chain_id_i64 = chain_provider.get_chain_id().await? as i64;
             let token0_addr = token0.to_string();
             let token1_addr = token1.to_string();
-            let fee_decimal = fee.to::<i32>();
-            let tick_spacing_i32 = tickSpacing.as_i32();
-            let pool_type = "EVM".to_string();
+            let fee_decimal = fee.to::<i64>();
+            let tick_spacing_i64 = tickSpacing.as_i64();
+            let pool_type = PoolType::EVM;
             let project_manager = launchParams.projectManager.to_string();
             let metadata_json = serde_json::Value::Null;
             let etp_start_time = unix_to_system_time(launchParams.exclusiveTradingPeriodStart.to());
-            let etp_close_time = unix_to_system_time(launchParams.exclusiveTradingPeriodEnd.to());
-            let launch_type = TokenLaunchType::from(launchParams.tokenLaunchType).to_string();
-            let initial_sqrt = slot.sqrtPriceX96.to::<i64>();
-            let initial_tick_i32 = slot.tick.as_i32();
+            let etp_end_time = unix_to_system_time(launchParams.exclusiveTradingPeriodEnd.to());
+            let launch_type = if launchParams.tokenLaunchType == 0 {
+                TokenLaunchType::FAIR
+            }else {
+                TokenLaunchType::CURATED
+            };
+            let initial_sqrt = slot.sqrtPriceX96.to_string();
+            let initial_tick_i32 = slot.tick.to_string();
+            info!("initial_tick {:?}", initial_tick_i32);
             let token = token::Token::new(token1, chain_provider.clone());
-            let token_supply_i64 = token.totalSupply().call().await?._0.to::<i64>();
+            let token_supply_i64 = match token.totalSupply().call().await {
+                Ok(supply) => supply._0.to_string(),
+                Err(e) => {
+                    error!("Error in fetching token supply from its contract, defaulting to 0");
+                    "0".to_string()
+                }
+            };
+
+            info!(target: log_target, "UniswapV3FactoryLib::PoolCreated - pool_address: {}, chain_id: {}, token_0_address: {}, token_1_address: {}, fee: {}, tick_spacing: {}, pool_type: {:?}, project_manager: {}, block_number: {}, created_at: {:?}, metadata: {:?}, etp_start_time: {:?}, etp_end_time: {:?}, launch_type: {:?}, initial_sqrt_price: {}, initial_tick: {}, token_supply: {}",
+                pool_address, chain_id_i64, token0_addr, token1_addr, fee_decimal, tick_spacing_i64, pool_type, project_manager, block_number_i64, timestamp, metadata_json, etp_start_time, etp_end_time, launch_type, initial_sqrt, initial_tick_i32, token_supply_i64);
 
             // --- perform the INSERT ---
             let query = r#"
                   INSERT INTO pools
                     (pool_address, chain_id, token_0_address, token_1_address, fee,
                      tick_spacing, pool_type, project_manager, block_number, created_at,
-                     metadata, etp_start_time, etp_close_time, launch_type, initial_sqrt_price,
-                     initial_tick, token_supply)
+                     metadata, etp_start_time, etp_end_time, launch_type, initial_sqrt_price,
+                     initial_tick, token_supply, launchpad_token)
                   VALUES
-                    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::token_launch_type,$15,$16,$17,$18)
                   ON CONFLICT (pool_address) DO NOTHING
                 "#;
 
-            let rows = client
+            let rows = match client
                 .execute(
                     query,
                     &[
@@ -1531,27 +1567,93 @@ async fn try_parse_evm_event(
                         &chain_id_i64,
                         &token0_addr,
                         &token1_addr,
-                        &fee_decimal,
-                        &tick_spacing_i32,
+                        &Decimal::from(fee_decimal),
+                        &tick_spacing_i64,
                         &pool_type,
                         &project_manager,
                         &block_number_i64,
                         &timestamp,
                         &metadata_json,
                         &etp_start_time,
-                        &etp_close_time,
+                        &etp_end_time,
                         &launch_type,
                         &initial_sqrt,
-                        &initial_tick_i32,
+                        &initial_tick_i32.parse::<i32>().unwrap(),
                         &token_supply_i64,
+                        &token1_addr, // token1 is the launchpad token for evm pools
                     ],
                 )
-                .await
-                .expect("failed to insert pool_created");
+                .await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    error!(target: log_target, "Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}", e);
+                    bail!("Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}", e);
+                }};
             info!(
                 target: log_target, "UniswapV3FactoryLib::PoolCreated inserted a fallback response {:?}",
                 rows
             );
+
+            let token_chains_query = r#"
+                INSERT INTO token_chains (token_id, address, decimals, network, address_bytes32) VALUES($1, $2, $3, $4, $5)
+            "#;
+
+            let tokens_query = "INSERT INTO tokens (ticker, full_name, is_stable, is_tradable, price_usd, description, launch_date, website, cmc_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (address, network) DO NOTHING";
+
+            let token_id = &pool_address;
+            let network = chain_id_to_chain_name(chain_id);
+            let address_bytes32 = format!("{:0>64}", hex::encode(token1));
+
+            let (decimals, ticker, full_name) = get_token_data(token1.clone(), chain_provider.clone()).await;
+            let is_stable = false;
+            let is_tradable = false;
+            let price_usd = Decimal::from(0_i64);
+            let description = String::new();
+            let launch_date = timestamp.clone();
+            let website = String::new();
+            let cmc_id = String::new();
+
+            // -- add in the tokens table
+            match client
+                .execute(
+                    token_chains_query,
+                    &[
+                        &token_id,
+                        &token1_addr,
+                        &decimals,
+                        &network,
+                        &address_bytes32
+                    ],
+                )
+                .await
+            {
+                Ok(rows) => {
+                    info!(target: log_target, "Inserted token data into token_chains table: {:?}", rows);
+                    match client.execute(tokens_query, &[
+                        &ticker,
+                        &full_name,
+                        &is_stable,
+                        &is_tradable,
+                        &price_usd,
+                        &description,
+                        &launch_date,
+                        &website,
+                        &cmc_id
+                    ]).await {
+                        Ok(rows) => {
+                            info!(target: log_target, "Inserted token data into tokens table: {:?}", rows);
+                        }
+                        Err(e) => {
+                            error!(target: log_target, "Error inserting token chain data into token_chains table: {:?}", e);
+                            bail!("Error inserting token chain data into token_chains table: {:?}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!(target: log_target, "Error inserting token data into tokens table: {:?}", e);
+                    bail!("Error inserting token data into tokens table: {:?}", e);
+                }
+            };
         }
         Some(&UniswapV3PoolLib::Swap::SIGNATURE_HASH) => {
             let UniswapV3PoolLib::Swap {
@@ -1570,8 +1672,14 @@ async fn try_parse_evm_event(
             let pool_address = log.address().to_string();
             let transaction_hash = log.transaction_hash.unwrap().to_string();
             let block_number = log.block_number.unwrap() as i64;
-            let timestamp = unix_to_system_time(log.block_timestamp.unwrap());
-            let sqrt_price = sqrtPriceX96.to::<i64>();
+            let timestamp = match log.block_timestamp {
+                Some(ts) => unix_to_system_time(ts),
+                None => {
+                    error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+                    SystemTime::now() // Fallback to current time if timestamp is missing
+                }
+            };;
+            let sqrt_price = sqrtPriceX96.to_string();
             let liquidity_i64 = liquidity as i64;
             let tick_i32 = tick.as_i32();
             let initiator_user_address = sender.to_string();
@@ -1698,12 +1806,12 @@ async fn try_parse_evm_event(
             let is_vault_initiated = false;
 
             let query = r#"
-                INSERT INTO swap_amm
+                INSERT INTO ammswap
                     (pool_address, token_in, token_out, amount_in, amount_out, amount_in_usd,
                      amount_out_usd, initiator_user_address, price, transaction_hash, block_number,
                      timestamp, chain_id, is_vault_initiated, sqrt_price, liquidity, tick)
                 VALUES
-                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) ON CONFLICT (transaction_hash) DO NOTHING
             "#;
 
             let rows = client
@@ -1713,12 +1821,12 @@ async fn try_parse_evm_event(
                         &pool_address,
                         &token_in,
                         &token_out,
-                        &amount_in,
-                        &amount_out,
-                        &amount_in_usd,
-                        &amount_out_usd,
+                        &Decimal::from_str(&amount_in).unwrap(),
+                        &Decimal::from_str(&amount_out).unwrap(),
+                        &Decimal::from_str(&amount_in_usd).unwrap(),
+                        &Decimal::from_str(&amount_out_usd).unwrap(),
                         &initiator_user_address,
-                        &price,
+                        &Decimal::from_f64(price.unwrap_or(0.0)),
                         &transaction_hash,
                         &block_number,
                         &timestamp,
@@ -1751,7 +1859,13 @@ async fn try_parse_evm_event(
             let user_address = owner.to_string();
             let transaction_hash = log.transaction_hash.unwrap().to_string();
             let block_number = log.block_number.unwrap() as i64;
-            let timestamp = unix_to_system_time(log.block_timestamp.unwrap());
+            let timestamp = match log.block_timestamp {
+                Some(ts) => unix_to_system_time(ts),
+                None => {
+                    error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+                    SystemTime::now() // Fallback to current time if timestamp is missing
+                }
+            };
 
             let amount_token0 = amount0.to::<i64>();
             let amount_token1 = amount1.to::<i64>();
@@ -1797,7 +1911,13 @@ async fn try_parse_evm_event(
             let user_address = owner.to_string();
             let transaction_hash = log.transaction_hash.unwrap().to_string();
             let block_number = log.block_number.unwrap() as i64;
-            let timestamp = unix_to_system_time(log.block_timestamp.unwrap());
+            let timestamp = match log.block_timestamp {
+                Some(ts) => unix_to_system_time(ts),
+                None => {
+                    error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+                    SystemTime::now() // Fallback to current time if timestamp is missing
+                }
+            };;
 
             let amount_token0 = amount0.to::<i64>();
             let amount_token1 = amount1.to::<i64>();
@@ -1843,7 +1963,13 @@ async fn try_parse_evm_event(
             let user_address = owner.to_string();
             let transaction_hash = log.transaction_hash.unwrap().to_string();
             let block_number = log.block_number.unwrap() as i64;
-            let timestamp = unix_to_system_time(log.block_timestamp.unwrap());
+            let timestamp = match log.block_timestamp {
+                Some(ts) => unix_to_system_time(ts),
+                None => {
+                    error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+                    SystemTime::now() // Fallback to current time if timestamp is missing
+                }
+            };
 
             let amount_token0 = amount0.to::<i64>();
             let amount_token1 = amount1.to::<i64>();
@@ -1903,10 +2029,9 @@ async fn insert_liquidity_event(
     let query = r#"
         INSERT INTO liquidity
             (pool_address, user_address, is_add, position_id, token_0_amount, token_1_amount,
-             chain_id, timestamp, transaction_hash, is_manager, liquidity, fee_amount_0,
-             fee_amount_1, is_vault)
+             chain_id, timestamp, transaction_hash, is_manager, liquidity, is_vault)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (transaction_hash) DO NOTHING
     "#;
 
     match client
@@ -1917,15 +2042,13 @@ async fn insert_liquidity_event(
                 &user_address,
                 &is_add,
                 &position_id,
-                &amount_token0,
-                &amount_token1,
+                &Decimal::from(amount_token0),
+                &Decimal::from(amount_token1),
                 &chain_id,
                 &timestamp,
                 &transaction_hash,
                 &is_manager,
                 &liquidity_amount,
-                &fee_amount_0,
-                &fee_amount_1,
                 &is_vault,
             ],
         )
@@ -1940,4 +2063,36 @@ async fn insert_liquidity_event(
             bail!("Failed to insert liquidity data: {:?}", e);
         }
     }
+}
+
+async fn get_token_data(token_address: Address, chain_provider: RootProvider<PubSubFrontend>) -> (i32, String, String) {
+    let log_target = "EVM get_token_data";
+    let token_instance = token::Token::new(token_address, chain_provider.clone());
+    let decimals = match token_instance.decimals().call().await {
+        Ok(decimals) => decimals._0 as i32,
+        Err(e) => {
+            error!(target: log_target, "Error fetching token decimals for {}: {:?}", token_address, e);
+            18 // Default to 18 if fetching fails
+        }
+    };
+
+    let ticker = match token_instance.symbol().call().await {
+        Ok(symbol) => symbol._0,
+        Err(e) => {
+            error!(target: log_target, "Error fetching token symbol for {}: {:?}", token_address, e);
+            "Unknown".to_string() // Default to "Unknown" if fetching fails
+        }
+    };
+
+    let full_name = match token_instance.name().call().await {
+        Ok(name) => name._0,
+        Err(e) => {
+            error!(target: log_target, "Error fetching token name for {}: {:?}", token_address, e);
+            "Unknown".to_string() // Default to "Unknown" if fetching fails
+        }
+    };
+
+    info!(target: log_target, "Token data for {}: Decimals: {}, Ticker: {}, Full Name: {}", token_address, decimals, ticker, full_name);
+    
+    (decimals, ticker, full_name)
 }

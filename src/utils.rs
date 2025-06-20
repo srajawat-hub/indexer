@@ -21,6 +21,18 @@ pub(crate) fn unix_to_system_time(timestamp_secs: u64) -> SystemTime {
     dt_utc.into()
 }
 
+pub fn chain_id_to_chain_name(chain_id: i64) -> String {
+    match chain_id {
+        1 => "ethereum".to_string(),
+        10 => "optimism".to_string(),
+        137 => "polygon".to_string(),
+        42161 => "arbitrum".to_string(),
+        8453 => "base".to_string(),
+        1399811149 => "solana".to_string(),
+        _ => format!("Unknown Chain ID: {}", chain_id),
+    }
+}
+
 /// Displays the error if present, waits for few seconds and
 /// retries execution.
 ///

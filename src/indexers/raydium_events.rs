@@ -132,6 +132,7 @@ pub struct PoolCreatedEventWithState {
 
 #[event]
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct SwapEvent {
     /// The pool for which token_0 and token_1 were swapped
     pub pool_state: Pubkey,

@@ -233,6 +233,86 @@
     },
     {
         "type": "function",
+        "name": "cancelLocalSwap",
+        "inputs": [
+            {
+                "name": "order",
+                "type": "tuple",
+                "internalType": "struct IMockLN.MockLNOrder",
+                "components": [
+                    {
+                        "name": "orderId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tokenIn",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "tokenOut",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "amountIn",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "amountOut",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "destinationChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "sourceChainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "receiverAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "filler",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "multiLeg",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "stableCoinAddress",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "debridgeMetadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
         "name": "composeMsgSender",
         "inputs": [],
         "outputs": [
@@ -330,11 +410,6 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
@@ -348,6 +423,11 @@
                         "name": "debridgeMetadata",
                         "type": "bytes",
                         "internalType": "bytes"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     }
                 ]
             },
@@ -425,11 +505,6 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
@@ -443,6 +518,11 @@
                         "name": "debridgeMetadata",
                         "type": "bytes",
                         "internalType": "bytes"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     }
                 ]
             },
@@ -515,11 +595,6 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
@@ -533,6 +608,11 @@
                         "name": "debridgeMetadata",
                         "type": "bytes",
                         "internalType": "bytes"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     }
                 ]
             },
@@ -610,11 +690,6 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
@@ -628,6 +703,11 @@
                         "name": "debridgeMetadata",
                         "type": "bytes",
                         "internalType": "bytes"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     }
                 ]
             },
@@ -750,11 +830,6 @@
                         "internalType": "bytes32"
                     },
                     {
-                        "name": "claimer",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
                         "name": "multiLeg",
                         "type": "bool",
                         "internalType": "bool"
@@ -768,6 +843,11 @@
                         "name": "debridgeMetadata",
                         "type": "bytes",
                         "internalType": "bytes"
+                    },
+                    {
+                        "name": "timeoutUnixTimestampInSec",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     }
                 ]
             }
@@ -1221,6 +1301,45 @@
     },
     {
         "type": "function",
+        "name": "setSolanaAckMessages",
+        "inputs": [
+            {
+                "name": "_solanaAckMessages",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setSolanaVaultParams",
+        "inputs": [
+            {
+                "name": "_solanaVaultParams",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "setSolanaVaultsProgramId",
+        "inputs": [
+            {
+                "name": "_solanaVaultsProgramId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "setVaultAddress",
         "inputs": [
             {
@@ -1231,6 +1350,45 @@
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "solanaAckMessages",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "solanaVaultParams",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "solanaVaultsProgramId",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -1316,6 +1474,25 @@
                 "type": "uint256",
                 "indexed": true,
                 "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "DebridgeOrderCreated",
+        "inputs": [
+            {
+                "name": "orderId",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "debridgeOrderId",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
             }
         ],
         "anonymous": false
@@ -1739,6 +1916,11 @@
     },
     {
         "type": "error",
+        "name": "OrderDoesNotExist",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "OrderDoesntExist",
         "inputs": []
     },
@@ -1755,6 +1937,11 @@
     {
         "type": "error",
         "name": "OrderNotClaimable",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OrderTimedOut",
         "inputs": []
     },
     {
@@ -1800,6 +1987,27 @@
             },
             {
                 "name": "value",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "SafeERC20FailedDecreaseAllowance",
+        "inputs": [
+            {
+                "name": "spender",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "currentAllowance",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "requestedDecrease",
                 "type": "uint256",
                 "internalType": "uint256"
             }

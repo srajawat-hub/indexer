@@ -78,18 +78,18 @@ df = pd.DataFrame(data)
 
 # Generate SQL INSERT statements and save to file
 sql_statements = [
-    "DELETE FROM public.swap_amm;"
+    "DELETE FROM public.ammswap;"
 ]
 for pair, pool_address in pools.items():
     tok_a, tok_b = pair.split('/')
     sql_statements.append(
-        f"insert into public.pools (pool_address, chain_id, token_0_address, token_1_address, fee, tick_spacing, pool_type, project_manager, block_number, created_at, min_trade_amt, max_trade_amt, metadata, etp_start_time, etp_close_time, launch_type, initial_sqrt_price, initial_tick, token_supply)"
-        f"values  ('{pool_address}', 1, '{tok_a}', '{tok_b}', 1, 30, 'EVM', '0x', 1, '2025-06-02 15:54:42.000000', '0', '0', '{{}}', '2025-06-02 15:54:46.000000', '2025-06-02 15:54:48.000000', '1', 1, 1, 10);"
+        f"insert into public.pools (pool_address, chain_id, token_0_address, token_1_address, fee, tick_spacing, pool_type, project_manager, block_number, created_at, min_trade_amt, max_trade_amt, metadata, etp_start_time, etp_end_time, launch_type, initial_sqrt_price, initial_tick, token_supply)"
+        f"values  ('{pool_address}', 1, '{tok_a}', '{tok_b}', 1, 30, 'EVM', '0x', 1, '2025-06-02 15:54:42.000000', '0', '0', '{{}}', '2025-06-02 15:54:46.000000', '2025-06-02 15:54:48.000000', 'FAIR', 1, 1, 10);"
     )
 
 for _, row in df.iterrows():
     sql_statements.append(
-        f"INSERT INTO public.swap_amm ("
+        f"INSERT INTO public.ammswap ("
         f"pool_address, token_in, token_out, amount_in, amount_out, amount_in_usd, amount_out_usd, "
         f"initiator_user_address, price, transaction_hash, block_number, timestamp, chain_id, "
         f"is_vault_initiated, sqrt_price, liquidity, tick"

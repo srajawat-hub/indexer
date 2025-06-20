@@ -1,6 +1,9 @@
+use std::fmt;
+
 use crate::utils::deserialize_number;
 use alloy::sol;
 use serde::{Deserialize, Serialize};
+use tokio_postgres::types::{IsNull, ToSql, Type};
 
 pub mod intent_processor {
     use alloy::sol;
@@ -237,7 +240,10 @@ sol! {
     #[derive(PartialEq)]
     enum IntentPayloadEnum {
         Transact,
-        Stake
+        Stake,
+        LaunchpadSwap,
+        LaunchpadAddLiquidity,
+        LaunchpadRemoveLiquidity
     }
 
     #[derive(Debug)]
@@ -256,7 +262,8 @@ sol! {
         RegisterVault,
         UpdateVaultStatus,
         Acknowledgement,
-        Deposit
+        Deposit,
+        LaunchpadPoolCreation
     }
 
     #[derive(Debug)]
@@ -309,12 +316,79 @@ sol! {
         bytes32 receiver;
     }
 
+    // create one for launchpad swap
+    #[derive(Debug)]
+    struct AcknowledgementMetadataLaunchpadSwap {
+        // The output token amount that was received
+        uint256 receivedAmount;
+    }
+
+    #[derive(Debug)]
+    struct AcknowledgementMetadataLaunchpadAddLiquidity {
+        // The receipt NFT that was minted to the user
+        bytes32 receiptNFTAddress;
+        // This is only used for NFTs on EVM. Can be set to 0 for Solana NFTs.
+        uint256 tokenId;
+        // exact amount of token0 that was added
+        uint256 amount0;
+        // exact amount of token1 that was added
+        uint256 amount1;
+    }
+
+    #[derive(Debug)]
+    struct AcknowledgementMetadataLaunchpadRemoveLiquidity {
+        // exact amount of token0 that was removed
+        uint256 amount0;
+        // exact amount of token1 that was removed
+        uint256 amount1;
+    }
+
     #[derive(Debug)]
     struct IntentProcessorBoundMessageDepositData {
         address userAddress;
         uint256 amount;
         bytes32 tokenAddress;
         uint256 chainIdentifier;
+    }
+
+    #[derive(Debug)]
+    struct IntentProcessorBoundMessageLaunchpadPoolCreationData {
+        bytes32 poolAddress;
+        bytes32 token0;
+        bytes32 token1;
+        uint256 chainId;
+        uint256 launchType;
+        bytes32 projectLiquidityProvider;
+        uint256 feeTier;
+        uint8 reserveTokenIndex;
+        uint256 exclusiveTradingPeriodStartTimestamp;
+        uint256 exclusiveTradingPeriodEndTimestamp;
+    }
+
+    #[derive(Debug)]
+    struct LaunchpadPool {
+        bytes32 token0;
+        bytes32 token1;
+        bytes32 poolAddress;
+        uint256 chainId;
+        // whether its fair/curated
+        uint256 launchType;
+        // The address that is responsible for seeding the pool with initial liquidity.
+        bytes32 projectLiquidityProvider;
+        // Would be set to false when pool is created. Will be flipped
+        // when the project liquidity is provided.
+        //
+        // The trading is not allowed until the project liquidity is provided.
+        bool isProjectLiquidityProvided;
+        // Whether token0 or token1 is the reserve token i.e. the token with which
+        // the launchpad token is bonded
+        uint8 reserveTokenIndex;
+        // The time at which the exclusive trading period starts
+        uint256 exclusiveTradingPeriodStartTimestamp;
+        // The time at which the exclusive trading period ends
+        uint256 exclusiveTradingPeriodEndTimestamp;
+        // The fee tier of the pool
+        uint256 feeTier;
     }
 
     #[derive(Debug)]
@@ -362,7 +436,10 @@ sol! {
         LocalTransfer,
         LocalSwap,
         CrossChain,
-        Stake
+        Stake,
+        LaunchpadSwap,
+        LaunchpadAddLiquidity,
+        LaunchpadRemoveLiquidity
     }
 
     #[derive(Debug)]
@@ -386,6 +463,35 @@ sol! {
     #[derive(Debug)]
     struct SolutionTypeCrossChainData {
         SolidityLiquidityNetwork liquidityNetwork;
+    }
+
+    #[derive(Debug)]
+    struct SolutionTypeLaunchpadSwapData {
+        bytes32 poolAddress;
+    }
+
+    #[derive(Debug)]
+    struct SolutionTypeLaunchpadAddLiquidityData {
+        int256 tickLower;
+        int256 tickUpper;
+        uint256 liquidity;
+        uint256 amount0Max;
+        uint256 amount1Max;
+        bytes32 token0;
+        bytes32 token1;
+        bytes32 poolAddress;
+    }
+
+    #[derive(Debug)]
+    struct SolutionTypeLaunchpadRemoveLiquidityData {
+        uint256 liquidity;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        bytes32 receiptTokenAddress;
+        uint256 tokenId;
+        bytes32 token0;
+        bytes32 token1;
+        bytes32 poolAddress;
     }
 
     #[derive(Debug)]
@@ -677,4 +783,68 @@ pub struct Order {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OrdersResponse {
     pub orders: Vec<Order>,
+}
+
+#[derive(Debug)]
+pub enum PoolType {
+    EVM,
+    SOLANA
+}
+
+impl fmt::Display for PoolType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            PoolType::EVM => "EVM",
+            PoolType::SOLANA => "SOLANA",
+        })
+    }
+}
+
+impl ToSql for PoolType {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        out: &mut tokio_postgres::types::private::BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let s = self.to_string();
+        s.to_sql(ty, out)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        ty.name() == "pool_type_enum"
+    }
+
+    tokio_postgres::types::to_sql_checked!();
+}
+
+#[derive(Debug)]
+pub enum TokenLaunchType {
+    FAIR,
+    CURATED
+}
+
+impl fmt::Display for TokenLaunchType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            TokenLaunchType::FAIR => "FAIR",
+            TokenLaunchType::CURATED => "CURATED",
+        })
+    }
+}
+
+impl ToSql for TokenLaunchType {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        out: &mut tokio_postgres::types::private::BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let s = self.to_string();
+        s.to_sql(ty, out)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        ty.name() == "token_launch_type"
+    }
+
+    tokio_postgres::types::to_sql_checked!();
 }

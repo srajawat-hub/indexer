@@ -107,7 +107,7 @@ async fn main() {
             use std::io::Write;
             writeln!(
                 buf,
-                "[{} - Thread: {:?} - Target: {}] {}",
+                "[{} - Thread: {:?} - Target: {}] {} \n",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 std::thread::current().id(),
                 record.target(),

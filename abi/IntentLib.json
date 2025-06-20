@@ -1,6 +1,25 @@
 [
     {
         "type": "event",
+        "name": "AdminUpdated",
+        "inputs": [
+            {
+                "name": "oldAdmin",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            },
+            {
+                "name": "newAdmin",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "CircuitBreakerStateChanged",
         "inputs": [
             {
@@ -99,25 +118,6 @@
             },
             {
                 "name": "proposedOwner",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            }
-        ],
-        "anonymous": false
-    },
-    {
-        "type": "event",
-        "name": "PauserUpdated",
-        "inputs": [
-            {
-                "name": "oldPauser",
-                "type": "address",
-                "indexed": true,
-                "internalType": "address"
-            },
-            {
-                "name": "newPauser",
                 "type": "address",
                 "indexed": true,
                 "internalType": "address"

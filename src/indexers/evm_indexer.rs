@@ -93,19 +93,22 @@ impl BlockchainIndexer for EvmIndexer {
                 Address::from_hex(self.vaults_contract_address.clone()).unwrap();
             let mut subscribed_contracts = vec![vaults_contract_addr];
 
+
+            let mut additional_contracts_num = 0;
+
             // Only add AMM contract address if it's provided
             if let Some(amm_address) = &self.amm_contract_address {
                 let amm_contract_addr = Address::from_hex(amm_address.clone()).unwrap();
                 subscribed_contracts.push(amm_contract_addr);
+                additional_contracts_num += 1;
             }
 
             let initial_contracts_num = subscribed_contracts.len();
             subscribed_contracts.extend(pool_addresses);
 
             info!(
-                "Subscribing to {} contracts total (including {} pools)",
-                subscribed_contracts.len(),
-                subscribed_contracts.len() - 2
+                "Subscribing to {} contracts total",
+                subscribed_contracts.len()
             );
 
             let filter = Filter::new().address(subscribed_contracts.clone());

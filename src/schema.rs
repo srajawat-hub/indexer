@@ -44,7 +44,7 @@ diesel::table! {
         transaction_hash -> Text,
         block_number -> Int8,
         is_vault_initiated -> Bool,
-        sqrt_price -> Int8,
+        sqrt_price -> Text,
         liquidity -> Int8,
         tick -> Int4,
     }
@@ -54,6 +54,7 @@ diesel::table! {
     chain_metadata (chain_id) {
         chain_id -> Text,
         network_name -> Text,
+        latest_block -> Int8,
     }
 }
 
@@ -87,7 +88,7 @@ diesel::table! {
 
 diesel::table! {
     intent_fees (id) {
-        id -> Int4,
+        id -> Int8,
         intent_id -> Int8,
         fees -> Jsonb,
     }
@@ -149,6 +150,23 @@ diesel::table! {
 }
 
 diesel::table! {
+    ohlc_price_tables (id) {
+        id -> Int8,
+        token_address -> Text,
+        chain_id -> Int8,
+        interval -> Text,
+        open_price -> Numeric,
+        high_price -> Numeric,
+        low_price -> Numeric,
+        close_price -> Numeric,
+        volume_token -> Numeric,
+        volume_usd -> Nullable<Numeric>,
+        timestamp_bucket -> Timestamp,
+        pool_address -> Text,
+    }
+}
+
+diesel::table! {
     order_created (id) {
         id -> Int8,
         intent_id -> Int8,
@@ -194,15 +212,14 @@ diesel::table! {
         project_manager -> Text,
         block_number -> Int8,
         created_at -> Timestamp,
-        min_trade_amt -> Nullable<Numeric>,
-        max_trade_amt -> Nullable<Numeric>,
         metadata -> Nullable<Jsonb>,
         etp_start_time -> Timestamp,
         etp_end_time -> Timestamp,
         launch_type -> TokenLaunchType,
-        initial_sqrt_price -> Int8,
+        initial_sqrt_price -> Text,
         initial_tick -> Int4,
-        token_supply -> Int8,
+        token_supply -> Text,
+        launchpad_token -> Text,
     }
 }
 
@@ -273,8 +290,6 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(token_chains -> tokens (token_id));
-
 diesel::allow_tables_to_appear_in_same_query!(
     acknowledgement,
     ammswap,
@@ -285,6 +300,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     intent_state,
     liquidity,
     message_dispatched_from_vault,
+    ohlc_price_tables,
     order_created,
     pools,
     received_message_on_vault,

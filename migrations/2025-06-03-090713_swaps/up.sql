@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS acknowledgement (
 );
 
 CREATE TABLE IF NOT EXISTS chain_metadata (
-    chain_id text NOT NULL,
+    chain_id text NOT NULL PRIMARY KEY,
     network_name text NOT NULL
 );
 
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS intent_fees (
 );
 
 CREATE TABLE IF NOT EXISTS intent_state (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     version integer NOT NULL,
     transaction_hash character varying(88) NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS intent_state (
 );
 
 CREATE TABLE IF NOT EXISTS message_dispatched_from_vault (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     sender_address character varying(66) NOT NULL,
     destination_domain_id integer NOT NULL,

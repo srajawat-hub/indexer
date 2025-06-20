@@ -631,6 +631,75 @@
     },
     {
         "type": "function",
+        "name": "launchpadPools",
+        "inputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "token0",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "token1",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "poolAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "chainId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "launchType",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "projectLiquidityProvider",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "isProjectLiquidityProvided",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "reserveTokenIndex",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "exclusiveTradingPeriodStartTimestamp",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "exclusiveTradingPeriodEndTimestamp",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "feeTier",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "lzReceive",
         "inputs": [
             {
@@ -1347,6 +1416,50 @@
     },
     {
         "type": "function",
+        "name": "userLiquidityPositions",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "poolAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "tokenAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "tokenId",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tickLower",
+                "type": "int256",
+                "internalType": "int256"
+            },
+            {
+                "name": "tickUpper",
+                "type": "int256",
+                "internalType": "int256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "version",
         "inputs": [],
         "outputs": [
@@ -1627,6 +1740,11 @@
     },
     {
         "type": "error",
+        "name": "E17",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "E5",
         "inputs": []
     },
@@ -1663,6 +1781,22 @@
     },
     {
         "type": "error",
+        "name": "InsufficientBalance",
+        "inputs": [
+            {
+                "name": "currentBalance",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "requiredAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "InvalidDelegate",
         "inputs": []
     },
@@ -1678,7 +1812,23 @@
     },
     {
         "type": "error",
+        "name": "LaunchpadPoolAlreadyExists",
+        "inputs": [
+            {
+                "name": "poolAddress",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "LzTokenUnavailable",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NoBalanceFound",
         "inputs": []
     },
     {

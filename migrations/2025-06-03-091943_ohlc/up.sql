@@ -64,7 +64,7 @@ BEGIN
 
     -------------------------------------------------------------------
     -- 3) Build & run a single dynamic‐SQL block that:
-    --    a) selects all swap_amm rows into a CTE “trades”,
+    --    a) selects all ammswap rows into a CTE “trades”,
     --       computing both the bucket and the ``token_reserve``
     --    b) groups by (token_reserve, chain_id, pool_address, bucket)
     --    c) inserts one candle per group
@@ -77,7 +77,7 @@ BEGIN
         %s AS bucket,
         -- 2) Compute the “reserve token” (the lexicographically smaller of the pair)
         LEAST(sa.token_in, sa.token_out) AS token_reserve
-      FROM public.swap_amm sa
+      FROM public.ammswap sa
     )
     INSERT INTO public.ohlc_price_tables (
       token_address, chain_id, interval,
