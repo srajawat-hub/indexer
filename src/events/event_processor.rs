@@ -1684,6 +1684,16 @@ async fn try_parse_evm_event(
             let tick_i32 = tick.as_i32();
             let initiator_user_address = sender.to_string();
 
+            // get user address from received message on vault
+            let user_query = "SELECT sender_address FROM received_message_on_vault WHERE LOWER(transaction_hash) = LOWER($1)";
+            let sender_address = match client.query_one(user_query, &[&transaction_hash]).await {
+                Ok(row) => row.get::<_, String>("sender_address"),
+                Err(e) => {
+                    error!(target: log_target, "Failed to fetch initiator user address for transaction hash {}: {:?}", transaction_hash, e);
+                    initiator_user_address.clone() // Fallback to sender address if query fails
+                }
+            };
+
             // Query pool to get token addresses
             let pool_query =
                 "SELECT token_0_address, token_1_address FROM pools WHERE pool_address = $1";
@@ -1825,7 +1835,7 @@ async fn try_parse_evm_event(
                         &Decimal::from_str(&amount_out).unwrap(),
                         &Decimal::from_str(&amount_in_usd).unwrap(),
                         &Decimal::from_str(&amount_out_usd).unwrap(),
-                        &initiator_user_address,
+                        &sender_address,
                         &Decimal::from_f64(price.unwrap_or(0.0)),
                         &transaction_hash,
                         &block_number,
