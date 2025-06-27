@@ -88,7 +88,7 @@ diesel::table! {
 
 diesel::table! {
     intent_fees (id) {
-        id -> Int8,
+        id -> Int4,
         intent_id -> Int8,
         fees -> Jsonb,
     }

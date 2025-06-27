@@ -1599,6 +1599,10 @@ impl SolanaIndexer {
                             <ConfigChangeEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
                                 .map(RaydiumEvent::ConfigChangeEvent)
                         }
+                        CreatePersonalPositionEvent::DISCRIMINATOR => {
+                            <CreatePersonalPositionEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
+                                .map(RaydiumEvent::CreatePersonalPositionEvent)
+                        }
                         PoolCreatedEvent::DISCRIMINATOR => {
                             let event = <PoolCreatedEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)?;
                             let pool_state = PoolState::try_deserialize(&mut &self.rpc_client.get_account_data(&event.pool_state).await?[..])?;
