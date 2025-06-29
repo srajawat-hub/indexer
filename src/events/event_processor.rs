@@ -1877,8 +1877,8 @@ async fn try_parse_evm_event(
                 }
             };
 
-            let amount_token0 = amount0.to::<i64>();
-            let amount_token1 = amount1.to::<i64>();
+            let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
+            let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap();
             let liquidity_amount = amount as i64;
             let position_id = format!("{}:{}:{}", owner, tickLower, tickUpper);
 
@@ -1929,8 +1929,8 @@ async fn try_parse_evm_event(
                 }
             };;
 
-            let amount_token0 = amount0.to::<i64>();
-            let amount_token1 = amount1.to::<i64>();
+            let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
+            let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap(); // overflow error Uint conversion error: Overflow(256, 7766279631448224401, 9223372036854775807)
             let liquidity_amount = amount as i64;
 
             let position_id = format!("{}:{}:{}", owner, tickLower, tickUpper);
@@ -1981,8 +1981,8 @@ async fn try_parse_evm_event(
                 }
             };
 
-            let amount_token0 = amount0.to::<i64>();
-            let amount_token1 = amount1.to::<i64>();
+            let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
+            let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap();
             let liquidity_amount = amount as i64;
 
             let position_id = format!("{}:{}:{}", owner, tickLower, tickUpper);
@@ -2024,8 +2024,8 @@ async fn insert_liquidity_event(
     is_add: bool,
     is_manager: bool,
     position_id: Option<String>,
-    amount_token0: i64,
-    amount_token1: i64,
+    amount_token0: Decimal,
+    amount_token1: Decimal,
     liquidity_amount: i64,
     fee_amount_0: Option<i64>,
     fee_amount_1: Option<i64>,
