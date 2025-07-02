@@ -1,13 +1,13 @@
 use alloy::primitives::{Address, FixedBytes};
 use alloy::providers::{Provider, RootProvider};
 use alloy::pubsub::PubSubFrontend;
-use alloy::rpc::types::Log;
+use alloy::rpc::types::{Log, TransactionReceipt};
 use alloy::sol_types::SolValue;
 use alloy::sol_types::SolEvent;
 use anyhow::{bail, Context};
 use futures_util::stream::StreamExt;
 use futures_util::Stream;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_postgres::Client;
 
+use crate::solidity_structs::token::Token::Transfer;
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance;
@@ -1678,7 +1679,7 @@ async fn try_parse_evm_event(
                     error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
                     SystemTime::now() // Fallback to current time if timestamp is missing
                 }
-            };;
+            };
             let sqrt_price = sqrtPriceX96.to_string();
             let liquidity_i64 = liquidity as i64;
             let tick_i32 = tick.as_i32();
@@ -1866,7 +1867,8 @@ async fn try_parse_evm_event(
             info!(target: log_target, "UniswapV3PoolLib::Mint by {sender} for owner {owner}");
 
             let pool_address = log.address().to_string();
-            let user_address = owner.to_string();
+            let periphery_contract_address = owner.to_string();
+            let raw_transaction_hash = log.transaction_hash.unwrap();
             let transaction_hash = log.transaction_hash.unwrap().to_string();
             let block_number = log.block_number.unwrap() as i64;
             let timestamp = match log.block_timestamp {
@@ -1876,6 +1878,15 @@ async fn try_parse_evm_event(
                     SystemTime::now() // Fallback to current time if timestamp is missing
                 }
             };
+
+            let transaction_receipt = chain_provider.get_transaction_receipt(raw_transaction_hash).await;
+            let user_address: String;
+            if let Some(user_addr) = get_liquidity_provider_address_evm(transaction_receipt, &client, periphery_contract_address).await {
+                user_address = user_addr;
+            } else {
+                warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+                user_address = String::new();
+            }
 
             let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
             let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap();
@@ -1918,7 +1929,8 @@ async fn try_parse_evm_event(
             info!(target: log_target, "UniswapV3PoolLib::MintByProjectManager by {sender} for owner {owner}");
 
             let pool_address = log.address().to_string();
-            let user_address = owner.to_string();
+            let periphery_contract_address = owner.to_string(); // periphery contract
+            let raw_transaction_hash = log.transaction_hash.unwrap();
             let transaction_hash = log.transaction_hash.unwrap().to_string();
             let block_number = log.block_number.unwrap() as i64;
             let timestamp = match log.block_timestamp {
@@ -1927,7 +1939,16 @@ async fn try_parse_evm_event(
                     error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
                     SystemTime::now() // Fallback to current time if timestamp is missing
                 }
-            };;
+            };
+
+            let transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>> = chain_provider.get_transaction_receipt(raw_transaction_hash).await;
+            let project_manager_address: String;
+            if let Some(pm_address) = get_liquidity_provider_address_evm(transaction_receipt, &client, periphery_contract_address).await {
+                project_manager_address = pm_address;
+            } else {
+                warn!(target: log_target, "Failed to get project manager address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+                project_manager_address = fallback_fetch_pm_address(&client, &pool_address, log_target).await;
+            };
 
             let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
             let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap(); // overflow error Uint conversion error: Overflow(256, 7766279631448224401, 9223372036854775807)
@@ -1938,7 +1959,7 @@ async fn try_parse_evm_event(
             insert_liquidity_event(
                 &client,
                 pool_address,
-                user_address,
+                project_manager_address,
                 true, // is_add = true for mint
                 true, // is_manager = true for project manager mint
                 Some(position_id),
@@ -2011,7 +2032,7 @@ async fn try_parse_evm_event(
             .await?;
         }
         _ => {
-            info!("\ndidn't match any event, {:?}", log);
+            warn!("\ndidn't match any event, {:?}", log);
         }
     }
     Ok(())
@@ -2105,4 +2126,52 @@ async fn get_token_data(token_address: Address, chain_provider: RootProvider<Pub
     info!(target: log_target, "Token data for {}: Decimals: {}, Ticker: {}, Full Name: {}", token_address, decimals, ticker, full_name);
     
     (decimals, ticker, full_name)
+}
+
+async fn get_liquidity_provider_address_evm(
+    transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>>, 
+    client: &Arc<Client>, 
+    periphery_address: String
+) -> Option<String> {
+    let log_target = "EVM get_liquidity_provider_address_evm";
+    let mut liquidity_user_address: Option<String> = None;
+
+    match transaction_receipt {
+        Ok(Some(receipt)) => {
+            let receipt_logs = receipt.inner.logs();
+            for log in receipt_logs {
+                let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
+                    address: log.address(),
+                    data: log.data().clone(),
+                };
+                let decoded = Transfer::decode_log(&primitive_log, true).unwrap();
+                if decoded.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                    liquidity_user_address = Some(decoded.to.to_string());
+                    break;
+                }
+            }
+        }
+        Ok(None) => {
+            error!(target: log_target, "Transaction receipt not found");
+        }
+        Err(e) => {
+            error!(target: log_target, "Error fetching transaction receipt: {:?}", e);
+        }
+    }
+    liquidity_user_address
+}
+
+async fn fallback_fetch_pm_address(
+    client: &Arc<Client>,
+    pool_address: &str,
+    log_target: &str,
+) -> String {
+    let query = "SELECT project_manager FROM pools WHERE LOWER(pool_address) = LOWER($1)";
+    match client.query_one(query, &[&pool_address]).await {
+        Ok(row) => row.get::<_, String>("project_manager"),
+        Err(e) => {
+            error!(target: log_target, "Failed to fetch project manager address from pools table: {:?}", e);
+            String::new() // Fallback if query fails
+        }
+    }
 }

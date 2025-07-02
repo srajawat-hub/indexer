@@ -18,7 +18,7 @@ use crate::{
 use super::BlockchainIndexer;
 use crate::indexers::raydium_events::{
     AmmConfig, CollectPersonalFeeEvent, CollectProtocolFeeEvent, ConfigChangeEvent,
-    CreatePersonalPositionEvent, DecreaseLiquidityEvent, IncreaseLiquidityEvent, LaunchType,
+    CreatePersonalPositionEvent, DecreaseLiquidityEvent, IncreaseLiquidityEvent,
     PoolCreatedEvent, PoolCreatedEventWithState, PoolState, SwapEvent, AMM_CONFIG_SEED,
 };
 use crate::utils::unix_to_system_time;
