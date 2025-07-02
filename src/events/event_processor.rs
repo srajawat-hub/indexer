@@ -975,7 +975,7 @@ async fn try_parse_evm_event(
             if decoded_ack_metadata.data.len() > 0 {
                 let mut actual_amount = String::new();
                 let metadata_variant = decoded_ack_metadata.enumVariant as u8;
-                // TODO: Add launchpad ack variants as well
+                
                 if metadata_variant == 1 {
                     // stake
                     let metadata_data = AcknowledgementMetadataStake::abi_decode(
@@ -1016,7 +1016,7 @@ async fn try_parse_evm_event(
                     AND (SELECT COUNT(*) FROM order_created WHERE order_id = $3) = 1
                     ";
 
-                // TODO: update amount_out_usd here as well in order_created
+                // update amount_out_usd here as well in order_created
                 let amount_out_usd = get_amount_usd_value(
                     token_out,
                     destination_chain_id,
@@ -1812,9 +1812,7 @@ async fn try_parse_evm_event(
                 ("0".to_string(), "0".to_string())
             };
 
-            // TODO: Implement proper vault detection logic by checking if the transaction
-            // originates from a known vault contract address
-            let is_vault_initiated = false;
+            let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;
 
             let query = r#"
                 INSERT INTO ammswap
@@ -1892,6 +1890,7 @@ async fn try_parse_evm_event(
             let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap();
             let liquidity_amount = amount as i64;
             let position_id = format!("{}:{}:{}", owner, tickLower, tickUpper);
+            let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, raw_transaction_hash.clone()).await;
 
             insert_liquidity_event(
                 &client,
@@ -1909,7 +1908,7 @@ async fn try_parse_evm_event(
                 block_number,
                 timestamp,
                 chain_id,
-                Some(false), // is_vault = false for regular mint
+                Some(is_vault_initiated), // is_vault = false for regular mint
                 log_target,
             )
             .await?;
@@ -2008,7 +2007,21 @@ async fn try_parse_evm_event(
 
             let position_id = format!("{}:{}:{}", owner, tickLower, tickUpper);
 
-            let is_manager = false; // TODO: implement manager detection logic
+            let manager_query = "SELECT project_manager FROM pools WHERE pool_address = $1";
+            let manager_row = client.query_one(manager_query, &[&pool_address]).await;
+            let is_manager = match manager_row {
+                Ok(row) => {
+                    let pm_address: String = row.get("project_manager");
+                    pm_address.to_lowercase() == user_address.to_lowercase()
+                },
+                Err(e) => {
+                    error!(target: log_target, "Failed to fetch project manager for pool {}: {:?}", pool_address, e);
+                    bail!("Failed to fetch project manager for pool {}: {:?}", pool_address, e);
+                    false
+                }
+            };
+
+            let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;
 
             insert_liquidity_event(
                 &client,
@@ -2026,7 +2039,7 @@ async fn try_parse_evm_event(
                 block_number,
                 timestamp,
                 chain_id,
-                Some(false), // is_vault = false
+                Some(is_vault_initiated), // is_vault = false
                 log_target,
             )
             .await?;
@@ -2172,6 +2185,56 @@ async fn fallback_fetch_pm_address(
         Err(e) => {
             error!(target: log_target, "Failed to fetch project manager address from pools table: {:?}", e);
             String::new() // Fallback if query fails
+        }
+    }
+}
+
+async fn check_vault_initiated_transaction(
+    chain_provider: RootProvider<PubSubFrontend>, 
+    db_client: &Arc<Client>,
+    transaction_hash: FixedBytes<32>
+) -> bool {
+    let log_target = "EVM check_vault_initiated_transaction";
+    let query = "SELECT transaction_hash FROM received_message_on_vault WHERE LOWER(transaction_hash) = LOWER($1)";
+    match db_client.query_one(query, &[&transaction_hash.to_string()]).await {
+        Ok(row) => {
+            let db_transaction_hash: String = row.get("transaction_hash");
+            if db_transaction_hash.to_lowercase() == transaction_hash.to_string().to_lowercase() {
+                info!(target: log_target, "Transaction {} is initiated by vault", transaction_hash);
+                return true;
+            } else {
+                check_vault_initiated_transaction_log(chain_provider, transaction_hash).await
+            }
+        }
+        Err(e) => {
+            error!(target: log_target, "Failed to check if transaction is initiated by vault: {:?}", e);
+            // fallback decode the transaction receipt and check for received_message_on_vault event
+            check_vault_initiated_transaction_log(chain_provider, transaction_hash).await
+        }
+    }
+}
+
+async fn check_vault_initiated_transaction_log(chain_provider: RootProvider<PubSubFrontend>, transaction_hash: FixedBytes<32>) -> bool {
+    let log_target = "EVM check_vault_initiated_transaction_log";
+    let transaction_receipt = chain_provider.get_transaction_receipt(transaction_hash).await;
+    match transaction_receipt {
+        Ok(Some(receipt)) => {
+            let receipt_logs = receipt.inner.logs();
+            for log in receipt_logs {
+                if log.topics()[0] == Vault::ReceivedMessageOnVault::SIGNATURE_HASH {
+                    info!(target: log_target, "Transaction {} is initiated by vault based on receipt logs", transaction_hash);
+                    return true;
+                }
+            }
+            return false;
+        }
+        Ok(None) => {
+            error!(target: log_target, "Transaction receipt not found for {}", transaction_hash);
+            return false;
+        }
+        Err(e) => {
+            error!(target: log_target, "Error fetching transaction receipt for {}: {:?}", transaction_hash, e);
+            return false;
         }
     }
 }
