@@ -33,6 +33,29 @@ pub fn chain_id_to_chain_name(chain_id: i64) -> String {
     }
 }
 
+pub fn get_wrapped_native_token_address(chain_id: i64) -> String {
+    match chain_id {
+        1 => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // Ethereum Mainnet - WETH
+        137 => "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270".to_string(), // Polygon Mainnet - WMATIC
+        42161 => "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1".to_string(), // Arbitrum One - WETH
+        10 => "0x4200000000000000000000000000000000000006".to_string(), // Optimism Mainnet - WETH
+        8453 => "0x4200000000000000000000000000000000000006".to_string(), // Base Mainnet - WETH
+        18083 => "0x6a79ca29282AC295679a14A8274300e5842e45e5".to_string(), // Inclusive Layer Testnet
+        18082 => "0x0000000000000000000000000000000000000000".to_string(), // Inclusive Layer
+        999 => "0x5555555555555555555555555555555555555555".to_string(), // Hyperevm - WHYPE
+        _ => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // Default to Ethereum WETH
+    }
+}
+
+pub fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
+    match chain_id {
+        137 => (String::from("28321"), 18),      // pol
+        1399811149 => (String::from("5426"), 9), // sol
+        18082 => (String::from("3408"), 18),     // usdc
+        _ => (String::from("1027"), 18),         // ETH
+    }
+}
+
 /// Displays the error if present, waits for few seconds and
 /// retries execution.
 ///
