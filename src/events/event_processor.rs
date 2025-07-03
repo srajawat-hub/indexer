@@ -735,6 +735,9 @@ pub async fn get_liquidity_provider_address_evm(
         Ok(Some(receipt)) => {
             let receipt_logs = receipt.inner.logs();
             for log in receipt_logs {
+                if log.topic0() != Some(&Transfer::SIGNATURE_HASH) {
+                    continue; // Skip logs that are not Transfer events
+                }
                 let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
                     address: log.address(),
                     data: log.data().clone(),
