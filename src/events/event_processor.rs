@@ -738,14 +738,20 @@ pub async fn get_liquidity_provider_address_evm(
                 if log.topic0() != Some(&Transfer::SIGNATURE_HASH) {
                     continue; // Skip logs that are not Transfer events
                 }
+                info!("log topic 0: {:?}", log.topic0());
+                info!("transfer signature hash: {:?}", Transfer::SIGNATURE_HASH);
                 let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
                     address: log.address(),
                     data: log.data().clone(),
                 };
-                let decoded = Transfer::decode_log(&primitive_log, true).unwrap();
-                if decoded.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
-                    liquidity_user_address = Some(decoded.to.to_string());
-                    break;
+                let decoded = Transfer::decode_log(&primitive_log, true);
+                if let Ok(decoded_data) = decoded {
+                    if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                        liquidity_user_address = Some(decoded_data.to.to_string());
+                        break;
+                    }
+                } else {
+                    error!(target: log_target, "Failed to decode Transfer log: {:?}", log);
                 }
             }
         }
