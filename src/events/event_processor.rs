@@ -33,11 +33,12 @@ use crate::events::evm_handlers::uniswap_mint::handle_uniswap_mint_event;
 use crate::events::evm_handlers::uniswap_mint_by_project_manager::handle_uniswap_mint_by_pm_event;
 use crate::events::evm_handlers::uniswap_poolcreated::handle_uniswap_pool_created_event;
 use crate::events::evm_handlers::uniswap_swap::handle_uniswap_swap_event;
+use crate::solidity_structs::non_fungible_position_manager::NonFungiblePositionManager::{IncreaseLiquidity, DecreaseLiquidity, Collect};
 use crate::solidity_structs::token::Token::Transfer;
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
 use crate::solidity_structs::{
-    self, token, AmountTypes, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult,
+    self, token, AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult
 };
 use crate::solidity_structs::{
     intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
@@ -651,13 +652,14 @@ pub async fn insert_liquidity_event(
     chain_id: i64,
     is_vault: Option<bool>,
     log_target: &str,
+    token_id: Option<String>
 ) -> anyhow::Result<()> {
     let query = r#"
         INSERT INTO liquidity
             (pool_address, user_address, is_add, position_id, token_0_amount, token_1_amount,
-             chain_id, timestamp, transaction_hash, is_manager, liquidity, is_vault)
+             chain_id, timestamp, transaction_hash, is_manager, liquidity, is_vault, token_id)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (transaction_hash) DO NOTHING
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (transaction_hash) DO NOTHING
     "#;
 
     match client
@@ -676,6 +678,7 @@ pub async fn insert_liquidity_event(
                 &is_manager,
                 &liquidity_amount,
                 &is_vault,
+                &token_id
             ],
         )
         .await
@@ -727,32 +730,103 @@ pub async fn get_liquidity_provider_address_evm(
     transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>>, 
     client: &Arc<Client>, 
     periphery_address: String
-) -> Option<String> {
+) -> LiquidityDecodedLogData {
     let log_target = "EVM get_liquidity_provider_address_evm";
     let mut liquidity_user_address: Option<String> = None;
+    let mut liquidity_token_id: Option<String> = None;
 
     match transaction_receipt {
         Ok(Some(receipt)) => {
             let receipt_logs = receipt.inner.logs();
             for log in receipt_logs {
-                if log.topic0() != Some(&Transfer::SIGNATURE_HASH) {
-                    continue; // Skip logs that are not Transfer events
-                }
-                info!("log topic 0: {:?}", log.topic0());
-                info!("transfer signature hash: {:?}", Transfer::SIGNATURE_HASH);
-                let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
-                    address: log.address(),
-                    data: log.data().clone(),
-                };
-                let decoded = Transfer::decode_log(&primitive_log, true);
-                if let Ok(decoded_data) = decoded {
-                    if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
-                        liquidity_user_address = Some(decoded_data.to.to_string());
-                        break;
+                match log.topic0() {
+                    Some(&Transfer::SIGNATURE_HASH) => {
+                        info!(target: log_target, "Found Transfer log in receipt for transaction: {:?}", receipt.transaction_hash);
+                        info!("log topic 0: {:?}", log.topic0());
+                        info!("transfer signature hash: {:?}", Transfer::SIGNATURE_HASH);
+                        let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
+                            address: log.address(),
+                            data: log.data().clone(),
+                        };
+                        let decoded = Transfer::decode_log(&primitive_log, true);
+                        if let Ok(decoded_data) = decoded {
+                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                                liquidity_user_address = Some(decoded_data.to.to_string());
+                            }
+                        } else {
+                            error!(target: log_target, "Failed to decode Transfer log: {:?}", log);
+                        }
+
+                        if liquidity_token_id.is_some() && liquidity_user_address.is_some() {
+                            break;
+                        }
+                        continue; // Skip Transfer logs for this check
+                    },
+                    Some(&IncreaseLiquidity::SIGNATURE_HASH) => {
+                        info!(target: log_target, "Found IncreaseLiquidity log in receipt for transaction: {:?}", receipt.transaction_hash);
+                        // Decode IncreaseLiquidity event if needed
+                        let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
+                            address: log.address(),
+                            data: log.data().clone(),
+                        };
+                        let decoded = IncreaseLiquidity::decode_log(&primitive_log, true);
+                        if let Ok(decoded_data) = decoded {
+                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                                liquidity_token_id = Some(decoded_data.tokenId.to_string());
+                            }
+                        } else {
+                            error!(target: log_target, "Failed to decode IncreaseLiquidity log: {:?}", log);
+                        }
+                        if liquidity_token_id.is_some() && liquidity_user_address.is_some() {
+                            break;
+                        }
+                        continue; // Skip IncreaseLiquidity logs for this check
+                    },
+                    Some(&DecreaseLiquidity::SIGNATURE_HASH) => {
+                        info!(target: log_target, "Found DecreaseLiquidity log in receipt for transaction: {:?}", receipt.transaction_hash);
+                        // Decode DecreaseLiquidity event if needed
+                        let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
+                            address: log.address(),
+                            data: log.data().clone(),
+                        };
+                        let decoded = DecreaseLiquidity::decode_log(&primitive_log, true);
+                        if let Ok(decoded_data) = decoded {
+                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                                liquidity_token_id = Some(decoded_data.tokenId.to_string());
+                            }
+                        } else {
+                            error!(target: log_target, "Failed to decode DecreaseLiquidity log: {:?}", log);
+                        }
+                        if liquidity_token_id.is_some() && liquidity_user_address.is_some() {
+                            break;
+                        }
+                        continue; // Skip DecreaseLiquidity logs for this check
+                    },
+                    Some(&Collect::SIGNATURE_HASH) => {
+                        info!(target: log_target, "Found Collect log in receipt for transaction: {:?}", receipt.transaction_hash);
+                        // Decode Collect event if needed
+                        let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
+                            address: log.address(),
+                            data: log.data().clone(),
+                        };
+                        let decoded = Collect::decode_log(&primitive_log, true);
+                        if let Ok(decoded_data) = decoded {
+                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                                liquidity_token_id = Some(decoded_data.tokenId.to_string());
+                            }
+                        } else {
+                            error!(target: log_target, "Failed to decode Collect log: {:?}", log);
+                        }
+                        if liquidity_token_id.is_some() && liquidity_user_address.is_some() {
+                            break;
+                        }
+                        continue; // Skip Collect logs for this check
+                    },
+                    _ => {
+                        continue; // Skip logs that are not Transfer events
                     }
-                } else {
-                    error!(target: log_target, "Failed to decode Transfer log: {:?}", log);
                 }
+
             }
         }
         Ok(None) => {
@@ -762,7 +836,11 @@ pub async fn get_liquidity_provider_address_evm(
             error!(target: log_target, "Error fetching transaction receipt: {:?}", e);
         }
     }
-    liquidity_user_address
+
+    LiquidityDecodedLogData {
+        liquidity_user_address: liquidity_user_address,
+        liquidity_token_id: liquidity_token_id,
+    }
 }
 
 pub async fn fallback_fetch_pm_address(

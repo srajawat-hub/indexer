@@ -50,6 +50,7 @@ pub async fn handle_uniswap_pool_created_event(
     let metadata_json = serde_json::Value::Null;
     let etp_start_time = unix_to_system_time(launchParams.exclusiveTradingPeriodStart.to());
     let etp_end_time = unix_to_system_time(launchParams.exclusiveTradingPeriodEnd.to());
+    let extended_liquidity_lock_duration = unix_to_system_time((launchParams.extendedLiquidityLockDuration + launchParams.exclusiveTradingPeriodEnd).to());
     let launch_type = if launchParams.tokenLaunchType == 0 {
         TokenLaunchType::FAIR
     } else {
@@ -76,9 +77,9 @@ pub async fn handle_uniswap_pool_created_event(
             (pool_address, chain_id, token_0_address, token_1_address, fee,
              tick_spacing, pool_type, project_manager, block_number, created_at,
              metadata, etp_start_time, etp_end_time, launch_type, initial_sqrt_price,
-             initial_tick, token_supply, launchpad_token)
+             initial_tick, token_supply, launchpad_token, liquidity_lock_end_timestamp)
           VALUES
-            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::token_launch_type,$15,$16,$17,$18)
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::token_launch_type,$15,$16,$17,$18,$19)
           ON CONFLICT (pool_address) DO NOTHING
         "#;
 
@@ -104,6 +105,7 @@ pub async fn handle_uniswap_pool_created_event(
                 &initial_tick_i32.parse::<i32>().unwrap(),
                 &token_supply_i64,
                 &token1_addr, // token1 is the launchpad token for evm pools
+                &extended_liquidity_lock_duration,
             ],
         )
         .await {

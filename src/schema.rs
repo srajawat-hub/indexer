@@ -129,6 +129,7 @@ diesel::table! {
         is_manager -> Bool,
         liquidity -> Int8,
         is_vault -> Bool,
+        token_id -> Nullable<Text>,
     }
 }
 
@@ -220,6 +221,7 @@ diesel::table! {
         initial_tick -> Int4,
         token_supply -> Text,
         launchpad_token -> Text,
+        liquidity_lock_end_timestamp -> Nullable<Timestamp>,
     }
 }
 

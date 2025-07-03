@@ -1,11 +1,11 @@
 use std::{str::FromStr, sync::Arc, time::SystemTime};
 use anyhow::bail;
-use log::{info, error};
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use log::{error, info, warn};
+use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log};
 use rust_decimal::Decimal;
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::{check_vault_initiated_transaction, insert_liquidity_event}, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::unix_to_system_time};
+use crate::{events::event_processor::{check_vault_initiated_transaction, get_liquidity_provider_address_evm, insert_liquidity_event}, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::unix_to_system_time};
 
 pub async fn handle_uniswap_burn_event(
     log: Log,
@@ -26,7 +26,8 @@ pub async fn handle_uniswap_burn_event(
     info!(target: log_target, "UniswapV3PoolLib::Burn by owner {owner}");
 
     let pool_address = log.address().to_string();
-    let user_address = owner.to_string();
+    let periphery_contract_address = owner.to_string();
+    let raw_transaction_hash = log.transaction_hash.unwrap();
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let block_number = log.block_number.unwrap() as i64;
     let timestamp = match log.block_timestamp {
@@ -36,6 +37,20 @@ pub async fn handle_uniswap_burn_event(
             SystemTime::now() // Fallback to current time if timestamp is missing
         }
     };
+
+    let transaction_receipt = chain_provider.get_transaction_receipt(raw_transaction_hash).await;
+    let user_address: String;
+    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(transaction_receipt, &client, periphery_contract_address).await;
+
+    if let Some(user_addr) = liquidity_decoded_user_data.liquidity_user_address {
+        user_address = user_addr;
+    } else {
+        warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+        user_address = String::new();
+    }
+
+    let token_id = liquidity_decoded_user_data.liquidity_token_id;
+
 
     let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
     let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap();
@@ -77,6 +92,7 @@ pub async fn handle_uniswap_burn_event(
         chain_id,
         Some(is_vault_initiated), // is_vault = false
         log_target,
+        token_id
     )
     .await?;
 

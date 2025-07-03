@@ -1409,14 +1409,14 @@ impl SolanaIndexer {
         transaction_hash: String,
         timestamp: SystemTime,
         is_vault: Option<bool>,
-        log_target: &str,
+        log_target: &str
     ) -> anyhow::Result<()> {
         let query = r#"
             INSERT INTO liquidity
                 (pool_address, user_address, is_add, position_id, token_0_amount, token_1_amount,
-                 chain_id, timestamp, transaction_hash, is_manager, liquidity, is_vault)
+                 chain_id, timestamp, transaction_hash, is_manager, liquidity, is_vault, token_id)
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (transaction_hash) DO NOTHING
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (transaction_hash) DO NOTHING
         "#;
 
         info!(target: log_target, "\n\nInserting liquidity event: pool_address = {}, user_address = {}, is_add = {}, position_id = {:?}, amount_token0 = {}, amount_token1 = {}, liquidity_amount = {}, transaction_hash = {} \n\n",
@@ -1438,6 +1438,7 @@ impl SolanaIndexer {
                     &is_manager,
                     &liquidity_amount,
                     &is_vault,
+                    &position_id
                 ],
             )
             .await

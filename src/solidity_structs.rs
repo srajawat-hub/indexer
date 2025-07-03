@@ -87,6 +87,18 @@ pub mod uniswap_v3_factory_lib {
     );
 }
 
+pub mod non_fungible_position_manager {
+    use alloy::sol;
+    sol!(
+        #[allow(clippy::too_many_arguments)]
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        NonFungiblePositionManager,
+        "abi/NonfungiblePositionManager.json"
+    );
+}
+
 pub mod uniswap_v3_pool_lib {
     use alloy::sol;
     use UniswapV3PoolLib::TokenLaunchType;
@@ -761,6 +773,12 @@ pub struct OfferWithMetadata {
 struct AffiliateFee {
     beneficiarySrc: Option<TokenAddress>,
     amount: Option<Amount>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct LiquidityDecodedLogData {
+    pub liquidity_user_address: Option<String>,
+    pub liquidity_token_id: Option<String>
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
