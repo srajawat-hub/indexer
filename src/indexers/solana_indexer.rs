@@ -1017,6 +1017,7 @@ impl SolanaIndexer {
                 let token1_addr = token_mint_1.to_string();
 
                 let fee = Decimal::from(amm_config.fee_tiers[fee_tier_index as usize].trade_fee_rate as i32);
+                let liquidity_lock_period = amm_config.project_liquidity_requirements[pool_state.launch_type as usize].lock_liquidity_period;
                 let tick_spacing_i64 = tick_spacing as i64;
                 let pool_type = PoolType::SOLANA;
                 let project_manager = pool_state.project_liquidity_provider.to_string();
@@ -1027,6 +1028,7 @@ impl SolanaIndexer {
                     unix_to_system_time(pool_state.exclusive_trading_period_start_time);
                 let etp_close_time =
                     unix_to_system_time(pool_state.exclusive_trading_period_end_time);
+                let liquidity_lock_end_time = unix_to_system_time(pool_state.exclusive_trading_period_end_time + liquidity_lock_period);
                 let launch_type = if pool_state.launch_type == 0 {
                     TokenLaunchType::FAIR
                 } else {
@@ -1045,9 +1047,9 @@ impl SolanaIndexer {
                         (pool_address, chain_id, token_0_address, token_1_address, fee,
                          tick_spacing, pool_type, project_manager, block_number, created_at,
                          metadata, etp_start_time, etp_end_time, launch_type, initial_sqrt_price,
-                         initial_tick, token_supply, launchpad_token)
+                         initial_tick, token_supply, launchpad_token, liquidity_lock_end_timestamp)
                     VALUES
-                        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
                     ON CONFLICT (pool_address) DO NOTHING
                 "#;
 
@@ -1072,7 +1074,8 @@ impl SolanaIndexer {
                             &initial_sqrt,
                             &initial_tick_i32,
                             &token_supply_i64,
-                            &reserve_token_mint.to_string()
+                            &reserve_token_mint.to_string(),
+                            &liquidity_lock_end_time
                         ],
                     )
                     .await?;
