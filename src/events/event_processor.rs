@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, FixedBytes};
+use alloy::primitives::{b256, Address, FixedBytes};
 use alloy::providers::{Provider, RootProvider};
 use alloy::pubsub::PubSubFrontend;
 use alloy::rpc::types::{Log, TransactionReceipt};
@@ -744,17 +744,18 @@ pub async fn get_liquidity_provider_address_evm(
                         info!(target: log_target, "Found Transfer log in receipt for transaction: {:?}", receipt.transaction_hash);
                         info!("log topic 0: {:?}", log.topic0());
                         info!("transfer signature hash: {:?}", Transfer::SIGNATURE_HASH);
-                        let primitive_log: alloy::primitives::Log = alloy::primitives::Log {
-                            address: log.address(),
-                            data: log.data().clone(),
-                        };
-                        let decoded = Transfer::decode_log(&primitive_log, true);
-                        if let Ok(decoded_data) = decoded {
-                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
-                                liquidity_user_address = Some(decoded_data.to.to_string());
+                        if log.address().to_string().to_lowercase() == periphery_address.to_lowercase() {
+                            info!(target: log_target, "Transfer log address matches periphery address: {:?}", periphery_address);
+                            let user_address_bytes32 = log.topics().get(2);
+                            if let Some(user_address) = user_address_bytes32 {
+                                let user_address = Address::from_word(*user_address);
+                                liquidity_user_address = Some(user_address.to_string());
+                                info!(target: log_target, "Liquidity user address found: {:?}", liquidity_user_address);
+                            } else {
+                                warn!(target: log_target, "User address not found in Transfer log topics");
                             }
                         } else {
-                            error!(target: log_target, "Failed to decode Transfer log: {:?}", log);
+                            info!(target: log_target, "Transfer log address does not match periphery address: {:?} != {:?}", log.address(), periphery_address);
                         }
 
                         if liquidity_token_id.is_some() && liquidity_user_address.is_some() {
@@ -813,6 +814,9 @@ pub async fn get_liquidity_provider_address_evm(
                         if let Ok(decoded_data) = decoded {
                             if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
                                 liquidity_token_id = Some(decoded_data.tokenId.to_string());
+                                if liquidity_user_address.is_none() {
+                                    liquidity_user_address = Some(decoded_data.recipient.to_string());
+                                }
                             }
                         } else {
                             error!(target: log_target, "Failed to decode Collect log: {:?}", log);
