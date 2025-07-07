@@ -73,6 +73,30 @@ diesel::table! {
 }
 
 diesel::table! {
+    hook_executor_orders (id) {
+        id -> Int8,
+        protocol_id -> Int4,
+        #[max_length = 66]
+        order_hash -> Varchar,
+        order_id -> Int8,
+        #[max_length = 66]
+        recipient -> Varchar,
+        #[max_length = 66]
+        token -> Varchar,
+        amount -> Numeric,
+        timeout_timestamp -> Int8,
+        reason -> Nullable<Text>,
+        #[max_length = 88]
+        transaction_hash -> Varchar,
+        block_number -> Int8,
+        timestamp -> Timestamp,
+        status -> Int4,
+        destination_chain_id -> Int8,
+        additional_data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     intent (id) {
         id -> Int8,
         intent_id -> Int8,
@@ -297,6 +321,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     ammswap,
     chain_metadata,
     deposit_received,
+    hook_executor_orders,
     intent,
     intent_fees,
     intent_state,

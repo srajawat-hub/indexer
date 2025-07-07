@@ -123,6 +123,18 @@ pub mod uniswap_v3_pool_lib {
     }
 }
 
+pub mod hook_executor {
+    use alloy::sol;
+    sol!(
+        #[allow(clippy::too_many_arguments)]
+        #[allow(missing_docs)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        HookExecutor,
+        "abi/HookExecutor.json"
+    );
+}
+
 // Define our intent payload enum using Alloy's sol! macro
 sol! {
     #[derive(Debug)]

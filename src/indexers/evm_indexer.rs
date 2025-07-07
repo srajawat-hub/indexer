@@ -21,6 +21,7 @@ pub struct EvmIndexer {
     ws_rpc_url: String,
     vaults_contract_address: String,
     amm_contract_address: Option<String>,
+    hook_executor_contract_address: Option<String>,
     solana_chain_id: u64,
 }
 
@@ -30,6 +31,7 @@ impl EvmIndexer {
         ws_rpc_url: String,
         vaults_contract_address: String,
         amm_contract_address: Option<String>,
+        hook_executor_contract_address: Option<String>,
         solana_chain_id: u64,
     ) -> Self {
         Self {
@@ -37,6 +39,7 @@ impl EvmIndexer {
             ws_rpc_url,
             vaults_contract_address,
             amm_contract_address,
+            hook_executor_contract_address,
             solana_chain_id,
         }
     }
@@ -101,6 +104,11 @@ impl BlockchainIndexer for EvmIndexer {
                 let amm_contract_addr = Address::from_hex(amm_address.clone()).unwrap();
                 subscribed_contracts.push(amm_contract_addr);
                 additional_contracts_num += 1;
+            }
+
+            if let Some(hook_executor_address) = &self.hook_executor_contract_address {
+                let hook_executor_contract_addr = Address::from_hex(hook_executor_address.clone()).unwrap();
+                subscribed_contracts.push(hook_executor_contract_addr);
             }
 
             let initial_contracts_num = subscribed_contracts.len();

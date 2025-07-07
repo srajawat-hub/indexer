@@ -2,6 +2,7 @@
 
 // src/main.rs
 mod constants;
+mod enums;
 mod events;
 mod indexers;
 pub mod solidity_structs;
@@ -38,6 +39,8 @@ pub struct IndexerConfig {
     pub mockln_contract: String,
     #[serde(default)]
     amm_contract: Option<String>,
+    #[serde(default)]
+    pub hook_executor_contract: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -60,6 +63,7 @@ fn create_evm_indexer(
     ws_url: &str,
     vaults_address: &str,
     amm_address: Option<String>,
+    hook_executor_address: Option<String>,
     solana_chain_id: u64,
 ) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(EvmIndexer::new(
@@ -67,6 +71,7 @@ fn create_evm_indexer(
         ws_url.to_string(),
         vaults_address.to_string(),
         amm_address,
+        hook_executor_address,
         solana_chain_id,
     ))
 }
@@ -158,6 +163,7 @@ async fn main() {
                     &conf.ws_url,
                     &conf.mockln_contract,
                     conf.amm_contract.clone(),
+                    conf.hook_executor_contract.clone(),
                     config.solana_chain_id,
                 ));
             }
@@ -166,6 +172,7 @@ async fn main() {
                 &conf.ws_url,
                 &conf.contract,
                 conf.amm_contract.clone(),
+                conf.hook_executor_contract.clone(),
                 config.solana_chain_id,
             ));
         } else if conf.execution_environment == "SVM" {

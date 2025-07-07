@@ -22,6 +22,10 @@ use tokio_postgres::Client;
 use crate::events::evm_handlers::acknowledgement_received::handle_acknowledgement_received_event;
 use crate::events::evm_handlers::debridge_order_created::handle_debridge_order_created_event;
 use crate::events::evm_handlers::deposit_received::handle_deposit_received_event;
+use crate::events::evm_handlers::hook_executor_order_failed::handle_hook_executor_order_failed_event;
+use crate::events::evm_handlers::hook_executor_order_pending::handle_hook_executor_order_pending_event;
+use crate::events::evm_handlers::hook_executor_order_timedout::handle_hook_executor_order_timeout_event;
+use crate::events::evm_handlers::hook_executor_order_verified::handle_hook_executor_order_verified_event;
 use crate::events::evm_handlers::intent_fees::handle_intent_fees_event;
 use crate::events::evm_handlers::intent_submitted::handle_intent_submitted_event;
 use crate::events::evm_handlers::message_dispatched_from_vault::handle_message_dispatched_from_vault_event;
@@ -35,15 +39,16 @@ use crate::events::evm_handlers::uniswap_poolcreated::handle_uniswap_pool_create
 use crate::events::evm_handlers::uniswap_swap::handle_uniswap_swap_event;
 use crate::solidity_structs::non_fungible_position_manager::NonFungiblePositionManager::{IncreaseLiquidity, DecreaseLiquidity, Collect};
 use crate::solidity_structs::token::Token::Transfer;
+use crate::enums::OrderStatus;
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
 use crate::solidity_structs::{
     self, token, AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult
 };
 use crate::solidity_structs::{
-    intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
+    hook_executor::HookExecutor, intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
-use crate::utils::get_native_token_cmc_id;
+use crate::utils::{get_native_token_cmc_id, unix_to_system_time};
 
 pub enum IntentVersions {
     IntentSubmitted,
@@ -627,6 +632,18 @@ async fn try_parse_evm_event(
         Some(&UniswapV3PoolLib::Burn::SIGNATURE_HASH) => {
             handle_uniswap_burn_event(log, &client, chain_id, chain_provider).await?;
         }
+        Some(&HookExecutor::OrderPending::SIGNATURE_HASH) => {
+            handle_hook_executor_order_pending_event(log, &client, chain_id, chain_provider).await?;
+        }
+        Some(&HookExecutor::OrderVerified::SIGNATURE_HASH) => {
+            handle_hook_executor_order_verified_event(log, &client, chain_id, chain_provider).await?;
+        }
+        Some(&HookExecutor::OrderFailed::SIGNATURE_HASH) => {
+            handle_hook_executor_order_failed_event(log, &client, chain_id, chain_provider).await?;
+        }
+        Some(&HookExecutor::OrderTimedOut::SIGNATURE_HASH) => {
+            handle_hook_executor_order_timeout_event(log, &client, chain_id, chain_provider).await?;
+        }
         _ => {
             warn!("\ndidn't match any event, {:?}", log);
         }
@@ -722,13 +739,13 @@ pub async fn get_token_data(token_address: Address, chain_provider: RootProvider
     };
 
     info!(target: log_target, "Token data for {}: Decimals: {}, Ticker: {}, Full Name: {}", token_address, decimals, ticker, full_name);
-    
+
     (decimals, ticker, full_name)
 }
 
 pub async fn get_liquidity_provider_address_evm(
-    transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>>, 
-    client: &Arc<Client>, 
+    transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>>,
+    client: &Arc<Client>,
     periphery_address: String
 ) -> LiquidityDecodedLogData {
     let log_target = "EVM get_liquidity_provider_address_evm";
@@ -863,7 +880,7 @@ pub async fn fallback_fetch_pm_address(
 }
 
 pub async fn check_vault_initiated_transaction(
-    chain_provider: RootProvider<PubSubFrontend>, 
+    chain_provider: RootProvider<PubSubFrontend>,
     db_client: &Arc<Client>,
     transaction_hash: FixedBytes<32>
 ) -> bool {
