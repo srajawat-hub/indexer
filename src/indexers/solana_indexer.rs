@@ -11,8 +11,8 @@ use crate::{
     events::event_processor::{DepositStatus, IntentStage, IntentVersions},
     skip_fail,
     solidity_structs::{
-        IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, PoolType, SolidityIntentProcessorBoundMessage, TokenLaunchType
-    },
+        IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, SolidityIntentProcessorBoundMessage
+    }, structs::{PoolType, TokenLaunchType},
 };
 
 use super::BlockchainIndexer;

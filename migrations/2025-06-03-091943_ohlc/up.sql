@@ -75,9 +75,16 @@ BEGIN
         sa.*,
         -- 1) Compute the bucket (minute/hour/day or 5m)
         %s AS bucket,
-        -- 2) Compute the “reserve token” (the lexicographically smaller of the pair)
-        LEAST(sa.token_in, sa.token_out) AS token_reserve
+        p.launchpad_token,
+        CASE
+          WHEN LOWER(sa.token_in) = LOWER(p.launchpad_token) THEN sa.token_out
+          ELSE sa.token_in
+        END AS token_reserve
       FROM public.ammswap sa
+      JOIN public.pools p 
+        ON LOWER(sa.pool_address) = LOWER(p.pool_address)
+        AND sa.chain_id = p.chain_id
+      WHERE sa.timestamp > %L
     )
     INSERT INTO public.ohlc_price_tables (
       token_address, chain_id, interval,
@@ -113,7 +120,16 @@ BEGIN
         ORDER BY x.timestamp DESC
         LIMIT 1
       )                     AS close_price,
-      SUM(t.amount_in)      AS volume_token,
+
+      -- Volume
+      SUM(
+        CASE
+          WHEN LOWER(t.token_in) = LOWER(t.launchpad_token) THEN t.amount_out
+          WHEN LOWER(t.token_out) = LOWER(t.launchpad_token) THEN t.amount_in
+          ELSE 0
+        END
+      ) AS volume_token,
+      -- SUM(t.amount_in)      AS volume_token,
       SUM(t.amount_in_usd)  AS volume_usd,
       t.bucket              AS timestamp_bucket,
       t.pool_address
@@ -128,6 +144,7 @@ BEGIN
   $SQL$,
     -- format() parameters, in order:
                v_bucket_expr,   -- %s → bucket expression (date_trunc or 5-minute logic)
+               v_last_bucket, -- %L → literal last_bucket timestamp
                p_interval,      -- %L → literal interval value (’1m’, ’5m’, ’1h’, ’1d’)
                v_last_bucket    -- %L → literal last_bucket timestamp
         );

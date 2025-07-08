@@ -5,7 +5,7 @@ use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
 use rust_decimal::{prelude::FromPrimitive, Decimal};
 use tokio_postgres::{Client, GenericClient};
 
-use crate::{events::event_processor::{check_vault_initiated_transaction, get_usd_value_of_native}, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::{get_native_token_cmc_id, get_wrapped_native_token_address, unix_to_system_time}};
+use crate::{events::event_processor::check_vault_initiated_transaction, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::{get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token, get_wrapped_native_token_address, unix_to_system_time}};
 
 pub async fn handle_uniswap_swap_event(
     log: Log,
@@ -53,13 +53,20 @@ pub async fn handle_uniswap_swap_event(
 
     // Query pool to get token addresses
     let pool_query =
-        "SELECT token_0_address, token_1_address FROM pools WHERE pool_address = $1";
+        "SELECT token_0_address, token_1_address, launchpad_token FROM pools WHERE pool_address = $1";
     let pool_row = client
         .query_one(pool_query, &[&pool_address])
         .await
         .context("Failed to fetch pool tokens for swap")?;
     let token0_address: String = pool_row.get("token_0_address");
     let token1_address: String = pool_row.get("token_1_address");
+    let launchpad_token: String = pool_row.get("launchpad_token");
+
+    let base_token = if launchpad_token.to_lowercase() == token0_address.to_lowercase() {
+        token0_address.clone()
+    } else {
+        token1_address.clone()
+    };
 
     // Determine token flow based on amount signs
     let (token_in, token_out, amount_in, amount_out) = if amount0.is_negative() {
@@ -78,94 +85,45 @@ pub async fn handle_uniswap_swap_event(
         )
     };
 
-    // Calculate price if amounts are valid
-    let price = if let (Ok(amt_in), Ok(amt_out)) =
-        (amount_in.parse::<f64>(), amount_out.parse::<f64>())
-    {
-        if amt_in > 0.0 {
-            Some(amt_out / amt_in)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
     // Calculate USD values for amounts
-    // For EVM chains, we currently only have ETH/XXX ppols - determine which token is native
-    let wrapped_native_address = get_wrapped_native_token_address(chain_id);
-    let zero_address = "0x0000000000000000000000000000000000000000";
+    let (amount_in_usd, amount_out_usd, price) = 'calc: {
+        let mut amount_in_usd_value: f64 = 0.0;
+        let mut amount_out_usd_value: f64 = 0.0;
 
-    let (native_token, _other_token, native_amount, other_amount) =
-        if token_in.to_lowercase() == wrapped_native_address.to_lowercase()
-            || token_in.to_lowercase() == zero_address
-        {
-            (
-                token_in.clone(),
-                token_out.clone(),
-                amount_in.clone(),
-                amount_out.clone(),
-            )
-        } else if token_out.to_lowercase() == wrapped_native_address.to_lowercase()
-            || token_out.to_lowercase() == zero_address
-        {
-            (
-                token_out.clone(),
-                token_in.clone(),
-                amount_out.clone(),
-                amount_in.clone(),
-            )
-        } else {
-            // If neither token is the native/wrapped native token, we can't calculate USD values accurately
-            (
-                "0".to_string(),
-                "0".to_string(),
-                "0".to_string(),
-                "0".to_string(),
-            )
-        };
+        let base_token_usd_price = get_usd_value_of_token(Some(&base_token), &chain_id.to_string()).await;
+        let base_token_decimals = get_token_decimals(&base_token, &chain_id.to_string()).await;
 
-    let (amount_in_usd, amount_out_usd) = if native_token != "0" {
-        let decimals = get_native_token_cmc_id(chain_id).1;
-        // Get ETH price in USD
-        let eth_price_usd = get_usd_value_of_native(
-            &chain_id,
-            &(10_u128.pow(decimals)),
-            None,
-            None,
-            None,
-            None,
-        )
-        .await;
+        let token_in_decimals = get_token_decimals(&token_in, &chain_id.to_string()).await;
+        let token_out_decimals = get_token_decimals(&token_out, &chain_id.to_string()).await;
 
-        let eth_price_f64 = eth_price_usd.parse::<f64>().unwrap_or(0.0);
+        let formatted_amount_in = amount_in.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_in_decimals as f64);
+        let formatted_amount_out = amount_out.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_out_decimals as f64);
 
-        if eth_price_f64 > 0.0 && price.is_some() {
-            let swap_price = price.unwrap();
-
-            // Calculate USD values using the extracted variables
-            let native_amount_eth =
-                native_amount.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(decimals as f64);
-            let other_amount_tokens = other_amount.parse::<f64>().unwrap_or(0.0);
-
-            let native_usd_val = native_amount_eth * eth_price_f64;
-            let other_usd_val = if swap_price != 0.0 {
-                other_amount_tokens / swap_price * eth_price_f64
-            } else {
-                0.0
-            };
-
-            // Map back to amount_in_usd and amount_out_usd based on which is which
-            if token_in.to_lowercase() == native_token.to_lowercase() {
-                (native_usd_val.to_string(), other_usd_val.to_string())
-            } else {
-                (other_usd_val.to_string(), native_usd_val.to_string())
-            }
-        } else {
-            ("0".to_string(), "0".to_string())
+        if formatted_amount_in == 0.0 {
+            break 'calc ("0".to_string(), "0".to_string(), None)
         }
-    } else {
-        ("0".to_string(), "0".to_string())
+
+        let trade_price = formatted_amount_out / formatted_amount_in;
+        info!(target: log_target, "Trade price calculated: {}", trade_price);
+
+        if token_in.to_lowercase() == base_token.to_lowercase() {
+            // If token_in is the base token, calculate amount_in_usd based on base token price
+            amount_in_usd_value = formatted_amount_in * base_token_usd_price;
+
+            // launchpad token
+            let amount_out_usd_price = trade_price * base_token_usd_price;
+            amount_out_usd_value = formatted_amount_out * amount_out_usd_price;
+        } else {
+            // If token_out is the base token, calculate amount_out_usd based on base token price
+            amount_out_usd_value = formatted_amount_out * base_token_usd_price;
+
+            // launchpad token
+            let amount_in_usd_price = (1.0/trade_price) * base_token_usd_price;
+            amount_in_usd_value = formatted_amount_in * amount_in_usd_price;
+        };
+        
+        info!(target: log_target, "Calculated USD values: amount_in_usd: {}, amount_out_usd: {}", amount_in_usd_value, amount_out_usd_value);
+        (amount_in_usd_value.to_string(), amount_out_usd_value.to_string(), Some(trade_price))
     };
 
     let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;

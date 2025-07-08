@@ -43,12 +43,13 @@ use crate::enums::OrderStatus;
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
 use crate::solidity_structs::{
-    self, token, AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult
+    self, token
 };
 use crate::solidity_structs::{
     hook_executor::HookExecutor, intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
 };
-use crate::utils::{get_native_token_cmc_id, unix_to_system_time};
+use crate::structs::{AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult};
+use crate::utils::{get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token, get_wrapped_native_token_address};
 
 pub enum IntentVersions {
     IntentSubmitted,
@@ -103,190 +104,6 @@ struct Quote {
     market_cap: Option<f64>,
 }
 
-// =========== Historical
-#[derive(Debug, Deserialize)]
-struct ApiResponseHistory {
-    data: HashMap<String, TokenInfoHistory>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenInfoHistory {
-    quotes: Vec<QuoteEntryHistory>,
-}
-
-#[derive(Debug, Deserialize)]
-struct QuoteEntryHistory {
-    quote: HashMap<String, QuoteDetail>,
-}
-
-#[derive(Debug, Deserialize)]
-struct QuoteDetail {
-    price: Option<f64>,
-}
-
-pub async fn get_usd_value_of_native(
-    chain_id: &i64,
-    transaction_cost: &u128,
-    cmc_id: Option<String>,
-    symbol: Option<String>,
-    decimals: Option<i32>,
-    timestamp: Option<String>,
-) -> String {
-    let cmc_api_key = std::env::var("CMC_API_KEY")
-        .expect("CMC_API_KEY must be set")
-        .parse::<String>()
-        .unwrap();
-
-    let token_symbol;
-    let token_decimals;
-
-    let cmc_api = match cmc_id.clone() {
-        Some(id) => {
-            if symbol == None || decimals == None {
-                error!("CMC_ID not found");
-                return String::from("0");
-            }
-            token_symbol = symbol.unwrap();
-            token_decimals = decimals.unwrap() as u32;
-            let cmc_api_url = match timestamp {
-                Some(ref time) => {
-                    format!("https://pro-api.coinmarketcap.com/v3/cryptocurrency/quotes/historical?id={}&time_start={}&count=1", id, time)
-                }
-                None => {
-                    format!(
-                        "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}",
-                        id
-                    )
-                }
-            };
-            cmc_api_url
-        }
-        None => {
-            (token_symbol, token_decimals) = get_native_token_cmc_id(*chain_id);
-            let cmc_api_url = match timestamp {
-                Some(ref time) => {
-                    format!("https://pro-api.coinmarketcap.com/v3/cryptocurrency/quotes/historical?id={}&time_start={}&count=1", token_symbol, time)
-                }
-                None => {
-                    format!(
-                        "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id={}",
-                        token_symbol
-                    )
-                }
-            };
-            cmc_api_url
-        }
-    };
-
-    let mut headers = HeaderMap::new();
-    match HeaderValue::from_str(&cmc_api_key) {
-        Ok(header_value) => {
-            headers.insert("X-CMC_PRO_API_KEY", header_value);
-        }
-        Err(e) => {
-            error!("Invalid header value: {}", e);
-            return String::from("0");
-        }
-    }
-
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-    let api_client = reqwest::Client::new();
-    let mut transaction_fees_usd = String::from("0");
-
-    let response_result = api_client.get(&cmc_api).headers(headers).send().await;
-
-    match response_result {
-        Ok(response) => {
-            let token_getter;
-            if cmc_id == None {
-                token_getter = token_symbol;
-            } else {
-                token_getter = cmc_id.unwrap();
-            }
-            match timestamp {
-                Some(_time) => {
-                    let json_result = response.json::<ApiResponseHistory>().await;
-
-                    match json_result {
-                        Ok(api_response) => {
-                            if let Some(tokens) = api_response.data.get(&token_getter) {
-                                if tokens.quotes.len() > 0 {
-                                    if let Some(quote) = tokens.quotes[0].quote.get("USD") {
-                                        match quote.price {
-                                            Some(price) => {
-                                                info!("Price of {}: ${}", token_getter, price);
-                                                transaction_fees_usd = ((*transaction_cost as f64
-                                                    / 10_f64.powf(token_decimals as f64))
-                                                    * price)
-                                                    .to_string();
-                                                info!(
-                                                    "Transaction fee in usd {:?}",
-                                                    transaction_fees_usd
-                                                );
-                                            }
-                                            None => {
-                                                error!("Price not available for {}", token_getter)
-                                            }
-                                        }
-                                    } else {
-                                        error!("USD quote not available.");
-                                    }
-                                } else {
-                                    error!("CMC Api failed to fetch historical price of the token with cmc_id {:?}", token_getter);
-                                }
-                            } else {
-                                error!("No data found in response.");
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to parse JSON: {}", e);
-                        }
-                    };
-                }
-                None => {
-                    let json_result = response.json::<ApiResponse>().await;
-
-                    match json_result {
-                        Ok(api_response) => {
-                            if let Some(tokens) = api_response.data.get(&token_getter) {
-                                if let Some(quote) = tokens.quote.get("USD") {
-                                    match quote.price {
-                                        Some(price) => {
-                                            info!("Price of {}: ${}", token_getter, price);
-                                            transaction_fees_usd = ((*transaction_cost as f64
-                                                / 10_f64.powf(token_decimals as f64))
-                                                * price)
-                                                .to_string();
-                                            info!(
-                                                "Transaction fee in usd {:?}",
-                                                transaction_fees_usd
-                                            );
-                                        }
-                                        None => error!("Price not available for {}", token_getter),
-                                    }
-                                } else {
-                                    error!("USD quote not available.");
-                                }
-                            } else {
-                                error!("No data found in response.");
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to parse JSON: {}", e);
-                        }
-                    };
-                }
-            }
-        }
-        Err(e) => {
-            error!("Request failed: {}", e);
-        }
-    };
-
-    transaction_fees_usd
-}
-
 pub async fn update_intent_state(
     intent_id: &i64,
     version: i32,
@@ -323,8 +140,10 @@ pub async fn update_intent_state(
         };
     let txn_hash_str = transaction_hash.to_string();
 
-    let transaction_cost_usd =
-        get_usd_value_of_native(&chain_id, &transaction_cost, None, None, None, None).await;
+    let native_token_usd_price = get_usd_value_of_token(None, chain_id.to_string().as_str()).await;
+    let wrapped_native_token_address = get_wrapped_native_token_address(chain_id);
+    let native_token_decimals = get_token_decimals(wrapped_native_token_address.as_str(), &chain_id.to_string()).await;
+    let transaction_cost_usd = ((transaction_cost as f64 / 10_f64.powf(native_token_decimals as f64)) * native_token_usd_price).to_string();
 
     let _intent_state_response = match client
         .execute(
@@ -509,54 +328,6 @@ pub async fn get_fees_data(
     fee_data_response
 }
 
-pub async fn get_amount_usd_value(
-    token_in: String,
-    chain_id: String,
-    amount: Option<String>,
-    client: &Arc<Client>,
-    timestamp: Option<String>,
-) -> String {
-    let tokens_query = "SELECT t.id, t.cmc_id, t.ticker, tc.decimals, cm.chain_id, tc.network, LOWER(tc.address_bytes32) AS token_address_bytes32
-        FROM tokens t
-        JOIN token_chains tc ON t.id = tc.token_id
-        JOIN chain_metadata cm ON cm.network_name = tc.network
-        WHERE LOWER(tc.address_bytes32) = LOWER($1) AND chain_id = $2";
-
-    let log_target = "Amount USD Value";
-
-    let inclusive_layer_fee_usd = match &amount {
-        Some(fee) => {
-            let token_data = match client
-                .query_one(tokens_query, &[&token_in, &chain_id])
-                .await
-            {
-                Ok(res) => {
-                    let cmc_id: String = res.get("cmc_id");
-                    let symbol: String = res.get("ticker");
-                    let decimals: i32 = res.get("decimals");
-                    let inclusive_layer_fee_usd = get_usd_value_of_native(
-                        &chain_id.parse::<i64>().unwrap(),
-                        &fee.parse::<u128>().unwrap(),
-                        Some(cmc_id),
-                        Some(symbol),
-                        Some(decimals),
-                        timestamp,
-                    )
-                    .await;
-                    inclusive_layer_fee_usd
-                }
-                Err(_e) => {
-                    error!(target: log_target, "Failed to get inclusive_layer_fee_usd, error: {:?}", _e);
-                    String::from("0.0")
-                }
-            };
-            token_data
-        }
-        None => String::from("0.0"),
-    };
-    inclusive_layer_fee_usd
-}
-
 // Function to listen to events from a specific RPC and contract
 pub async fn process_evm_events<S>(
     mut stream: S,
@@ -711,38 +482,6 @@ pub async fn insert_liquidity_event(
     }
 }
 
-pub async fn get_token_data(token_address: Address, chain_provider: RootProvider<PubSubFrontend>) -> (i32, String, String) {
-    let log_target = "EVM get_token_data";
-    let token_instance = token::Token::new(token_address, chain_provider.clone());
-    let decimals = match token_instance.decimals().call().await {
-        Ok(decimals) => decimals._0 as i32,
-        Err(e) => {
-            error!(target: log_target, "Error fetching token decimals for {}: {:?}", token_address, e);
-            18 // Default to 18 if fetching fails
-        }
-    };
-
-    let ticker = match token_instance.symbol().call().await {
-        Ok(symbol) => symbol._0,
-        Err(e) => {
-            error!(target: log_target, "Error fetching token symbol for {}: {:?}", token_address, e);
-            "Unknown".to_string() // Default to "Unknown" if fetching fails
-        }
-    };
-
-    let full_name = match token_instance.name().call().await {
-        Ok(name) => name._0,
-        Err(e) => {
-            error!(target: log_target, "Error fetching token name for {}: {:?}", token_address, e);
-            "Unknown".to_string() // Default to "Unknown" if fetching fails
-        }
-    };
-
-    info!(target: log_target, "Token data for {}: Decimals: {}, Ticker: {}, Full Name: {}", token_address, decimals, ticker, full_name);
-
-    (decimals, ticker, full_name)
-}
-
 pub async fn get_liquidity_provider_address_evm(
     transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>>,
     client: &Arc<Client>,
@@ -761,6 +500,7 @@ pub async fn get_liquidity_provider_address_evm(
                         info!(target: log_target, "Found Transfer log in receipt for transaction: {:?}", receipt.transaction_hash);
                         info!("log topic 0: {:?}", log.topic0());
                         info!("transfer signature hash: {:?}", Transfer::SIGNATURE_HASH);
+                        
                         if log.address().to_string().to_lowercase() == periphery_address.to_lowercase() {
                             info!(target: log_target, "Transfer log address matches periphery address: {:?}", periphery_address);
                             let user_address_bytes32 = log.topics().get(2);
@@ -810,6 +550,8 @@ pub async fn get_liquidity_provider_address_evm(
                         let decoded = DecreaseLiquidity::decode_log(&primitive_log, true);
                         if let Ok(decoded_data) = decoded {
                             if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                                info!(target: log_target, "DecreaseLiquidity log address matches periphery address: {:?}", periphery_address);
+                                info!(target: log_target, "DecreaseLiquidity log data: {:?}, token id {}", decoded_data, decoded_data.tokenId.to_string());
                                 liquidity_token_id = Some(decoded_data.tokenId.to_string());
                             }
                         } else {

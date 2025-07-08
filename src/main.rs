@@ -7,6 +7,7 @@ mod events;
 mod indexers;
 pub mod solidity_structs;
 mod utils;
+mod structs;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use anchor_lang::pubkey;
@@ -18,11 +19,10 @@ use postgres_openssl::MakeTlsConnector;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_sdk::pubkey::Pubkey;
-use solidity_structs::OrdersResponse;
 use std::{fs, sync::Arc, thread::sleep, time::Duration};
 use tokio::{signal, sync::broadcast};
 
-use crate::constants::DEFAULT_ORDER_ID;
+use crate::{constants::DEFAULT_ORDER_ID, structs::OrdersResponse};
 
 /// Only needed to satisfy Anchor's proc-macros
 pub const ID: Pubkey = pubkey!("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");

@@ -50,10 +50,12 @@ pub async fn handle_uniswap_burn_event(
         warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
         // get user address from liquidity add transaction with the same token id
         if let Some(ref token_id_value) = token_id {
+            info!(target: log_target, "Fetching user address for token_id: {}", token_id_value);
             let query = "SELECT user_address FROM liquidity WHERE token_id = $1 AND is_add = true ORDER BY timestamp DESC LIMIT 1";
             user_address = match client.query_one(query, &[&token_id_value]).await {
                 Ok(row) => {
                     let address: String = row.get("user_address");
+                    info!(target: log_target, "Found user address for token_id {}: {}", token_id_value, address);
                     address
                 },
                 Err(e) => {
@@ -66,8 +68,6 @@ pub async fn handle_uniswap_burn_event(
             user_address = String::new();
         }
     }
-
-
 
     let amount_token0 = Decimal::from_str(&amount0.to_string()).unwrap();
     let amount_token1 = Decimal::from_str(&amount1.to_string()).unwrap();

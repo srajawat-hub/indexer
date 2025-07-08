@@ -5,7 +5,7 @@ use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::ty
 use rust_decimal::Decimal;
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::get_token_data, solidity_structs::{token, uniswap_v3_factory_lib::UniswapV3FactoryLib, uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance, PoolType, TokenLaunchType}, utils::{chain_id_to_chain_name, unix_to_system_time}};
+use crate::{solidity_structs::{token, uniswap_v3_factory_lib::UniswapV3FactoryLib, uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance}, structs::{PoolType, TokenLaunchType}, utils::{chain_id_to_chain_name, get_token_data, unix_to_system_time}};
 
 pub async fn handle_uniswap_pool_created_event(
     log: Log,

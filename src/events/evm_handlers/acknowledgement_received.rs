@@ -4,10 +4,10 @@ use log::{info, error};
 use alloy::{dyn_abi::SolType, providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
 use tokio_postgres::Client;
 use crate::{
-    events::event_processor::{fetch_intent_initiator, get_amount_usd_value, update_intent_state, IntentStage, IntentVersions}, 
+    events::event_processor::{fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions}, 
     solidity_structs::{
         intent_processor::IntentProcessorV2, AcknowledgementMetadataLaunchpadAddLiquidity, AcknowledgementMetadataLaunchpadRemoveLiquidity, AcknowledgementMetadataLaunchpadSwap, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, SolidityAcknowledgementMetadata
-    }};
+    }, utils::{get_token_decimals, get_usd_value_of_token}};
 
 
 pub async fn handle_acknowledgement_received_event(
@@ -146,14 +146,9 @@ pub async fn handle_acknowledgement_received_event(
             ";
 
         // update amount_out_usd here as well in order_created
-        let amount_out_usd = get_amount_usd_value(
-            token_out,
-            destination_chain_id,
-            Some(actual_amount.clone()),
-            &client,
-            None,
-        )
-        .await;
+        let token_out_usd_price = get_usd_value_of_token(Some(&token_out), &destination_chain_id).await;
+        let token_out_decimals = get_token_decimals(&token_out, &destination_chain_id).await;
+        let amount_out_usd = ((actual_amount.parse::<f64>().unwrap_or(0.0) / 10.0_f64.powf(token_out_decimals)) * token_out_usd_price).to_string();
 
         let order_rows_updated = client
             .execute(
