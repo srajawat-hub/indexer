@@ -174,7 +174,7 @@ impl BlockchainIndexer for EvmIndexer {
 
         loop {
             sleep(Duration::from_secs(1)).await;
-            if start_block_number >= end_block_number {
+            if start_block_number > end_block_number {
                 // If we reached the end block, wait for new blocks
                 info!("Waiting for new blocks on chain id {}...", chain_id);
                 sleep(Duration::from_secs(5)).await;
