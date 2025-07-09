@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc, time::SystemTime};
 use anyhow::Context;
 use log::{info, error};
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use alloy::{providers::RootProvider, rpc::types::Log, transports::http::Http};
 use rust_decimal::{prelude::FromPrimitive, Decimal};
 use tokio_postgres::{Client, GenericClient};
 
@@ -11,7 +11,7 @@ pub async fn handle_uniswap_swap_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let UniswapV3PoolLib::Swap {
         sender,
@@ -126,7 +126,7 @@ pub async fn handle_uniswap_swap_event(
         (amount_in_usd_value.to_string(), amount_out_usd_value.to_string(), Some(trade_price))
     };
 
-    let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;
+    let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await.0;
 
     let query = r#"
         INSERT INTO ammswap

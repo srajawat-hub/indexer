@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use alloy::dyn_abi::SolType;
+use alloy::transports::http::Http;
 use anyhow::bail;
 use log::{info, error};
 use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
@@ -16,7 +17,7 @@ pub async fn handle_order_created_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>,
+    chain_provider: RootProvider<Http<reqwest::Client>>,
     solana_chain_id: &str
 ) -> anyhow::Result<()> {
     let IntentLibV2::OrderCreated {

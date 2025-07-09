@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use log::info;
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http};
 use tokio_postgres::Client;
 use crate::{
     events::event_processor::{
@@ -14,7 +14,7 @@ pub async fn handle_solution_submitted_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let IntentLibV2::SolutionSubmitted { intentId, solver } =
         log.log_decode().unwrap().inner.data;

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::bail;
 use log::{info, error};
-use alloy::{dyn_abi::SolType, providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent};
+use alloy::{dyn_abi::SolType, providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent, transports::http::Http};
 use tokio_postgres::Client;
 
 use crate::{events::event_processor::{fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions}, solidity_structs::{vault::Vault, CreatedOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData}};
@@ -10,7 +10,7 @@ pub async fn handle_received_message_on_vault_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let Vault::ReceivedMessageOnVault {
         origin,

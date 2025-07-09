@@ -1,6 +1,6 @@
 use std::{str::FromStr, time::SystemTime};
 
-use alloy::{primitives::{Address, B256}, providers::{ProviderBuilder, RootProvider}, pubsub::PubSubFrontend, transports::http::Http};
+use alloy::{primitives::{Address, B256}, providers::{ProviderBuilder, RootProvider}, transports::http::Http};
 use chrono::DateTime;
 use log::{error, info};
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -51,6 +51,7 @@ pub fn get_wrapped_native_token_address(chain_id: i64) -> String {
         18083 => "0x6a79ca29282AC295679a14A8274300e5842e45e5".to_string(), // Inclusive Layer Testnet
         18082 => "0x0000000000000000000000000000000000000000".to_string(), // Inclusive Layer
         999 => "0x5555555555555555555555555555555555555555".to_string(), // Hyperevm - WHYPE
+        1399811149 => "So11111111111111111111111111111111111111112".to_string(),
         _ => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // Default to Ethereum WETH
     }
 }
@@ -74,6 +75,7 @@ pub fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
         137 => (String::from("28321"), 18),      // pol
         1399811149 => (String::from("5426"), 9), // sol
         18082 => (String::from("3408"), 18),     // usdc
+        999 => (String::from("32196"), 18), // hyperevm whype
         _ => (String::from("1027"), 18),         // ETH
     }
 }
@@ -152,7 +154,7 @@ pub async fn get_token_decimals(
     }
 }
 
-pub async fn get_token_data(token_address: Address, chain_provider: RootProvider<PubSubFrontend>) -> (i32, String, String) {
+pub async fn get_token_data(token_address: Address, chain_provider: RootProvider<Http<reqwest::Client>>) -> (i32, String, String) {
     let log_target = "EVM get_token_data";
     let token_instance = token::Token::new(token_address, chain_provider.clone());
     let decimals = 18 as i32;

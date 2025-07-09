@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use anyhow::bail;
 use log::{info, error};
-use alloy::{dyn_abi::SolType, providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use alloy::{dyn_abi::SolType, providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http};
 use tokio_postgres::Client;
 use crate::{
     events::event_processor::{fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions}, 
@@ -14,7 +14,7 @@ pub async fn handle_acknowledgement_received_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let IntentProcessorV2::AcknowledgementReceived {
         orderId,

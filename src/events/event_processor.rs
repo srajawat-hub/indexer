@@ -1,9 +1,9 @@
+use alloy::dyn_abi::SolType;
 use alloy::primitives::{b256, Address, FixedBytes};
 use alloy::providers::{Provider, RootProvider};
-use alloy::pubsub::PubSubFrontend;
 use alloy::rpc::types::{Log, TransactionReceipt};
-use alloy::sol_types::SolValue;
 use alloy::sol_types::SolEvent;
+use alloy::transports::http::Http;
 use anyhow::bail;
 use futures_util::stream::StreamExt;
 use futures_util::Stream;
@@ -43,7 +43,7 @@ use crate::enums::OrderStatus;
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
 use crate::solidity_structs::{
-    self, token
+    self, token, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData
 };
 use crate::solidity_structs::{
     hook_executor::HookExecutor, intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
@@ -110,7 +110,7 @@ pub async fn update_intent_state(
     stage: &str,
     transaction_hash: FixedBytes<32>,
     client: &Arc<Client>,
-    provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
+    provider: RootProvider<Http<reqwest::Client>>,
     order_id: &i64,
     chain_id: i64,
     initiator_address: String,
@@ -139,7 +139,7 @@ pub async fn update_intent_state(
             Err(_e) => (0 as i64, 0u128),
         };
     let txn_hash_str = transaction_hash.to_string();
-
+    
     let native_token_usd_price = get_usd_value_of_token(None, chain_id.to_string().as_str()).await;
     let wrapped_native_token_address = get_wrapped_native_token_address(chain_id);
     let native_token_decimals = get_token_decimals(wrapped_native_token_address.as_str(), &chain_id.to_string()).await;
@@ -333,7 +333,7 @@ pub async fn process_evm_events<S>(
     mut stream: S,
     client: Arc<Client>,
     chain_id: i64,
-    chain_provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend>,
+    chain_provider: &RootProvider<Http<reqwest::Client>>,
     solana_chain_id: &str,
 ) where
     S: Stream<Item = Log> + Unpin,
@@ -356,7 +356,7 @@ pub async fn process_evm_events<S>(
 async fn try_parse_evm_event(
     client: Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>,
+    chain_provider: RootProvider<Http<reqwest::Client>>,
     solana_chain_id: &str,
     log: Log,
 ) -> anyhow::Result<()> {
@@ -622,18 +622,19 @@ pub async fn fallback_fetch_pm_address(
 }
 
 pub async fn check_vault_initiated_transaction(
-    chain_provider: RootProvider<PubSubFrontend>,
+    chain_provider: RootProvider<Http<reqwest::Client>>, 
     db_client: &Arc<Client>,
     transaction_hash: FixedBytes<32>
-) -> bool {
+) -> (bool, Option<String>) {
     let log_target = "EVM check_vault_initiated_transaction";
-    let query = "SELECT transaction_hash FROM received_message_on_vault WHERE LOWER(transaction_hash) = LOWER($1)";
+    let query = "SELECT transaction_hash, sender_address FROM received_message_on_vault WHERE LOWER(transaction_hash) = LOWER($1)";
     match db_client.query_one(query, &[&transaction_hash.to_string()]).await {
         Ok(row) => {
             let db_transaction_hash: String = row.get("transaction_hash");
             if db_transaction_hash.to_lowercase() == transaction_hash.to_string().to_lowercase() {
-                info!(target: log_target, "Transaction {} is initiated by vault", transaction_hash);
-                return true;
+                let user_address: String = row.get("sender_address");
+                info!(target: log_target, "Transaction {} is initiated by vault with user address {}", transaction_hash, user_address);
+                return (true, Some(user_address));
             } else {
                 check_vault_initiated_transaction_log(chain_provider, transaction_hash).await
             }
@@ -646,7 +647,10 @@ pub async fn check_vault_initiated_transaction(
     }
 }
 
-async fn check_vault_initiated_transaction_log(chain_provider: RootProvider<PubSubFrontend>, transaction_hash: FixedBytes<32>) -> bool {
+async fn check_vault_initiated_transaction_log(
+    chain_provider: RootProvider<Http<reqwest::Client>>, 
+    transaction_hash: FixedBytes<32>
+) -> (bool, Option<String>) {
     let log_target = "EVM check_vault_initiated_transaction_log";
     let transaction_receipt = chain_provider.get_transaction_receipt(transaction_hash).await;
     match transaction_receipt {
@@ -654,19 +658,47 @@ async fn check_vault_initiated_transaction_log(chain_provider: RootProvider<PubS
             let receipt_logs = receipt.inner.logs();
             for log in receipt_logs {
                 if log.topics()[0] == Vault::ReceivedMessageOnVault::SIGNATURE_HASH {
+                    let Vault::ReceivedMessageOnVault {
+                        origin,
+                        sender,
+                        message,
+                        provider,
+                    } = log.log_decode().unwrap().inner.data;
+
+                    let message_slice = message.as_ref();
+                    let decoded_message = match SolidityVaultBoundMessage::abi_decode(message_slice, true) {
+                        Ok(res) => res,
+                        Err(e) => {
+                            error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
+                            return (true, None) // vault initiated
+                        }
+                    };
+                    // getting user address
+                    let decoded_message_data = match VaultBoundMessagePlaceOrderData::abi_decode(
+                        decoded_message.data.as_ref(),
+                        true,
+                    ) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            error!(target: log_target, "Failed to decode VaultBoundMessagePlaceOrderData in Vault::ReceivedMessageOnVault: {:?}", e);
+                            return (true, None)
+                        }
+                    };
+                    let initiator_address = decoded_message_data.order.initiatorAddress.to_string();
+
                     info!(target: log_target, "Transaction {} is initiated by vault based on receipt logs", transaction_hash);
-                    return true;
+                    return (true, Some(initiator_address));
                 }
             }
-            return false;
+            return (false, None);
         }
         Ok(None) => {
             error!(target: log_target, "Transaction receipt not found for {}", transaction_hash);
-            return false;
+            return (false, None);
         }
         Err(e) => {
             error!(target: log_target, "Error fetching transaction receipt for {}: {:?}", transaction_hash, e);
-            return false;
+            return (false, None);
         }
     }
 }

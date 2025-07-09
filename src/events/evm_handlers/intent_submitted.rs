@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use log::info;
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http};
 use tokio_postgres::Client;
 use crate::{events::event_processor::{update_intent_state, IntentStage, IntentVersions}, solidity_structs::intent_lib_v2::IntentLibV2};
 
@@ -10,7 +10,7 @@ pub async fn handle_intent_submitted_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>,
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let IntentLibV2::IntentSubmitted {
         intentId,

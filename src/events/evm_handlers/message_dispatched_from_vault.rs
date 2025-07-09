@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::bail;
 use log::{info, error, debug};
-use alloy::{dyn_abi::SolType, providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent};
+use alloy::{dyn_abi::SolType, providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent, transports::http::Http};
 use tokio_postgres::Client;
 
 use crate::{events::event_processor::{fetch_intent_initiator, update_intent_state, DepositStatus, IntentStage, IntentVersions}, solidity_structs::{vault::Vault, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, SolidityIntentProcessorBoundMessage}};
@@ -10,7 +10,7 @@ pub async fn handle_message_dispatched_from_vault_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let Vault::MessageDispatchedFromVault {
         sender,
@@ -64,18 +64,37 @@ pub async fn handle_message_dispatched_from_vault_event(
             let timestamp = std::time::SystemTime::now();
 
             // fetch intent_id
-            let intent_id_query = "SELECT intent_id FROM order_created WHERE order_id = $1";
-            let intent_id_response = match client
-                .query_one(intent_id_query, &[&order_id])
+            let intent_id_from_vault = "SELECT intent_id, sender_address FROM received_message_on_vault WHERE order_id = $1";
+            let (intent_id, initiator_address) = match client
+                .query_one(intent_id_from_vault, &[&order_id])
                 .await
             {
-                Ok(row) => row,
+                Ok(row) => {
+                    let intent_id: i64 = row.get("intent_id");
+                    let sender_address: String = row.get("sender_address");
+                    info!(target: log_target, "Fetched intent_id {:?} for order_id {:?} from received_message_on_vault", intent_id, order_id);
+                    (intent_id, sender_address)
+                },
                 Err(e) => {
                     error!(target: log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, e);
-                    bail!("Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, e);
+                    // as a fallback try to get it from order_created table
+                    let intent_id_query = "SELECT intent_id, creator_address FROM order_created WHERE order_id = $1";
+                    match client.query_one(
+                        intent_id_query,
+                        &[&order_id],
+                    ).await {
+                        Ok(row) => {
+                            let intent_id: i64 = row.get("intent_id");
+                            let creator_address: String = row.get("creator_address");
+                            (intent_id, creator_address)
+                        },
+                        Err(e) => {
+                            error!(target: log_target, "Failed to fetch intent_id from order_created for order_id {:?}: {:?}", order_id, e);
+                            (0_i64, String::new()) // Fallback to 0 if not found
+                        }
+                    }
                 }
             };
-            let intent_id: i64 = intent_id_response.get("intent_id");
 
             let query =
                 "INSERT INTO message_dispatched_from_vault VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (transaction_hash) DO NOTHING";
@@ -107,9 +126,6 @@ pub async fn handle_message_dispatched_from_vault_event(
                     error!(target: log_target, "Failed to add data into data");
                 }
             };
-
-            let initiator_address: String =
-                fetch_intent_initiator(intent_id, &client).await;
 
             update_intent_state(
                 &intent_id,

@@ -1,17 +1,25 @@
 use std::{sync::Arc, time::SystemTime};
 use anyhow::bail;
 use log::{info, error};
-use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log};
+use alloy::{providers::{Provider, RootProvider}, rpc::types::Log, transports::http::Http};
 use rust_decimal::Decimal;
 use tokio_postgres::Client;
 
-use crate::{solidity_structs::{token, uniswap_v3_factory_lib::UniswapV3FactoryLib, uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance}, structs::{PoolType, TokenLaunchType}, utils::{chain_id_to_chain_name, get_token_data, unix_to_system_time}};
+use crate::{
+    solidity_structs::{
+        token, 
+        uniswap_v3_factory_lib::UniswapV3FactoryLib::{self}, 
+        uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance
+    }, 
+    structs::{PoolType, TokenLaunchType}, 
+    utils::{chain_id_to_chain_name, unix_to_system_time, get_token_data}
+};
 
 pub async fn handle_uniswap_pool_created_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let UniswapV3FactoryLib::PoolCreated {
         token0,

@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc, time::SystemTime};
 use log::{error, info, warn};
-use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::{Log, TransactionReceipt}};
+use alloy::{providers::{Provider, RootProvider}, rpc::types::{Log, TransactionReceipt}, transports::http::Http};
 use rust_decimal::Decimal;
 use tokio_postgres::Client;
 
@@ -10,7 +10,7 @@ pub async fn handle_uniswap_mint_by_pm_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let UniswapV3PoolLib::MintByProjectManager {
         sender,

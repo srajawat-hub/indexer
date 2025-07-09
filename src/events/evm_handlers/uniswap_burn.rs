@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc, time::SystemTime};
 use anyhow::bail;
-use log::{error, info, warn};
-use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log};
+use log::{info, error, warn};
+use alloy::{providers::{Provider, RootProvider}, rpc::types::Log, transports::http::Http};
 use rust_decimal::Decimal;
 use tokio_postgres::Client;
 
@@ -11,7 +11,7 @@ pub async fn handle_uniswap_burn_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let UniswapV3PoolLib::Burn {
         owner,
@@ -44,28 +44,33 @@ pub async fn handle_uniswap_burn_event(
 
     let token_id = liquidity_decoded_user_data.liquidity_token_id;
 
-    if let Some(user_addr) = liquidity_decoded_user_data.liquidity_user_address {
-        user_address = user_addr;
+    let (is_vault_initiated, initiator_address) = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;
+    if initiator_address.is_some() {
+        user_address = initiator_address.unwrap();
     } else {
-        warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
-        // get user address from liquidity add transaction with the same token id
-        if let Some(ref token_id_value) = token_id {
-            info!(target: log_target, "Fetching user address for token_id: {}", token_id_value);
-            let query = "SELECT user_address FROM liquidity WHERE token_id = $1 AND is_add = true ORDER BY timestamp DESC LIMIT 1";
-            user_address = match client.query_one(query, &[&token_id_value]).await {
-                Ok(row) => {
-                    let address: String = row.get("user_address");
-                    info!(target: log_target, "Found user address for token_id {}: {}", token_id_value, address);
-                    address
-                },
-                Err(e) => {
-                    error!(target: log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
-                    String::new()
-                }
-            };
+        if let Some(user_addr) = liquidity_decoded_user_data.liquidity_user_address {
+            user_address = user_addr;
         } else {
-            warn!(target: log_target, "No token_id found in liquidity decoded user data. Defaulting to empty user address.");
-            user_address = String::new();
+            warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+            // get user address from liquidity add transaction with the same token id
+            if let Some(ref token_id_value) = token_id {
+                info!(target: log_target, "Fetching user address for token_id: {}", token_id_value);
+                let query = "SELECT user_address FROM liquidity WHERE token_id = $1 AND is_add = true ORDER BY timestamp DESC LIMIT 1";
+                user_address = match client.query_one(query, &[&token_id_value]).await {
+                    Ok(row) => {
+                        let address: String = row.get("user_address");
+                        info!(target: log_target, "Found user address for token_id {}: {}", token_id_value, address);
+                        address
+                    },
+                    Err(e) => {
+                        error!(target: log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
+                        String::new()
+                    }
+                };
+            } else {
+                warn!(target: log_target, "No token_id found in liquidity decoded user data. Defaulting to empty user address.");
+                user_address = String::new();
+            }
         }
     }
 
@@ -88,8 +93,6 @@ pub async fn handle_uniswap_burn_event(
             false
         }
     };
-
-    let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;
 
     insert_liquidity_event(
         &client,

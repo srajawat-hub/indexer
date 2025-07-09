@@ -46,7 +46,7 @@ const MAX_LIMIT: u64 = 20;
 
 pub struct SolanaIndexer {
     rpc_url: String,
-    _ws_url: String,
+    // _ws_url: String,
     chain_id: i64,
     vaults_program_id: Pubkey,
     amm_program_id: Pubkey,
@@ -217,7 +217,7 @@ pub async fn update_intent_state(
 impl SolanaIndexer {
     pub fn new(
         rpc_url: String,
-        ws_url: String,
+        // ws_url: String,
         chain_id: i64,
         vaults_program_id: String,
         amm_program_id: String,
@@ -225,7 +225,7 @@ impl SolanaIndexer {
         let rpc_client = RpcClient::new(rpc_url.clone());
         Self {
             rpc_url,
-            _ws_url: ws_url,
+            // _ws_url: ws_url,
             chain_id,
             vaults_program_id: Pubkey::from_str(&vaults_program_id).unwrap(),
             amm_program_id: Pubkey::from_str(&amm_program_id).unwrap(),
@@ -605,7 +605,7 @@ impl SolanaIndexer {
             // Create a temporary SolanaIndexer instance to use the parse_solana_events method
             let temp_indexer = SolanaIndexer {
                 rpc_url: rpc_client.url().to_string(),
-                _ws_url: "".to_string(),
+                // _ws_url: "".to_string(),
                 chain_id,
                 vaults_program_id: *other_program_id,
                 amm_program_id: *program_id,
@@ -1911,7 +1911,7 @@ mod tests {
         let amm_program_id = pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
         let indexer = SolanaIndexer::new(
             url.clone(),
-            String::new(),
+            // String::new(),
             0,
             program_id.to_string(),
             amm_program_id.to_string(),
@@ -1980,7 +1980,7 @@ mod tests {
 
         let indexer = SolanaIndexer::new(
             url.clone(),
-            String::new(),
+            // String::new(),
             0,
             program_id.to_string(),
             amm_program_id.to_string(),
@@ -2051,7 +2051,7 @@ mod tests {
 
         let indexer = SolanaIndexer::new(
             url.clone(),
-            String::new(),
+            // String::new(),
             0,
             program_id.to_string(),
             amm_program_id.to_string(),

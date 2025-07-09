@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc, time::SystemTime};
 use anyhow::{bail, Context};
 use log::{info, error};
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use alloy::{providers::RootProvider, rpc::types::Log, transports::http::Http};
 use rust_decimal::{prelude::FromPrimitive, Decimal};
 use tokio_postgres::{Client, GenericClient};
 use crate::{enums::OrderStatus, solidity_structs::hook_executor::HookExecutor, utils::unix_to_system_time};
@@ -10,7 +10,7 @@ pub async fn handle_hook_executor_order_timeout_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
-    chain_provider: RootProvider<PubSubFrontend>,
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let HookExecutor::OrderTimedOut {
         orderHash,

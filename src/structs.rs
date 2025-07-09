@@ -1,7 +1,8 @@
-use std::fmt;
-use crate::utils::deserialize_number;
 use serde::{Deserialize, Serialize};
+use crate::utils::deserialize_number;
+use std::fmt;
 use tokio_postgres::types::{IsNull, ToSql, Type};
+
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ResultCosts {
@@ -90,12 +91,6 @@ struct AffiliateFee {
     amount: Option<Amount>,
 }
 
-#[derive(Debug, Serialize, Clone)]
-pub struct LiquidityDecodedLogData {
-    pub liquidity_user_address: Option<String>,
-    pub liquidity_token_id: Option<String>
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Order {
     pub orderId: OrderId,
@@ -116,27 +111,6 @@ pub struct Order {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OrdersResponse {
     pub orders: Vec<Order>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SwaggerTokenData {
-    #[serde(rename = "id")]
-    pub token_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TokenUsdPriceData {
-    pub data: SwaggerTokenData
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SwaggerTokenUsdRate {
-    pub rate: String
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SwaggerTokenUsdPriceData {
-    pub data: SwaggerTokenUsdRate
 }
 
 #[derive(Debug)]
@@ -201,4 +175,31 @@ impl ToSql for TokenLaunchType {
     }
 
     tokio_postgres::types::to_sql_checked!();
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SwaggerTokenData {
+    #[serde(rename = "id")]
+    pub token_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TokenUsdPriceData {
+    pub data: SwaggerTokenData
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SwaggerTokenUsdRate {
+    pub rate: String
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SwaggerTokenUsdPriceData {
+    pub data: SwaggerTokenUsdRate
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct LiquidityDecodedLogData {
+    pub liquidity_user_address: Option<String>,
+    pub liquidity_token_id: Option<String>
 }

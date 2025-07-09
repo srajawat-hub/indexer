@@ -46,49 +46,59 @@ pub async fn fill_history_intents(indexer_configs: Arc<Config>, client: Arc<Clie
 
     for indexer_config in &indexer_configs.indexers {
         let http_rpc_url = indexer_config.url.parse().unwrap();
-        let http_provider = ProviderBuilder::new().on_http(http_rpc_url);
-        info!("ws url {:?}", indexer_config.ws_url.clone());
-        let ws = WsConnect::new(indexer_config.ws_url.clone());
-        let ws_provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend> = match ProviderBuilder::new().on_ws(ws).await {
-            Ok(provider) => provider,
-            Err(e) => {
-                error!("Failed to connect to WebSocket provider: {e}");
-                continue; // Skip this indexer if WebSocket connection fails
-            }
-        };
+        let http_provider: alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>> = ProviderBuilder::new().on_http(http_rpc_url);
 
         let chain_id = http_provider.get_chain_id().await.unwrap() as i64;
 
         let (last_recorded_block_number, additional_addresses) = if chain_id == l3_chain_id {
-            // ip
-            let query = "SELECT * FROM intent ORDER BY id DESC LIMIT 1";
-            let block_number = match client.query(query, &[]).await {
-                Ok(row) => {
-                    if row.len() > 0 {
-                        row[0].get("block_number")
-                    } else {
-                        http_provider.get_block_number().await.unwrap() as i64
-                    }
-                }
-                Err(_e) => http_provider.get_block_number().await.unwrap() as i64,
-            };
-            (block_number as u64 + 1, Vec::<Address>::new()) // +1 to start from the next block
-        } else {
-            // vaults
-            let query = "SELECT * FROM received_message_on_vault WHERE chain_id = $1 ORDER BY id DESC LIMIT 1";
-            let block_number: i64 = match client.query(query, &[&chain_id]).await {
-                Ok(row) => {
-                    if row.len() > 0 {
-                        row[0].get("block_number")
-                    } else {
-                        error!("Failed to fetch block number from the database, using latest block number from provider");
-                        http_provider.get_block_number().await.unwrap() as i64
-                    }
-                    // 31638610 as i64 // TODO: remove this hardcoded value
-                }
+            // L3
+            let last_recorded_block_query = "SELECT lastest_block FROM chain_metadata WHERE chain_id = $1";
+            let block_number: i64 = match client.query_one(last_recorded_block_query, &[&chain_id.to_string()]).await {
+                Ok(row) => row.get("lastest_block"),
                 Err(_e) => {
                     error!("Error in fetching latest block number from database for chain id {chain_id}, using latest block number from provider");
-                    http_provider.get_block_number().await.unwrap() as i64
+                    let query = "SELECT * FROM intent ORDER BY id DESC LIMIT 1";
+                    let block_number: i64 = match client.query(query, &[&chain_id]).await {
+                        Ok(row) => {
+                            if row.len() > 0 {
+                                row[0].get("block_number")
+                            } else {
+                                http_provider.get_block_number().await.unwrap() as i64
+                            }
+                        }
+                        Err(_e) => {
+                            error!("Error in fetching latest block number from database for chain id {chain_id}, using latest block number from provider");
+                            http_provider.get_block_number().await.unwrap() as i64
+                        }
+                    };
+                    block_number
+                }
+            };
+
+            (block_number as u64 + 1, Vec::<Address>::new()) // +1 to start from the next block
+        } else {
+            // vaults and other contracts
+            let last_recorded_block_query = "SELECT lastest_block FROM chain_metadata WHERE chain_id = $1";
+            let block_number: i64 = match client.query_one(last_recorded_block_query, &[&chain_id.to_string()]).await {
+                Ok(row) => row.get("lastest_block"),
+                    // 31638610 as i64 // TODO: remove this hardcoded value
+                Err(_e) => {
+                    error!("Error in fetching latest block number from database for chain id {chain_id}, using latest block number from provider");
+                    let query = "SELECT * FROM received_message_on_vault WHERE chain_id = $1 ORDER BY id DESC LIMIT 1";                    
+                    let block_number: i64 = match client.query(query, &[&chain_id]).await {
+                        Ok(row) => {
+                            if row.len() > 0 {
+                                row[0].get("block_number")
+                            } else {
+                                http_provider.get_block_number().await.unwrap() as i64
+                            }
+                        }
+                        Err(_e) => {
+                            error!("Error in fetching latest block number from database for chain id {chain_id}, using latest block number from provider");
+                            http_provider.get_block_number().await.unwrap() as i64
+                        }
+                    };
+                    block_number
                     // 31638610 as i64 // TODO: remove this hardcoded value
                 }
             };
@@ -123,11 +133,6 @@ pub async fn fill_history_intents(indexer_configs: Arc<Config>, client: Arc<Clie
             latest_block_number,
         );
 
-
-        // let ws = WsConnect::new(indexer_config.ws_url.clone());
-        // let ws_provider: alloy::providers::RootProvider<alloy::pubsub::PubSubFrontend> =
-        //     ProviderBuilder::new().on_ws(ws).await.unwrap();
-
         while start_block_number <= latest_block_number {
             info!(target: "backfill", "Processing block range {} to {}", start_block_number, end_block_number);
             info!(target: "backfill", "Current contract addresses: {:?}", contract_addrs);
@@ -148,7 +153,7 @@ pub async fn fill_history_intents(indexer_configs: Arc<Config>, client: Arc<Clie
                 backfill_stream,
                 client.clone(),
                 chain_id,
-                ws_provider.clone(),
+                &http_provider.clone(),
                 &indexer_configs.solana_chain_id.to_string(),
             )
             .await;
@@ -218,5 +223,18 @@ pub async fn fill_history_intents(indexer_configs: Arc<Config>, client: Arc<Clie
                 );
             }
         }
+
+        // backfill completed for current chain id. Store the last backfilled block number in db
+        store_last_backfilled_block(&indexer_config.chain_id.to_string(), end_block_number as i64, client.clone()).await;
+    }
+}
+
+async fn store_last_backfilled_block(chain_id: &str, block_number: i64, client: Arc<Client>) {
+    let query = "INSERT INTO chain_metadata (chain_id, network_name, latest_block) VALUES ($1, $2, $3) ON CONFLICT (chain_id) DO UPDATE SET latest_block = EXCLUDED.latest_block";
+    let placeholder_chain_name = String::from("");
+    if let Err(e) = client.execute(query, &[&chain_id, &placeholder_chain_name, &block_number]).await {
+        error!("Failed to store last backfilled block: {:?}", e);
+    } else {
+        info!("Stored last backfilled block {} for chain {}", block_number, chain_id);
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use log::{info, error};
-use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent};
+use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent, transports::http::Http};
 use tokio_postgres::Client;
 
 use crate::{events::event_processor::DepositStatus, solidity_structs::{intent_processor::IntentProcessorV2, ProcessId}};
@@ -8,7 +8,7 @@ use crate::{events::event_processor::DepositStatus, solidity_structs::{intent_pr
 pub async fn handle_deposit_received_event(
     log: Log,
     client: &Arc<Client>,
-    chain_provider: RootProvider<PubSubFrontend>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let IntentProcessorV2::DepositReceived {
         userAddress,

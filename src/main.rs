@@ -30,7 +30,6 @@ pub const ID: Pubkey = pubkey!("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 #[derive(Deserialize, Clone)]
 pub struct IndexerConfig {
     pub url: String,
-    pub ws_url: String,
     pub contract: String,
     #[serde(default)]
     pub chain_id: i64,
@@ -60,7 +59,6 @@ impl Config {
 
 fn create_evm_indexer(
     url: &str,
-    ws_url: &str,
     vaults_address: &str,
     amm_address: Option<String>,
     hook_executor_address: Option<String>,
@@ -68,7 +66,6 @@ fn create_evm_indexer(
 ) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(EvmIndexer::new(
         url.to_string(),
-        ws_url.to_string(),
         vaults_address.to_string(),
         amm_address,
         hook_executor_address,
@@ -84,7 +81,7 @@ fn create_solana_indexer(
 ) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(SolanaIndexer::new(
         url.to_string(),
-        url.to_string(),
+        // url.to_string(),
         *chain_id,
         vaults_program_id.to_string(),
         amm_program_id.to_string(),
@@ -148,11 +145,6 @@ async fn main() {
     let config_path = std::env::var("CONFIG_PATH").unwrap_or("config.toml".to_string());
     let config = Config::from_file(&config_path).clone();
     let config_clone = Arc::new(config.clone());
-    tokio::spawn(async move {
-        let client_clone = Arc::clone(&db_client_clone);
-        backfill::fill_history_intents(config_clone.clone(), client_clone).await;
-        info!("History intents backfill completed.");
-    });
 
     let mut indexers: Vec<Box<dyn BlockchainIndexer + Send + Sync>> = vec![];
     config.indexers.iter().for_each(|conf| {
@@ -160,7 +152,6 @@ async fn main() {
             if !conf.mockln_contract.is_empty() {
                 indexers.push(create_evm_indexer(
                     &conf.url,
-                    &conf.ws_url,
                     &conf.mockln_contract,
                     conf.amm_contract.clone(),
                     conf.hook_executor_contract.clone(),
@@ -169,7 +160,6 @@ async fn main() {
             }
             indexers.push(create_evm_indexer(
                 &conf.url,
-                &conf.ws_url,
                 &conf.contract,
                 conf.amm_contract.clone(),
                 conf.hook_executor_contract.clone(),
