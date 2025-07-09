@@ -22,7 +22,13 @@ pub async fn handle_hook_executor_order_verified_event(
     info!(target: log_target, "HookExecutor::OrderVerified orderHash={orderHash:?}");
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
-    let timestamp = unix_to_system_time(log.block_timestamp.unwrap());
+    let timestamp_value = if log.block_timestamp.is_some() {
+        log.block_timestamp.unwrap()
+    } else {
+        // If block_timestamp is not available, use the current system time
+        SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+    };
+    let timestamp = unix_to_system_time(timestamp_value);
 
     let status = OrderStatus::Verified.to_i32();
     let query = r#"

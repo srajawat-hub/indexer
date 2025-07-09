@@ -30,7 +30,13 @@ pub async fn handle_hook_executor_order_pending_event(
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let block_number = log.block_number.unwrap() as i64;
-    let timestamp = unix_to_system_time(log.block_timestamp.unwrap());
+    let timestamp_value = if log.block_timestamp.is_some() {
+        log.block_timestamp.unwrap()
+    } else {
+        // If block_timestamp is not available, use the current system time
+        SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+    };
+    let timestamp = unix_to_system_time(timestamp_value);
 
     let query = r#"
         INSERT INTO hook_executor_orders
