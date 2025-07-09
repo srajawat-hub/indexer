@@ -297,6 +297,17 @@ impl BlockchainIndexer for EvmIndexer {
                         latest_block_number,
                     );
                 }
+            } else {
+                // No new pools to check, continue with the next batch
+                info!(
+                    "No new pools to check for chain-id {} for block range {} to {}, continuing to next batch",
+                    chain_id, start_block_number, end_block_number
+                );
+                start_block_number = end_block_number + 1;
+                end_block_number = std::cmp::min(
+                    start_block_number + BACKFILL_BATCH_SIZE as i64 - 1,
+                    latest_block_number,
+                );
             }
         }
     }

@@ -53,7 +53,6 @@ diesel::table! {
 diesel::table! {
     chain_metadata (chain_id) {
         chain_id -> Text,
-        network_name -> Text,
         latest_block -> Int8,
     }
 }

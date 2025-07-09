@@ -133,7 +133,13 @@ pub async fn get_token_decimals(
         info!(target: "get_token_decimals", "Formatted token address: {}", formatted_token_address);
         let mint_pubkey = formatted_token_address.parse::<Pubkey>().unwrap();
         let account_data = solana_client.get_account_data(&mint_pubkey).await.unwrap();
-        let mint = Mint::unpack(&account_data).unwrap();
+        let mint = match Mint::unpack(&account_data) {
+            Ok(mint) => mint,
+            Err(e) => {
+                error!(target: "get_token_decimals", "Error unpacking mint data for token {}: {:?}", token_address, e);
+                return 9.0; // Default to 9 if unpacking fails
+            }
+        };
         let decimals = mint.decimals;
         decimals as f64
     } else {
