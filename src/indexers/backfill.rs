@@ -230,9 +230,8 @@ pub async fn fill_history_intents(indexer_configs: Arc<Config>, client: Arc<Clie
 }
 
 async fn store_last_backfilled_block(chain_id: &str, block_number: i64, client: Arc<Client>) {
-    let query = "INSERT INTO chain_metadata (chain_id, network_name, latest_block) VALUES ($1, $2, $3) ON CONFLICT (chain_id) DO UPDATE SET latest_block = EXCLUDED.latest_block";
-    let placeholder_chain_name = String::from("");
-    if let Err(e) = client.execute(query, &[&chain_id, &placeholder_chain_name, &block_number]).await {
+    let query = "INSERT INTO chain_metadata (chain_id, latest_block) VALUES ($1, $2) ON CONFLICT (chain_id) DO UPDATE SET latest_block = EXCLUDED.latest_block";
+    if let Err(e) = client.execute(query, &[&chain_id, &block_number]).await {
         error!("Failed to store last backfilled block: {:?}", e);
     } else {
         info!("Stored last backfilled block {} for chain {}", block_number, chain_id);

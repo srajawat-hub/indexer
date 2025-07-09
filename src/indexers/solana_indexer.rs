@@ -664,19 +664,14 @@ impl SolanaIndexer {
         program_name: ProgramName,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let query = r#"
-            INSERT INTO chain_metadata (chain_id, network_name, latest_block)
-            VALUES ($1, $2, $3)
+            INSERT INTO chain_metadata (chain_id, latest_block)
+            VALUES ($1, $2)
             ON CONFLICT (chain_id)
             DO UPDATE SET latest_block = EXCLUDED.latest_block
         "#;
 
-        let network_name = match chain_id {
-            1399811149 => "solana-mainnet",
-            _ => "unknown",
-        };
-
         match database_client
-            .execute(query, &[&chain_id.to_string(), &network_name, &(latest_block as i64)])
+            .execute(query, &[&chain_id.to_string(), &(latest_block as i64)])
             .await
         {
             Ok(_) => {

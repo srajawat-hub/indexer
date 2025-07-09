@@ -100,12 +100,12 @@ impl EvmIndexer {
         block_number: i64,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let query = r#"
-            INSERT INTO chain_metadata (chain_id, network_name, latest_block)
-            VALUES ($1, $2, $3)
+            INSERT INTO chain_metadata (chain_id, latest_block)
+            VALUES ($1, $2)
             ON CONFLICT (chain_id)
             DO UPDATE SET latest_block = EXCLUDED.latest_block
         "#;
-        client.execute(query, &[&chain_id.to_string(), &"", &block_number]).await?;
+        client.execute(query, &[&chain_id.to_string(), &block_number]).await?;
         Ok(())
     }
 }
