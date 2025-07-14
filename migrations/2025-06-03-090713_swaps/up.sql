@@ -1,6 +1,6 @@
 -- Your SQL goes here
 CREATE TABLE IF NOT EXISTS acknowledgement (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     sender_address character varying(44) NOT NULL,
     result boolean NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS chain_metadata (
 );
 
 CREATE TABLE IF NOT EXISTS deposit_received (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     user_address text NOT NULL,
     token_address text NOT NULL,
     chain_id text NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS deposit_received (
 );
 
 CREATE TABLE IF NOT EXISTS intent (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     owner_address character varying(66) NOT NULL,
     transaction_hash character varying(88) NOT NULL,
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS message_dispatched_from_vault (
 );
 
 CREATE TABLE IF NOT EXISTS order_created (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     creator_address character varying(66) NOT NULL,
     token_in character varying(66) NOT NULL,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS order_created (
 );
 
 CREATE TABLE IF NOT EXISTS received_message_on_vault (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     origin_domain_id integer NOT NULL,
     sender_address character varying(44) NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS sanction_address_list (
 );
 
 CREATE TABLE IF NOT EXISTS solution (
-    id bigint NOT NULL PRIMARY KEY,
+    id bigserial NOT NULL PRIMARY KEY,
     intent_id bigint NOT NULL,
     solver_address character varying(44) NOT NULL,
     transaction_hash character varying(88) NOT NULL,

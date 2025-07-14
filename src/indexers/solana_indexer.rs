@@ -43,6 +43,7 @@ use std::fmt::{Debug, Display};
 use tokio_postgres::Client;
 
 const MAX_LIMIT: u64 = 20;
+const BATCH_SIZE: usize = 500;
 
 pub struct SolanaIndexer {
     rpc_url: String,
@@ -346,38 +347,38 @@ impl SolanaIndexer {
                         break;
                     }
                 };
-
+            
                 if sigs.is_empty() {
                     info!("[{}] Reached end of signatures during backfill", program_name);
                     break;
                 }
-
+            
                 // Filter signatures to only include those > previously_fetched_slot
                 let filtered_sigs: Vec<_> = sigs
                     .into_iter()
                     .filter(|sig| sig.slot > previously_fetched_slot)
                     .collect();
-
+            
                 if filtered_sigs.is_empty() {
                     info!("[{}] Reached previously fetched slot {} during backfill",
                           program_name, previously_fetched_slot);
                     break;
                 }
-
+            
                 info!("[{}] Fetched {} signatures for backfill (slots {} to {})",
                       program_name, filtered_sigs.len(),
                       filtered_sigs.last().unwrap().slot,
                       filtered_sigs.first().unwrap().slot);
-
+            
                 if until_sig.is_none() {
                     until_sig = Some(Signature::from_str(&filtered_sigs.first().unwrap().signature.clone())?);
                 }
                 // Update before_sig for next iteration (last signature chronologically)
                 before_sig = Some(skip_fail!(Signature::from_str(&filtered_sigs.last().unwrap().signature)));
-
+            
                 // Add to our accumulating list
                 all_historical_sigs.extend(filtered_sigs);
-
+            
                 // If we got less than MAX_LIMIT, we might have reached the end
                 if all_historical_sigs.len() < MAX_LIMIT as usize {
                     break;
@@ -539,15 +540,37 @@ impl SolanaIndexer {
             body.push(payload);
         }
 
-        // Fetch transaction data
-        let transactions = reqwest::Client::new()
-            .post(rpc_client.url())
-            .json(&body)
-            .send()
-            .await?
-            .json::<Vec<Response>>()
-            .await?;
+        let mut transactions: Vec<Response> = Vec::new();
+        const BATCH_SIZE: usize = 500;
+        let total_transactions = body.len();
+        let total_batches = (total_transactions + BATCH_SIZE - 1) / BATCH_SIZE;
 
+        info!("[{}] Starting batch requests for {} transactions in {} batches", program_name, total_transactions, total_batches);
+
+        for (batch_idx, chunk) in body.chunks(BATCH_SIZE).enumerate() {
+            let batch_num = batch_idx + 1;
+            info!("batch: {}, {}", rpc_client.url(), serde_json::to_string_pretty(&chunk).unwrap());
+            info!("[{}] Processing batch {}/{} ({} transactions)", program_name, batch_num, total_batches, chunk.len());
+            let batch_responses = loop {
+                let batch_responses = reqwest::Client::new()
+                    .post(rpc_client.url())
+                    .json(chunk)
+                    .send()
+                    .await.inspect_err(|e| info!("[{}] Batch {}/{} request error: {}", program_name, batch_num, total_batches, e))?
+                    .json::<Vec<Response>>().await;
+                match batch_responses {
+                    Ok(r) => {break r}
+                    Err(e) => {
+                        info!("[{program_name}] Error while querying  batch responses: {e:?}. Trying again...");
+                    }
+                }
+            };
+            transactions.extend(batch_responses);
+            info!("[{}] Completed batch {}/{} - collected {} total transactions so far", program_name, batch_num, total_batches, transactions.len());
+        }
+
+        info!("[{}] All batch requests completed - collected {} transactions total", program_name, transactions.len());
+        assert_eq!(transactions.len(), sigs.len(), "transactions response length mismatch");
         let mut processed_count = 0;
         for (index, tx) in transactions.iter().enumerate() {
             if let Some(err) = tx.result.transaction.meta.clone().unwrap().err {
@@ -1520,10 +1543,10 @@ impl BlockchainIndexer for SolanaIndexer {
             info!("Solana starting block number {:?}", block_number);
             self.fetch_historical_transactions(client.clone(), block_number)
                 .await?;
+        } else {
+            self.fetch_historical_transactions(client, 1)
+                .await?;
         }
-        self.fetch_historical_transactions(client, 346293323)
-            .await?;
-
         // Placeholder logic for listening to Solana program events
         info!(
             "Listening to events for Solana program {} on RPC {}",
@@ -1674,8 +1697,7 @@ impl SolanaIndexer {
                         }
                         continue;
                     }
-                }
-                if *line == format!("Program {} success", id_str) {
+                } else if *line == format!("Program {} success", id_str) {
                     if let Some(top) = &current_program {
                         if top.to_string() == id_str {
                             let evs = get_events_from_logs(&event_logs);
@@ -1695,13 +1717,7 @@ impl SolanaIndexer {
                 }
             }
 
-            if current_program.as_ref() == Some(raydium_program_id)
-                || current_program.as_ref() == Some(vaults_program_id)
-            {
-                event_logs.push(line.as_ref());
-            } else {
-                debug!(target: "solana_indexer", "Unknown event: {}", line);
-            }
+            event_logs.push(line.as_ref());
         }
         if let Some(program) = current_program {
             warn!(

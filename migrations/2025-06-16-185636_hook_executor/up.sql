@@ -1,5 +1,5 @@
 CREATE TABLE public.hook_executor_orders (
-    id bigint NOT NULL,
+    id bigserial NOT NULL,
     protocol_id integer NOT NULL,
     order_hash character varying(66) NOT NULL,
     order_id bigint NOT NULL,
