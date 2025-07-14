@@ -1,10 +1,25 @@
-use std::sync::Arc;
+use alloy::{
+    dyn_abi::SolType,
+    providers::{Provider, RootProvider},
+    pubsub::PubSubFrontend,
+    rpc::types::Log,
+    sol_types::SolEvent,
+    transports::http::Http,
+};
 use anyhow::bail;
-use log::{info, error, debug};
-use alloy::{dyn_abi::SolType, providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent, transports::http::Http};
+use log::{debug, error, info};
+use std::sync::Arc;
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::{fetch_intent_initiator, update_intent_state, DepositStatus, IntentStage, IntentVersions}, solidity_structs::{vault::Vault, DispatchId, IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, SolidityIntentProcessorBoundMessage}};
+use crate::{
+    events::event_processor::{
+        fetch_intent_initiator, update_intent_state, DepositStatus, IntentStage, IntentVersions,
+    },
+    solidity_structs::{
+        vault::Vault, DispatchId, IntentProcessorBoundMessageAcknowledgementData,
+        IntentProcessorBoundMessageDepositData, SolidityIntentProcessorBoundMessage,
+    },
+};
 
 pub async fn handle_message_dispatched_from_vault_event(
     log: Log,
@@ -39,14 +54,11 @@ pub async fn handle_message_dispatched_from_vault_event(
         2 => {
             let log_target = "EVM Vault::MessageDispatchedFromVault Ack";
             // ack
-            let decoded_message_data =
-                IntentProcessorBoundMessageAcknowledgementData::abi_decode(
-                    decoded_message.data.as_ref(),
-                    true,
-                );
-            let decoded_message_data = if let Ok(decoded_message_data) =
-                decoded_message_data
-            {
+            let decoded_message_data = IntentProcessorBoundMessageAcknowledgementData::abi_decode(
+                decoded_message.data.as_ref(),
+                true,
+            );
+            let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
                 decoded_message_data
             } else {
                 error!(target: log_target, "Error decoding IntentProcessorBoundMessageAcknowledgement message data");
@@ -74,20 +86,18 @@ pub async fn handle_message_dispatched_from_vault_event(
                     let sender_address: String = row.get("sender_address");
                     info!(target: log_target, "Fetched intent_id {:?} for order_id {:?} from received_message_on_vault", intent_id, order_id);
                     (intent_id, sender_address)
-                },
+                }
                 Err(e) => {
                     error!(target: log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, e);
                     // as a fallback try to get it from order_created table
-                    let intent_id_query = "SELECT intent_id, creator_address FROM order_created WHERE order_id = $1";
-                    match client.query_one(
-                        intent_id_query,
-                        &[&order_id],
-                    ).await {
+                    let intent_id_query =
+                        "SELECT intent_id, creator_address FROM order_created WHERE order_id = $1";
+                    match client.query_one(intent_id_query, &[&order_id]).await {
                         Ok(row) => {
                             let intent_id: i64 = row.get("intent_id");
                             let creator_address: String = row.get("creator_address");
                             (intent_id, creator_address)
-                        },
+                        }
                         Err(e) => {
                             error!(target: log_target, "Failed to fetch intent_id from order_created for order_id {:?}: {:?}", order_id, e);
                             (0_i64, String::new()) // Fallback to 0 if not found
@@ -142,11 +152,9 @@ pub async fn handle_message_dispatched_from_vault_event(
         }
         3 => {
             let log_target = "EVM Vault::MessageDispatchedFromVault Deposit";
-            let deposit_message_data = IntentProcessorBoundMessageDepositData::abi_decode(
-                &decoded_message.data,
-                true,
-            )
-            .unwrap();
+            let deposit_message_data =
+                IntentProcessorBoundMessageDepositData::abi_decode(&decoded_message.data, true)
+                    .unwrap();
             let deposit_user_address = deposit_message_data.userAddress;
             let user_address = deposit_user_address.to_string();
             let amount = deposit_message_data.amount.to_string();
@@ -172,8 +180,7 @@ pub async fn handle_message_dispatched_from_vault_event(
                                     address: log.address(),
                                     data: log.data().clone(),
                                 };
-                                let decoded =
-                                    DispatchId::decode_log(&primitive_log, true).unwrap();
+                                let decoded = DispatchId::decode_log(&primitive_log, true).unwrap();
                                 let message_dispatch_id = decoded.messageId;
                                 Some(message_dispatch_id.to_string())
                             }
@@ -199,7 +206,8 @@ pub async fn handle_message_dispatched_from_vault_event(
             let timestamp = std::time::SystemTime::now();
             let status = DepositStatus::Initialized as i32;
 
-            let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+            let query =
+                "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
             match client
                 .execute(
                     query,

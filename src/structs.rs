@@ -1,8 +1,7 @@
-use serde::{Deserialize, Serialize};
 use crate::utils::deserialize_number;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio_postgres::types::{IsNull, ToSql, Type};
-
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ResultCosts {
@@ -116,15 +115,19 @@ pub struct OrdersResponse {
 #[derive(Debug)]
 pub enum PoolType {
     EVM,
-    SOLANA
+    SOLANA,
 }
 
 impl fmt::Display for PoolType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            PoolType::EVM => "EVM",
-            PoolType::SOLANA => "SOLANA",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                PoolType::EVM => "EVM",
+                PoolType::SOLANA => "SOLANA",
+            }
+        )
     }
 }
 
@@ -148,15 +151,19 @@ impl ToSql for PoolType {
 #[derive(Debug)]
 pub enum TokenLaunchType {
     FAIR,
-    CURATED
+    CURATED,
 }
 
 impl fmt::Display for TokenLaunchType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            TokenLaunchType::FAIR => "FAIR",
-            TokenLaunchType::CURATED => "CURATED",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                TokenLaunchType::FAIR => "FAIR",
+                TokenLaunchType::CURATED => "CURATED",
+            }
+        )
     }
 }
 
@@ -185,21 +192,32 @@ pub struct SwaggerTokenData {
 
 #[derive(Debug, Deserialize)]
 pub struct TokenUsdPriceData {
-    pub data: SwaggerTokenData
+    pub data: SwaggerTokenData,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SwaggerTokenUsdRate {
-    pub rate: String
+    pub rate: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SwaggerTokenUsdPriceData {
-    pub data: SwaggerTokenUsdRate
+    pub data: SwaggerTokenUsdRate,
 }
 
 #[derive(Debug, Serialize, Clone)]
 pub struct LiquidityDecodedLogData {
     pub liquidity_user_address: Option<String>,
-    pub liquidity_token_id: Option<String>
+    pub liquidity_token_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SwaggerHistoricalPriceData {
+    pub price: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SwaggerHistoricalPriceRes {
+    pub success: bool,
+    pub data: SwaggerHistoricalPriceData,
 }

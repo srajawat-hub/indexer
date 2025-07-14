@@ -1,10 +1,20 @@
-use std::{str::FromStr, sync::Arc, time::SystemTime};
+use alloy::{
+    providers::{Provider, RootProvider},
+    rpc::types::{Log, TransactionReceipt},
+    transports::http::Http,
+};
 use log::{error, info, warn};
-use alloy::{providers::{Provider, RootProvider}, rpc::types::{Log, TransactionReceipt}, transports::http::Http};
 use rust_decimal::Decimal;
+use std::{str::FromStr, sync::Arc, time::SystemTime};
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::{fallback_fetch_pm_address, get_liquidity_provider_address_evm, insert_liquidity_event}, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::unix_to_system_time};
+use crate::{
+    events::event_processor::{
+        fallback_fetch_pm_address, get_liquidity_provider_address_evm, insert_liquidity_event,
+    },
+    solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self},
+    utils::unix_to_system_time,
+};
 
 pub async fn handle_uniswap_mint_by_pm_event(
     log: Log,
@@ -39,15 +49,26 @@ pub async fn handle_uniswap_mint_by_pm_event(
         }
     };
 
-    let transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>> = chain_provider.get_transaction_receipt(raw_transaction_hash).await;
+    let transaction_receipt: Result<
+        Option<TransactionReceipt>,
+        alloy::transports::RpcError<alloy::transports::TransportErrorKind>,
+    > = chain_provider
+        .get_transaction_receipt(raw_transaction_hash)
+        .await;
     let project_manager_address: String;
 
-    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(transaction_receipt, &client, periphery_contract_address).await;
+    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(
+        transaction_receipt,
+        &client,
+        periphery_contract_address,
+    )
+    .await;
     if let Some(pm_address) = liquidity_decoded_user_data.liquidity_user_address {
         project_manager_address = pm_address;
     } else {
         warn!(target: log_target, "Failed to get project manager address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
-        project_manager_address = fallback_fetch_pm_address(&client, &pool_address, log_target).await;
+        project_manager_address =
+            fallback_fetch_pm_address(&client, &pool_address, log_target).await;
     };
 
     let token_id = liquidity_decoded_user_data.liquidity_token_id;
@@ -76,7 +97,7 @@ pub async fn handle_uniswap_mint_by_pm_event(
         chain_id,
         Some(false), // is_vault = false
         log_target,
-        token_id
+        token_id,
     )
     .await?;
 

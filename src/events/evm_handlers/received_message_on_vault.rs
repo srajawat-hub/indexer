@@ -1,10 +1,24 @@
-use std::sync::Arc;
+use alloy::{
+    dyn_abi::SolType,
+    providers::{Provider, RootProvider},
+    pubsub::PubSubFrontend,
+    rpc::types::Log,
+    sol_types::SolEvent,
+    transports::http::Http,
+};
 use anyhow::bail;
-use log::{info, error};
-use alloy::{dyn_abi::SolType, providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent, transports::http::Http};
+use log::{error, info};
+use std::sync::Arc;
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::{fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions}, solidity_structs::{vault::Vault, CreatedOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData}};
+use crate::{
+    events::event_processor::{
+        fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions,
+    },
+    solidity_structs::{
+        vault::Vault, CreatedOrder, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
+    },
+};
 
 pub async fn handle_received_message_on_vault_event(
     log: Log,
@@ -27,7 +41,10 @@ pub async fn handle_received_message_on_vault_event(
         Ok(res) => res,
         Err(e) => {
             error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
-            bail!("Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
+            bail!(
+                "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}",
+                e
+            );
         }
     };
 
@@ -42,8 +59,7 @@ pub async fn handle_received_message_on_vault_event(
         }
     };
 
-    let timeout_unix_timestamp_in_sec =
-        decoded_message_data.order.timeoutUnixTimestampInSec as i64;
+    let timeout_unix_timestamp_in_sec = decoded_message_data.order.timeoutUnixTimestampInSec as i64;
 
     let block_number = log.block_number.unwrap() as i64;
     let intent_id = decoded_message_data.order.intentId as i64;
@@ -72,8 +88,7 @@ pub async fn handle_received_message_on_vault_event(
                             address: log.address(),
                             data: log.data().clone(),
                         };
-                        let decoded =
-                            CreatedOrder::decode_log(&primitive_log, true).unwrap();
+                        let decoded = CreatedOrder::decode_log(&primitive_log, true).unwrap();
                         let debridge_order_id = decoded.orderId;
                         Some(debridge_order_id)
                     } // convert log into primite log

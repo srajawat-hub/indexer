@@ -1,14 +1,26 @@
-use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
-use anyhow::bail;
-use log::{info, error};
-use alloy::{dyn_abi::SolType, providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http};
-use tokio_postgres::Client;
 use crate::{
-    events::event_processor::{fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions}, 
+    events::event_processor::{
+        fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions,
+    },
     solidity_structs::{
-        intent_processor::IntentProcessorV2, AcknowledgementMetadataLaunchpadAddLiquidity, AcknowledgementMetadataLaunchpadRemoveLiquidity, AcknowledgementMetadataLaunchpadSwap, AcknowledgementMetadataStake, AcknowledgementMetadataTransact, SolidityAcknowledgementMetadata
-    }, utils::{get_token_decimals, get_usd_value_of_token}};
-
+        intent_processor::IntentProcessorV2, AcknowledgementMetadataLaunchpadAddLiquidity,
+        AcknowledgementMetadataLaunchpadRemoveLiquidity, AcknowledgementMetadataLaunchpadSwap,
+        AcknowledgementMetadataStake, AcknowledgementMetadataTransact,
+        SolidityAcknowledgementMetadata,
+    },
+    utils::{get_token_decimals, get_usd_value_of_token},
+};
+use alloy::{
+    dyn_abi::SolType, providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log,
+    transports::http::Http,
+};
+use anyhow::bail;
+use log::{error, info};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tokio_postgres::Client;
 
 pub async fn handle_acknowledgement_received_event(
     log: Log,
@@ -42,7 +54,11 @@ pub async fn handle_acknowledgement_received_event(
         Ok(row) => row,
         Err(e) => {
             error!(target: log_target, "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, e);
-            bail!("Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, e);
+            bail!(
+                "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}",
+                order_id,
+                e
+            );
         }
     };
     let intent_id: i64 = intent_id_response.get("intent_id");
@@ -107,26 +123,30 @@ pub async fn handle_acknowledgement_received_event(
 
         if metadata_variant == 1 {
             // stake
-            let metadata_data = AcknowledgementMetadataStake::abi_decode(
+            let metadata_data =
+                AcknowledgementMetadataStake::abi_decode(decoded_ack_metadata.data.as_ref(), true)
+                    .unwrap();
+            actual_amount = metadata_data.amountCredited.to_string();
+        } else if metadata_variant == 2 {
+            let metadata_data = AcknowledgementMetadataLaunchpadSwap::abi_decode(
                 decoded_ack_metadata.data.as_ref(),
                 true,
             )
             .unwrap();
-            actual_amount = metadata_data.amountCredited.to_string();
-        } else if metadata_variant == 2 {
-            let metadata_data = AcknowledgementMetadataLaunchpadSwap::abi_decode(
-                decoded_ack_metadata.data.as_ref(), true
-            ).unwrap();
             actual_amount = metadata_data.receivedAmount.to_string();
         } else if metadata_variant == 3 {
             let metadata_data = AcknowledgementMetadataLaunchpadAddLiquidity::abi_decode(
-                decoded_ack_metadata.data.as_ref(), true
-            ).unwrap();
+                decoded_ack_metadata.data.as_ref(),
+                true,
+            )
+            .unwrap();
             actual_amount = metadata_data.amount1.to_string();
         } else if metadata_variant == 4 {
             let metadata_data = AcknowledgementMetadataLaunchpadRemoveLiquidity::abi_decode(
-                decoded_ack_metadata.data.as_ref(), true
-            ).unwrap();
+                decoded_ack_metadata.data.as_ref(),
+                true,
+            )
+            .unwrap();
             actual_amount = metadata_data.amount1.to_string();
         } else {
             // transact
@@ -146,9 +166,13 @@ pub async fn handle_acknowledgement_received_event(
             ";
 
         // update amount_out_usd here as well in order_created
-        let token_out_usd_price = get_usd_value_of_token(Some(&token_out), &destination_chain_id).await;
+        let token_out_usd_price =
+            get_usd_value_of_token(Some(&token_out), &destination_chain_id, None).await;
         let token_out_decimals = get_token_decimals(&token_out, &destination_chain_id).await;
-        let amount_out_usd = ((actual_amount.parse::<f64>().unwrap_or(0.0) / 10.0_f64.powf(token_out_decimals)) * token_out_usd_price).to_string();
+        let amount_out_usd = ((actual_amount.parse::<f64>().unwrap_or(0.0)
+            / 10.0_f64.powf(token_out_decimals))
+            * token_out_usd_price)
+            .to_string();
 
         let order_rows_updated = client
             .execute(

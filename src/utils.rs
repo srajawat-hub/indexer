@@ -1,14 +1,22 @@
 use std::{str::FromStr, time::SystemTime};
 
-use alloy::{primitives::{Address, B256}, providers::{ProviderBuilder, RootProvider}, transports::http::Http};
+use alloy::{
+    primitives::{Address, B256},
+    providers::{ProviderBuilder, RootProvider},
+    transports::http::Http,
+};
 use chrono::DateTime;
 use log::{error, info};
+use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{bs58, program_pack::Pack, pubkey::Pubkey};
 use spl_token::state::Mint;
 
-use crate::{constants::SOLANA_CHAIN_ID, solidity_structs::token, structs::{SwaggerTokenUsdPriceData, TokenUsdPriceData}};
-
+use crate::{
+    constants::SOLANA_CHAIN_ID,
+    solidity_structs::token,
+    structs::{SwaggerHistoricalPriceRes, SwaggerTokenUsdPriceData, TokenUsdPriceData},
+};
 
 // Add this helper function to handle number deserialization
 pub fn deserialize_number<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
@@ -50,7 +58,7 @@ pub fn get_wrapped_native_token_address(chain_id: i64) -> String {
         8453 => "0x4200000000000000000000000000000000000006".to_string(), // Base Mainnet - WETH
         18083 => "0x6a79ca29282AC295679a14A8274300e5842e45e5".to_string(), // Inclusive Layer Testnet
         18082 => "0x0000000000000000000000000000000000000000".to_string(), // Inclusive Layer
-        999 => "0x5555555555555555555555555555555555555555".to_string(), // Hyperevm - WHYPE
+        999 => "0x5555555555555555555555555555555555555555".to_string(),   // Hyperevm - WHYPE
         1399811149 => "So11111111111111111111111111111111111111112".to_string(),
         _ => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // Default to Ethereum WETH
     }
@@ -75,12 +83,16 @@ pub fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
         137 => (String::from("28321"), 18),      // pol
         1399811149 => (String::from("5426"), 9), // sol
         18082 => (String::from("3408"), 18),     // usdc
-        999 => (String::from("32196"), 18), // hyperevm whype
+        999 => (String::from("32196"), 18),      // hyperevm whype
         _ => (String::from("1027"), 18),         // ETH
     }
 }
 
-pub async fn get_usd_value_of_token(token_address: Option<&str>, chain_id: &str) -> f64 {
+pub async fn get_usd_value_of_token(
+    token_address: Option<&str>,
+    chain_id: &str,
+    timestamp: Option<u64>,
+) -> f64 {
     let request_client = reqwest::Client::new();
     let query_token_address = match token_address {
         Some(address) => String::from(address),
@@ -89,41 +101,90 @@ pub async fn get_usd_value_of_token(token_address: Option<&str>, chain_id: &str)
     if query_token_address.len() == 0 {
         return 0.0;
     }
-    let caishen_swagger_api_url = std::env::var("CAISHEN_SWAGGER_API_URL").expect("CAISHEN_SWAGGER_API_URL must be set");
+    let caishen_swagger_api_url =
+        std::env::var("CAISHEN_SWAGGER_API_URL").expect("CAISHEN_SWAGGER_API_URL must be set");
 
-    let token_data_url = format!("{}/v1/tokens/token-by-contract?chainId={}&contract={}", caishen_swagger_api_url, chain_id, query_token_address);
+    let token_data_url = format!(
+        "{}/v1/tokens/token-by-contract?chainId={}&contract={}",
+        caishen_swagger_api_url, chain_id, query_token_address
+    );
     let token_price = match request_client.get(&token_data_url).send().await {
         Ok(data) => {
+            info!("token res data {:?}", data);
             let result = match data.json::<TokenUsdPriceData>().await {
                 Ok(token_data) => {
                     let token_id = token_data.data.token_id;
-                    let price_url = format!("{}/v1/tokens/rates/{}", caishen_swagger_api_url, token_id);
-                    let price_response = match request_client.get(&price_url).send().await {
-                        Ok(price_data) => {
-                            let price_result = match price_data.json::<SwaggerTokenUsdPriceData>().await {
-                                Ok(price_data) => price_data.data.rate.parse::<f64>().unwrap_or(0.0),
-                                Err(_e) => 0.0,
-                            };
-                            price_result
-                        }
-                        Err(_e) => 0.0,
-                    };
-                    price_response
-                },
-                Err(_e) => 0.0,
+                    if let Some(ts) = timestamp {
+                        info!("Fetching token price at {ts} for chain id {chain_id}");
+                        fetch_usd_value_at_timestamp(caishen_swagger_api_url, ts, token_id).await
+                    } else {
+                        info!("Fetching token price at realtime for chain id {chain_id}");
+                        fetch_usd_value(caishen_swagger_api_url, token_id).await
+                    }
+                }
+                Err(_e) => {
+                    error!("Error parsing token data for usd price {:?}", _e);
+                    0.0
+                }
             };
             result
-        },
-        Err(_e) => 0.0,
+        }
+        Err(_e) => {
+            error!("Error in sending request to fetch usd price {:?}", _e);
+            0.0
+        }
     };
 
     token_price
 }
 
-pub async fn get_token_decimals(
-    token_address: &str,
-    chain_id: &str
+async fn fetch_usd_value_at_timestamp(
+    caishen_swagger_api_url: String,
+    timestamp: u64,
+    token_id: String,
 ) -> f64 {
+    let request_client = reqwest::Client::new();
+    let price_url = format!("{}/v1/tokens/rates/timestamp", caishen_swagger_api_url);
+    let price_response = match request_client
+        .post(&price_url)
+        .json(&json!(
+            {
+                "id": token_id,
+                "timestamp": timestamp * 1000, // Convert to milliseconds
+            }
+        ))
+        .send()
+        .await
+    {
+        Ok(price_data) => {
+            let price_result = match price_data.json::<SwaggerHistoricalPriceRes>().await {
+                Ok(price_data) => price_data.data.price.parse::<f64>().unwrap_or(0.0),
+                Err(_e) => 0.0,
+            };
+            price_result
+        }
+        Err(_e) => 0.0,
+    };
+    price_response
+}
+
+async fn fetch_usd_value(caishen_swagger_api_url: String, token_id: String) -> f64 {
+    let request_client = reqwest::Client::new();
+    let price_url = format!("{}/v1/tokens/rates/{}", caishen_swagger_api_url, token_id);
+    let price_response = match request_client.get(&price_url).send().await {
+        Ok(price_data) => {
+            let price_result = match price_data.json::<SwaggerTokenUsdPriceData>().await {
+                Ok(price_data) => price_data.data.rate.parse::<f64>().unwrap_or(0.0),
+                Err(_e) => 0.0,
+            };
+            price_result
+        }
+        Err(_e) => 0.0,
+    };
+    price_response
+}
+
+pub async fn get_token_decimals(token_address: &str, chain_id: &str) -> f64 {
     let mut decimal_value: f64 = 0.0;
     let rpc_url = get_rpc_url(chain_id);
     if chain_id == SOLANA_CHAIN_ID {
@@ -160,7 +221,10 @@ pub async fn get_token_decimals(
     }
 }
 
-pub async fn get_token_data(token_address: Address, chain_provider: RootProvider<Http<reqwest::Client>>) -> (i32, String, String) {
+pub async fn get_token_data(
+    token_address: Address,
+    chain_provider: RootProvider<Http<reqwest::Client>>,
+) -> (i32, String, String) {
     let log_target = "EVM get_token_data";
     let token_instance = token::Token::new(token_address, chain_provider.clone());
     let decimals = 18 as i32;
@@ -182,7 +246,7 @@ pub async fn get_token_data(token_address: Address, chain_provider: RootProvider
     };
 
     info!(target: log_target, "Token data for {}: Decimals: {}, Ticker: {}, Full Name: {}", token_address, decimals, ticker, full_name);
-    
+
     (decimals, ticker, full_name)
 }
 
@@ -215,7 +279,6 @@ fn hex_to_base58(hex: &str) -> String {
     };
     res
 }
- 
 
 /// Displays the error if present, waits for few seconds and
 /// retries execution.

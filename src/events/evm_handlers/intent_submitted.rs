@@ -1,10 +1,15 @@
 // pass the log and db client here and process it
 
-use std::sync::Arc;
+use crate::{
+    events::event_processor::{update_intent_state, IntentStage, IntentVersions},
+    solidity_structs::intent_lib_v2::IntentLibV2,
+};
+use alloy::{
+    providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http,
+};
 use log::info;
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http};
+use std::sync::Arc;
 use tokio_postgres::Client;
-use crate::{events::event_processor::{update_intent_state, IntentStage, IntentVersions}, solidity_structs::intent_lib_v2::IntentLibV2};
 
 pub async fn handle_intent_submitted_event(
     log: Log,
@@ -65,6 +70,6 @@ pub async fn handle_intent_submitted_event(
         owner_address,
     )
     .await;
-    
+
     Ok(())
 }

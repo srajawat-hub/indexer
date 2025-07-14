@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tokio_postgres::Client;
 
+use crate::enums::OrderStatus;
 use crate::events::evm_handlers::acknowledgement_received::handle_acknowledgement_received_event;
 use crate::events::evm_handlers::debridge_order_created::handle_debridge_order_created_event;
 use crate::events::evm_handlers::deposit_received::handle_deposit_received_event;
@@ -37,19 +38,26 @@ use crate::events::evm_handlers::uniswap_mint::handle_uniswap_mint_event;
 use crate::events::evm_handlers::uniswap_mint_by_project_manager::handle_uniswap_mint_by_pm_event;
 use crate::events::evm_handlers::uniswap_poolcreated::handle_uniswap_pool_created_event;
 use crate::events::evm_handlers::uniswap_swap::handle_uniswap_swap_event;
-use crate::solidity_structs::non_fungible_position_manager::NonFungiblePositionManager::{IncreaseLiquidity, DecreaseLiquidity, Collect};
+use crate::solidity_structs::non_fungible_position_manager::NonFungiblePositionManager::{
+    Collect, DecreaseLiquidity, IncreaseLiquidity,
+};
 use crate::solidity_structs::token::Token::Transfer;
-use crate::enums::OrderStatus;
 use crate::solidity_structs::uniswap_v3_factory_lib::UniswapV3FactoryLib;
 use crate::solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib;
 use crate::solidity_structs::{
-    self, token, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData
+    self, token, SolidityVaultBoundMessage, VaultBoundMessagePlaceOrderData,
 };
 use crate::solidity_structs::{
-    hook_executor::HookExecutor, intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2, vault::Vault,
+    hook_executor::HookExecutor, intent_lib_v2::IntentLibV2, intent_processor::IntentProcessorV2,
+    vault::Vault,
 };
-use crate::structs::{AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult};
-use crate::utils::{get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token, get_wrapped_native_token_address};
+use crate::structs::{
+    AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult,
+};
+use crate::utils::{
+    get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token,
+    get_wrapped_native_token_address,
+};
 
 pub enum IntentVersions {
     IntentSubmitted,
@@ -139,11 +147,16 @@ pub async fn update_intent_state(
             Err(_e) => (0 as i64, 0u128),
         };
     let txn_hash_str = transaction_hash.to_string();
-    
-    let native_token_usd_price = get_usd_value_of_token(None, chain_id.to_string().as_str()).await;
+
+    let native_token_usd_price =
+        get_usd_value_of_token(None, chain_id.to_string().as_str(), None).await;
     let wrapped_native_token_address = get_wrapped_native_token_address(chain_id);
-    let native_token_decimals = get_token_decimals(wrapped_native_token_address.as_str(), &chain_id.to_string()).await;
-    let transaction_cost_usd = ((transaction_cost as f64 / 10_f64.powf(native_token_decimals as f64)) * native_token_usd_price).to_string();
+    let native_token_decimals =
+        get_token_decimals(wrapped_native_token_address.as_str(), &chain_id.to_string()).await;
+    let transaction_cost_usd = ((transaction_cost as f64
+        / 10_f64.powf(native_token_decimals as f64))
+        * native_token_usd_price)
+        .to_string();
 
     let _intent_state_response = match client
         .execute(
@@ -371,7 +384,8 @@ async fn try_parse_evm_event(
             handle_solution_submitted_event(log, &client, chain_id, chain_provider).await?;
         }
         Some(&IntentLibV2::OrderCreated::SIGNATURE_HASH) => {
-            handle_order_created_event(log, &client, chain_id, chain_provider, solana_chain_id).await?;
+            handle_order_created_event(log, &client, chain_id, chain_provider, solana_chain_id)
+                .await?;
         }
         Some(&IntentProcessorV2::AcknowledgementReceived::SIGNATURE_HASH) => {
             handle_acknowledgement_received_event(log, &client, chain_id, chain_provider).await?;
@@ -383,7 +397,8 @@ async fn try_parse_evm_event(
             handle_received_message_on_vault_event(log, &client, chain_id, chain_provider).await?;
         }
         Some(&Vault::MessageDispatchedFromVault::SIGNATURE_HASH) => {
-            handle_message_dispatched_from_vault_event(log, &client, chain_id, chain_provider).await?;
+            handle_message_dispatched_from_vault_event(log, &client, chain_id, chain_provider)
+                .await?;
         }
         Some(&solidity_structs::DebridgeOrderCreated::SIGNATURE_HASH) => {
             handle_debridge_order_created_event(log, &client).await?;
@@ -404,16 +419,19 @@ async fn try_parse_evm_event(
             handle_uniswap_burn_event(log, &client, chain_id, chain_provider).await?;
         }
         Some(&HookExecutor::OrderPending::SIGNATURE_HASH) => {
-            handle_hook_executor_order_pending_event(log, &client, chain_id, chain_provider).await?;
+            handle_hook_executor_order_pending_event(log, &client, chain_id, chain_provider)
+                .await?;
         }
         Some(&HookExecutor::OrderVerified::SIGNATURE_HASH) => {
-            handle_hook_executor_order_verified_event(log, &client, chain_id, chain_provider).await?;
+            handle_hook_executor_order_verified_event(log, &client, chain_id, chain_provider)
+                .await?;
         }
         Some(&HookExecutor::OrderFailed::SIGNATURE_HASH) => {
             handle_hook_executor_order_failed_event(log, &client, chain_id, chain_provider).await?;
         }
         Some(&HookExecutor::OrderTimedOut::SIGNATURE_HASH) => {
-            handle_hook_executor_order_timeout_event(log, &client, chain_id, chain_provider).await?;
+            handle_hook_executor_order_timeout_event(log, &client, chain_id, chain_provider)
+                .await?;
         }
         _ => {
             warn!("\ndidn't match any event, {:?}", log);
@@ -440,7 +458,7 @@ pub async fn insert_liquidity_event(
     chain_id: i64,
     is_vault: Option<bool>,
     log_target: &str,
-    token_id: Option<String>
+    token_id: Option<String>,
 ) -> anyhow::Result<()> {
     let query = r#"
         INSERT INTO liquidity
@@ -466,7 +484,7 @@ pub async fn insert_liquidity_event(
                 &is_manager,
                 &liquidity_amount,
                 &is_vault,
-                &token_id
+                &token_id,
             ],
         )
         .await
@@ -483,9 +501,12 @@ pub async fn insert_liquidity_event(
 }
 
 pub async fn get_liquidity_provider_address_evm(
-    transaction_receipt: Result<Option<TransactionReceipt>, alloy::transports::RpcError<alloy::transports::TransportErrorKind>>,
+    transaction_receipt: Result<
+        Option<TransactionReceipt>,
+        alloy::transports::RpcError<alloy::transports::TransportErrorKind>,
+    >,
     client: &Arc<Client>,
-    periphery_address: String
+    periphery_address: String,
 ) -> LiquidityDecodedLogData {
     let log_target = "EVM get_liquidity_provider_address_evm";
     let mut liquidity_user_address: Option<String> = None;
@@ -500,8 +521,10 @@ pub async fn get_liquidity_provider_address_evm(
                         info!(target: log_target, "Found Transfer log in receipt for transaction: {:?}", receipt.transaction_hash);
                         info!("log topic 0: {:?}", log.topic0());
                         info!("transfer signature hash: {:?}", Transfer::SIGNATURE_HASH);
-                        
-                        if log.address().to_string().to_lowercase() == periphery_address.to_lowercase() {
+
+                        if log.address().to_string().to_lowercase()
+                            == periphery_address.to_lowercase()
+                        {
                             info!(target: log_target, "Transfer log address matches periphery address: {:?}", periphery_address);
                             let user_address_bytes32 = log.topics().get(2);
                             if let Some(user_address) = user_address_bytes32 {
@@ -519,7 +542,7 @@ pub async fn get_liquidity_provider_address_evm(
                             break;
                         }
                         continue; // Skip Transfer logs for this check
-                    },
+                    }
                     Some(&IncreaseLiquidity::SIGNATURE_HASH) => {
                         info!(target: log_target, "Found IncreaseLiquidity log in receipt for transaction: {:?}", receipt.transaction_hash);
                         // Decode IncreaseLiquidity event if needed
@@ -529,7 +552,9 @@ pub async fn get_liquidity_provider_address_evm(
                         };
                         let decoded = IncreaseLiquidity::decode_log(&primitive_log, true);
                         if let Ok(decoded_data) = decoded {
-                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                            if decoded_data.address.to_string().to_lowercase()
+                                == periphery_address.to_lowercase()
+                            {
                                 liquidity_token_id = Some(decoded_data.tokenId.to_string());
                             }
                         } else {
@@ -539,7 +564,7 @@ pub async fn get_liquidity_provider_address_evm(
                             break;
                         }
                         continue; // Skip IncreaseLiquidity logs for this check
-                    },
+                    }
                     Some(&DecreaseLiquidity::SIGNATURE_HASH) => {
                         info!(target: log_target, "Found DecreaseLiquidity log in receipt for transaction: {:?}", receipt.transaction_hash);
                         // Decode DecreaseLiquidity event if needed
@@ -549,7 +574,9 @@ pub async fn get_liquidity_provider_address_evm(
                         };
                         let decoded = DecreaseLiquidity::decode_log(&primitive_log, true);
                         if let Ok(decoded_data) = decoded {
-                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                            if decoded_data.address.to_string().to_lowercase()
+                                == periphery_address.to_lowercase()
+                            {
                                 info!(target: log_target, "DecreaseLiquidity log address matches periphery address: {:?}", periphery_address);
                                 info!(target: log_target, "DecreaseLiquidity log data: {:?}, token id {}", decoded_data, decoded_data.tokenId.to_string());
                                 liquidity_token_id = Some(decoded_data.tokenId.to_string());
@@ -561,7 +588,7 @@ pub async fn get_liquidity_provider_address_evm(
                             break;
                         }
                         continue; // Skip DecreaseLiquidity logs for this check
-                    },
+                    }
                     Some(&Collect::SIGNATURE_HASH) => {
                         info!(target: log_target, "Found Collect log in receipt for transaction: {:?}", receipt.transaction_hash);
                         // Decode Collect event if needed
@@ -571,10 +598,13 @@ pub async fn get_liquidity_provider_address_evm(
                         };
                         let decoded = Collect::decode_log(&primitive_log, true);
                         if let Ok(decoded_data) = decoded {
-                            if decoded_data.address.to_string().to_lowercase() == periphery_address.to_lowercase() {
+                            if decoded_data.address.to_string().to_lowercase()
+                                == periphery_address.to_lowercase()
+                            {
                                 liquidity_token_id = Some(decoded_data.tokenId.to_string());
                                 if liquidity_user_address.is_none() {
-                                    liquidity_user_address = Some(decoded_data.recipient.to_string());
+                                    liquidity_user_address =
+                                        Some(decoded_data.recipient.to_string());
                                 }
                             }
                         } else {
@@ -584,12 +614,11 @@ pub async fn get_liquidity_provider_address_evm(
                             break;
                         }
                         continue; // Skip Collect logs for this check
-                    },
+                    }
                     _ => {
                         continue; // Skip logs that are not Transfer events
                     }
                 }
-
             }
         }
         Ok(None) => {
@@ -622,13 +651,16 @@ pub async fn fallback_fetch_pm_address(
 }
 
 pub async fn check_vault_initiated_transaction(
-    chain_provider: RootProvider<Http<reqwest::Client>>, 
+    chain_provider: RootProvider<Http<reqwest::Client>>,
     db_client: &Arc<Client>,
-    transaction_hash: FixedBytes<32>
+    transaction_hash: FixedBytes<32>,
 ) -> (bool, Option<String>) {
     let log_target = "EVM check_vault_initiated_transaction";
     let query = "SELECT transaction_hash, sender_address FROM received_message_on_vault WHERE LOWER(transaction_hash) = LOWER($1)";
-    match db_client.query_one(query, &[&transaction_hash.to_string()]).await {
+    match db_client
+        .query_one(query, &[&transaction_hash.to_string()])
+        .await
+    {
         Ok(row) => {
             let db_transaction_hash: String = row.get("transaction_hash");
             if db_transaction_hash.to_lowercase() == transaction_hash.to_string().to_lowercase() {
@@ -648,11 +680,13 @@ pub async fn check_vault_initiated_transaction(
 }
 
 async fn check_vault_initiated_transaction_log(
-    chain_provider: RootProvider<Http<reqwest::Client>>, 
-    transaction_hash: FixedBytes<32>
+    chain_provider: RootProvider<Http<reqwest::Client>>,
+    transaction_hash: FixedBytes<32>,
 ) -> (bool, Option<String>) {
     let log_target = "EVM check_vault_initiated_transaction_log";
-    let transaction_receipt = chain_provider.get_transaction_receipt(transaction_hash).await;
+    let transaction_receipt = chain_provider
+        .get_transaction_receipt(transaction_hash)
+        .await;
     match transaction_receipt {
         Ok(Some(receipt)) => {
             let receipt_logs = receipt.inner.logs();
@@ -666,11 +700,14 @@ async fn check_vault_initiated_transaction_log(
                     } = log.log_decode().unwrap().inner.data;
 
                     let message_slice = message.as_ref();
-                    let decoded_message = match SolidityVaultBoundMessage::abi_decode(message_slice, true) {
+                    let decoded_message = match SolidityVaultBoundMessage::abi_decode(
+                        message_slice,
+                        true,
+                    ) {
                         Ok(res) => res,
                         Err(e) => {
                             error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
-                            return (true, None) // vault initiated
+                            return (true, None); // vault initiated
                         }
                     };
                     // getting user address
@@ -681,7 +718,7 @@ async fn check_vault_initiated_transaction_log(
                         Ok(data) => data,
                         Err(e) => {
                             error!(target: log_target, "Failed to decode VaultBoundMessagePlaceOrderData in Vault::ReceivedMessageOnVault: {:?}", e);
-                            return (true, None)
+                            return (true, None);
                         }
                     };
                     let initiator_address = decoded_message_data.order.initiatorAddress.to_string();

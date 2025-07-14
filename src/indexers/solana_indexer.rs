@@ -1,3 +1,4 @@
+use rust_decimal::{prelude::FromPrimitive, Decimal};
 use std::{
     collections::HashMap,
     str::FromStr,
@@ -5,21 +6,22 @@ use std::{
     thread::sleep,
     time::{Duration, SystemTime},
 };
-use rust_decimal::{prelude::FromPrimitive, Decimal};
 
 use crate::{
     events::event_processor::{DepositStatus, IntentStage, IntentVersions},
     skip_fail,
     solidity_structs::{
-        IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData, SolidityIntentProcessorBoundMessage
-    }, structs::{PoolType, TokenLaunchType},
+        IntentProcessorBoundMessageAcknowledgementData, IntentProcessorBoundMessageDepositData,
+        SolidityIntentProcessorBoundMessage,
+    },
+    structs::{PoolType, TokenLaunchType},
 };
 
 use super::BlockchainIndexer;
 use crate::indexers::raydium_events::{
     AmmConfig, CollectPersonalFeeEvent, CollectProtocolFeeEvent, ConfigChangeEvent,
-    CreatePersonalPositionEvent, DecreaseLiquidityEvent, IncreaseLiquidityEvent,
-    PoolCreatedEvent, PoolCreatedEventWithState, PoolState, SwapEvent, AMM_CONFIG_SEED,
+    CreatePersonalPositionEvent, DecreaseLiquidityEvent, IncreaseLiquidityEvent, PoolCreatedEvent,
+    PoolCreatedEventWithState, PoolState, SwapEvent, AMM_CONFIG_SEED,
 };
 use crate::utils::unix_to_system_time;
 use alloy::dyn_abi::SolType;
@@ -241,7 +243,10 @@ impl SolanaIndexer {
         database_client: Arc<Client>,
         previously_fetched_slot: u64,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Starting continuous transaction indexer from slot {} onwards", previously_fetched_slot);
+        info!(
+            "Starting continuous transaction indexer from slot {} onwards",
+            previously_fetched_slot
+        );
 
         // Process vault and raydium programs separately in parallel
         let vault_task = {
@@ -260,7 +265,8 @@ impl SolanaIndexer {
                         ProgramName::Vault,
                         previously_fetched_slot,
                         chain_id,
-                    ).await;
+                    )
+                    .await;
                     if let Err(e) = result {
                         error!("Error processing vault transactions: {:?}", e);
                     }
@@ -284,7 +290,8 @@ impl SolanaIndexer {
                         ProgramName::Raydium,
                         previously_fetched_slot,
                         chain_id,
-                    ).await;
+                    )
+                    .await;
                     if let Err(e) = result {
                         error!("Error processing raydium transactions: {:?}", e);
                     }
@@ -316,13 +323,17 @@ impl SolanaIndexer {
         let mut is_catching_up = current_slot < current_blockchain_slot.saturating_sub(1000);
         let mut until_sig = None;
 
-        info!("[{}] Starting from slot: {}, current blockchain slot: {}, catching up: {}",
-              program_name, current_slot, current_blockchain_slot, is_catching_up);
+        info!(
+            "[{}] Starting from slot: {}, current blockchain slot: {}, catching up: {}",
+            program_name, current_slot, current_blockchain_slot, is_catching_up
+        );
 
         // Phase 1: Backfill historical transactions if catching up
         if is_catching_up {
-            info!("[{}] Starting backfill from latest slot {} down to slot {}",
-                  program_name, current_blockchain_slot, previously_fetched_slot);
+            info!(
+                "[{}] Starting backfill from latest slot {} down to slot {}",
+                program_name, current_blockchain_slot, previously_fetched_slot
+            );
 
             let mut all_historical_sigs = Vec::new();
             let mut before_sig = None; // Start from latest
@@ -343,42 +354,57 @@ impl SolanaIndexer {
                 {
                     Ok(sigs) => sigs,
                     Err(e) => {
-                        error!("[{}] Error fetching signatures during backfill: {:?}", program_name, e);
+                        error!(
+                            "[{}] Error fetching signatures during backfill: {:?}",
+                            program_name, e
+                        );
                         break;
                     }
                 };
-            
+
                 if sigs.is_empty() {
-                    info!("[{}] Reached end of signatures during backfill", program_name);
+                    info!(
+                        "[{}] Reached end of signatures during backfill",
+                        program_name
+                    );
                     break;
                 }
-            
+
                 // Filter signatures to only include those > previously_fetched_slot
                 let filtered_sigs: Vec<_> = sigs
                     .into_iter()
                     .filter(|sig| sig.slot > previously_fetched_slot)
                     .collect();
-            
+
                 if filtered_sigs.is_empty() {
-                    info!("[{}] Reached previously fetched slot {} during backfill",
-                          program_name, previously_fetched_slot);
+                    info!(
+                        "[{}] Reached previously fetched slot {} during backfill",
+                        program_name, previously_fetched_slot
+                    );
                     break;
                 }
-            
-                info!("[{}] Fetched {} signatures for backfill (slots {} to {})",
-                      program_name, filtered_sigs.len(),
-                      filtered_sigs.last().unwrap().slot,
-                      filtered_sigs.first().unwrap().slot);
-            
+
+                info!(
+                    "[{}] Fetched {} signatures for backfill (slots {} to {})",
+                    program_name,
+                    filtered_sigs.len(),
+                    filtered_sigs.last().unwrap().slot,
+                    filtered_sigs.first().unwrap().slot
+                );
+
                 if until_sig.is_none() {
-                    until_sig = Some(Signature::from_str(&filtered_sigs.first().unwrap().signature.clone())?);
+                    until_sig = Some(Signature::from_str(
+                        &filtered_sigs.first().unwrap().signature.clone(),
+                    )?);
                 }
                 // Update before_sig for next iteration (last signature chronologically)
-                before_sig = Some(skip_fail!(Signature::from_str(&filtered_sigs.last().unwrap().signature)));
-            
+                before_sig = Some(skip_fail!(Signature::from_str(
+                    &filtered_sigs.last().unwrap().signature
+                )));
+
                 // Add to our accumulating list
                 all_historical_sigs.extend(filtered_sigs);
-            
+
                 // If we got less than MAX_LIMIT, we might have reached the end
                 if all_historical_sigs.len() < MAX_LIMIT as usize {
                     break;
@@ -387,10 +413,13 @@ impl SolanaIndexer {
             all_historical_sigs.reverse();
 
             if !all_historical_sigs.is_empty() {
-                info!("[{}] Processing {} historical signatures from backfill (slots {} to {})",
-                      program_name, all_historical_sigs.len(),
-                      all_historical_sigs.first().unwrap().slot,
-                      all_historical_sigs.last().unwrap().slot);
+                info!(
+                    "[{}] Processing {} historical signatures from backfill (slots {} to {})",
+                    program_name,
+                    all_historical_sigs.len(),
+                    all_historical_sigs.first().unwrap().slot,
+                    all_historical_sigs.last().unwrap().slot
+                );
 
                 // Process all historical transactions at once
                 let processed = Self::process_transaction_batch_for_program(
@@ -401,15 +430,21 @@ impl SolanaIndexer {
                     program_name,
                     all_historical_sigs.clone(),
                     chain_id,
-                ).await?;
+                )
+                .await?;
 
-                info!("[{}] Processed {} historical transactions during backfill",
-                      program_name, processed);
+                info!(
+                    "[{}] Processed {} historical transactions during backfill",
+                    program_name, processed
+                );
 
                 // Update current_slot to the latest processed transaction
                 if let Some(latest_sig) = all_historical_sigs.last() {
                     current_slot = latest_sig.slot;
-                    info!("[{}] Updated position to slot: {} after backfill", program_name, current_slot);
+                    info!(
+                        "[{}] Updated position to slot: {} after backfill",
+                        program_name, current_slot
+                    );
 
                     // Update chain_metadata with latest processed block from backfill
                     if let Err(e) = Self::update_chain_metadata_latest_block(
@@ -417,20 +452,29 @@ impl SolanaIndexer {
                         chain_id,
                         current_slot,
                         program_name,
-                    ).await {
-                        error!("[{}] Failed to update chain metadata after backfill: {:?}", program_name, e);
+                    )
+                    .await
+                    {
+                        error!(
+                            "[{}] Failed to update chain metadata after backfill: {:?}",
+                            program_name, e
+                        );
                     }
                 }
             }
 
             // Switch to real-time mode
             is_catching_up = false;
-            info!("[{}] Backfill complete, switching to real-time mode", program_name);
+            info!(
+                "[{}] Backfill complete, switching to real-time mode",
+                program_name
+            );
         }
 
         // Phase 2: Real-time processing loop
         if until_sig.is_none() {
-            until_sig = Self::get_last_signature_at_slot(&rpc_client, &program_id, current_slot).await;
+            until_sig =
+                Self::get_last_signature_at_slot(&rpc_client, &program_id, current_slot).await;
         }
 
         loop {
@@ -439,8 +483,10 @@ impl SolanaIndexer {
             // Get current blockchain slot
             let latest_slot = rpc_client.get_slot().await?;
 
-            info!("[{}] Real-time check: current position {}, latest slot: {}",
-                  program_name, current_slot, latest_slot);
+            info!(
+                "[{}] Real-time check: current position {}, latest slot: {}",
+                program_name, current_slot, latest_slot
+            );
 
             // Fetch new signatures since our last position
             let mut sigs = match rpc_client
@@ -457,7 +503,10 @@ impl SolanaIndexer {
             {
                 Ok(sigs) => sigs,
                 Err(e) => {
-                    error!("[{}] Error fetching signatures in real-time: {:?}", program_name, e);
+                    error!(
+                        "[{}] Error fetching signatures in real-time: {:?}",
+                        program_name, e
+                    );
                     continue;
                 }
             };
@@ -468,10 +517,13 @@ impl SolanaIndexer {
                 continue;
             }
 
-            info!("[{}] Processing {} new signatures (slots {} to {})",
-                  program_name, sigs.len(),
-                  sigs.first().unwrap().slot,
-                  sigs.last().unwrap().slot);
+            info!(
+                "[{}] Processing {} new signatures (slots {} to {})",
+                program_name,
+                sigs.len(),
+                sigs.first().unwrap().slot,
+                sigs.last().unwrap().slot
+            );
 
             // Process new transactions
             let processed = Self::process_transaction_batch_for_program(
@@ -482,15 +534,22 @@ impl SolanaIndexer {
                 program_name,
                 sigs.clone(),
                 chain_id,
-            ).await?;
+            )
+            .await?;
 
-            info!("[{}] Processed {} new transactions", program_name, processed);
+            info!(
+                "[{}] Processed {} new transactions",
+                program_name, processed
+            );
 
             // Update our position to the newest transaction
             if let Some(newest_sig) = sigs.last() {
                 current_slot = newest_sig.slot;
                 until_sig = Some(skip_fail!(Signature::from_str(&newest_sig.signature)));
-                info!("[{}] Updated position to slot: {}", program_name, current_slot);
+                info!(
+                    "[{}] Updated position to slot: {}",
+                    program_name, current_slot
+                );
 
                 // Update chain_metadata with latest processed block
                 if let Err(e) = Self::update_chain_metadata_latest_block(
@@ -498,8 +557,13 @@ impl SolanaIndexer {
                     chain_id,
                     current_slot,
                     program_name,
-                ).await {
-                    error!("[{}] Failed to update chain metadata: {:?}", program_name, e);
+                )
+                .await
+                {
+                    error!(
+                        "[{}] Failed to update chain metadata: {:?}",
+                        program_name, e
+                    );
                 }
             }
         }
@@ -545,32 +609,66 @@ impl SolanaIndexer {
         let total_transactions = body.len();
         let total_batches = (total_transactions + BATCH_SIZE - 1) / BATCH_SIZE;
 
-        info!("[{}] Starting batch requests for {} transactions in {} batches", program_name, total_transactions, total_batches);
+        info!(
+            "[{}] Starting batch requests for {} transactions in {} batches",
+            program_name, total_transactions, total_batches
+        );
 
         for (batch_idx, chunk) in body.chunks(BATCH_SIZE).enumerate() {
             let batch_num = batch_idx + 1;
-            info!("batch: {}, {}", rpc_client.url(), serde_json::to_string_pretty(&chunk).unwrap());
-            info!("[{}] Processing batch {}/{} ({} transactions)", program_name, batch_num, total_batches, chunk.len());
+            info!(
+                "batch: {}, {}",
+                rpc_client.url(),
+                serde_json::to_string_pretty(&chunk).unwrap()
+            );
+            info!(
+                "[{}] Processing batch {}/{} ({} transactions)",
+                program_name,
+                batch_num,
+                total_batches,
+                chunk.len()
+            );
             let batch_responses = loop {
                 let batch_responses = reqwest::Client::new()
                     .post(rpc_client.url())
                     .json(chunk)
                     .send()
-                    .await.inspect_err(|e| info!("[{}] Batch {}/{} request error: {}", program_name, batch_num, total_batches, e))?
-                    .json::<Vec<Response>>().await;
+                    .await
+                    .inspect_err(|e| {
+                        info!(
+                            "[{}] Batch {}/{} request error: {}",
+                            program_name, batch_num, total_batches, e
+                        )
+                    })?
+                    .json::<Vec<Response>>()
+                    .await;
                 match batch_responses {
-                    Ok(r) => {break r}
+                    Ok(r) => break r,
                     Err(e) => {
                         info!("[{program_name}] Error while querying  batch responses: {e:?}. Trying again...");
                     }
                 }
             };
             transactions.extend(batch_responses);
-            info!("[{}] Completed batch {}/{} - collected {} total transactions so far", program_name, batch_num, total_batches, transactions.len());
+            info!(
+                "[{}] Completed batch {}/{} - collected {} total transactions so far",
+                program_name,
+                batch_num,
+                total_batches,
+                transactions.len()
+            );
         }
 
-        info!("[{}] All batch requests completed - collected {} transactions total", program_name, transactions.len());
-        assert_eq!(transactions.len(), sigs.len(), "transactions response length mismatch");
+        info!(
+            "[{}] All batch requests completed - collected {} transactions total",
+            program_name,
+            transactions.len()
+        );
+        assert_eq!(
+            transactions.len(),
+            sigs.len(),
+            "transactions response length mismatch"
+        );
         let mut processed_count = 0;
         for (index, tx) in transactions.iter().enumerate() {
             if let Some(err) = tx.result.transaction.meta.clone().unwrap().err {
@@ -593,8 +691,7 @@ impl SolanaIndexer {
             let (tx_cost, compute_units_used) = match &tx.result.transaction.meta {
                 Some(metadata) => {
                     let tx_cost = metadata.fee.to_string();
-                    let compute_units =
-                        metadata.compute_units_consumed.clone().unwrap_or(0) as i64;
+                    let compute_units = metadata.compute_units_consumed.clone().unwrap_or(0) as i64;
                     (tx_cost, compute_units)
                 }
                 None => (String::from("0"), 0i64),
@@ -636,38 +733,44 @@ impl SolanaIndexer {
             };
 
             // Use the unified parse_solana_events method for both vault and raydium events
-            let all_events = temp_indexer.parse_solana_events(&logs, program_id, other_program_id).await?;
+            let all_events = temp_indexer
+                .parse_solana_events(&logs, program_id, other_program_id)
+                .await?;
 
             // Process events based on their type
             for events in all_events {
                 match events {
                     Events::Vaults(vault_events) if program_name == ProgramName::Vault => {
-                        temp_indexer.process_vaults_events(
-                            database_client,
-                            &mut sigs.clone(),
-                            index,
-                            &tx_cost,
-                            &compute_units_used,
-                            system_time,
-                            block_height,
-                            transaction_hash.clone(),
-                            block_number,
-                            vault_events,
-                        ).await;
+                        temp_indexer
+                            .process_vaults_events(
+                                database_client,
+                                &mut sigs.clone(),
+                                index,
+                                &tx_cost,
+                                &compute_units_used,
+                                system_time,
+                                block_height,
+                                transaction_hash.clone(),
+                                block_number,
+                                vault_events,
+                            )
+                            .await;
                     }
                     Events::Raydium(raydium_events) if program_name == ProgramName::Raydium => {
-                        temp_indexer.process_raydium_events(
-                            database_client,
-                            &mut sigs.clone(),
-                            index,
-                            &tx_cost,
-                            compute_units_used,
-                            system_time,
-                            block_height,
-                            transaction_hash.clone(),
-                            block_number,
-                            raydium_events,
-                        ).await;
+                        temp_indexer
+                            .process_raydium_events(
+                                database_client,
+                                &mut sigs.clone(),
+                                index,
+                                &tx_cost,
+                                compute_units_used,
+                                system_time,
+                                block_height,
+                                transaction_hash.clone(),
+                                block_number,
+                                raydium_events,
+                            )
+                            .await;
                     }
                     Events::Vaults(_) | Events::Raydium(_) => (),
                 }
@@ -698,12 +801,17 @@ impl SolanaIndexer {
             .await
         {
             Ok(_) => {
-                debug!("[{}] Updated chain_metadata latest_block to {} for chain_id {}",
-                       program_name, latest_block, chain_id);
+                debug!(
+                    "[{}] Updated chain_metadata latest_block to {} for chain_id {}",
+                    program_name, latest_block, chain_id
+                );
                 Ok(())
             }
             Err(e) => {
-                error!("[{}] Failed to update chain_metadata: {:?}", program_name, e);
+                error!(
+                    "[{}] Failed to update chain_metadata: {:?}",
+                    program_name, e
+                );
                 Err(Box::new(e))
             }
         }
@@ -713,12 +821,9 @@ impl SolanaIndexer {
     async fn get_last_signature_at_slot(
         rpc_client: &RpcClient,
         _program_id: &Pubkey,
-        slot: u64
+        slot: u64,
     ) -> Option<Signature> {
-        let block = rpc_client
-            .get_block(slot)
-            .await
-            .ok()?;
+        let block = rpc_client.get_block(slot).await.ok()?;
 
         // Get the first transaction in the block
         let first_tx = block.transactions.last()?;
@@ -727,9 +832,10 @@ impl SolanaIndexer {
         match &first_tx.transaction {
             solana_transaction_status::EncodedTransaction::Json(ui_tx) => {
                 // For JSON encoded transactions, get the first signature
-                ui_tx.signatures.first().and_then(|sig_str| {
-                    Signature::from_str(sig_str).ok()
-                })
+                ui_tx
+                    .signatures
+                    .first()
+                    .and_then(|sig_str| Signature::from_str(sig_str).ok())
             }
             solana_transaction_status::EncodedTransaction::Binary(data, _encoding) => {
                 // For binary encoded transactions, decode and extract signature
@@ -1034,8 +1140,12 @@ impl SolanaIndexer {
                 let token0_addr = token_mint_0.to_string();
                 let token1_addr = token_mint_1.to_string();
 
-                let fee = Decimal::from(amm_config.fee_tiers[fee_tier_index as usize].trade_fee_rate as i32);
-                let liquidity_lock_period = amm_config.project_liquidity_requirements[pool_state.launch_type as usize].lock_liquidity_period;
+                let fee = Decimal::from(
+                    amm_config.fee_tiers[fee_tier_index as usize].trade_fee_rate as i32,
+                );
+                let liquidity_lock_period = amm_config.project_liquidity_requirements
+                    [pool_state.launch_type as usize]
+                    .lock_liquidity_period;
                 let tick_spacing_i64 = tick_spacing as i64;
                 let pool_type = PoolType::SOLANA;
                 let project_manager = pool_state.project_liquidity_provider.to_string();
@@ -1046,7 +1156,9 @@ impl SolanaIndexer {
                     unix_to_system_time(pool_state.exclusive_trading_period_start_time);
                 let etp_close_time =
                     unix_to_system_time(pool_state.exclusive_trading_period_end_time);
-                let liquidity_lock_end_time = unix_to_system_time(pool_state.exclusive_trading_period_end_time + liquidity_lock_period);
+                let liquidity_lock_end_time = unix_to_system_time(
+                    pool_state.exclusive_trading_period_end_time + liquidity_lock_period,
+                );
                 let launch_type = if pool_state.launch_type == 0 {
                     TokenLaunchType::FAIR
                 } else {
@@ -1093,7 +1205,7 @@ impl SolanaIndexer {
                             &initial_tick_i32,
                             &token_supply_i64,
                             &reserve_token_mint.to_string(),
-                            &liquidity_lock_end_time
+                            &liquidity_lock_end_time,
                         ],
                     )
                     .await?;
@@ -1430,7 +1542,7 @@ impl SolanaIndexer {
         transaction_hash: String,
         timestamp: SystemTime,
         is_vault: Option<bool>,
-        log_target: &str
+        log_target: &str,
     ) -> anyhow::Result<()> {
         let query = r#"
             INSERT INTO liquidity
@@ -1459,7 +1571,7 @@ impl SolanaIndexer {
                     &is_manager,
                     &liquidity_amount,
                     &is_vault,
-                    &position_id
+                    &position_id,
                 ],
             )
             .await
@@ -1526,7 +1638,10 @@ impl BlockchainIndexer for SolanaIndexer {
                     Some(latest_block)
                 }
                 Ok(None) => {
-                    info!("No chain_metadata found for chain_id {}, starting fresh", self.chain_id);
+                    info!(
+                        "No chain_metadata found for chain_id {}, starting fresh",
+                        self.chain_id
+                    );
                     None
                 }
                 Err(e) => {
@@ -1544,8 +1659,7 @@ impl BlockchainIndexer for SolanaIndexer {
             self.fetch_historical_transactions(client.clone(), block_number)
                 .await?;
         } else {
-            self.fetch_historical_transactions(client, 1)
-                .await?;
+            self.fetch_historical_transactions(client, 1).await?;
         }
         // Placeholder logic for listening to Solana program events
         info!(
@@ -1910,9 +2024,9 @@ fn init_logger() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use anchor_lang::pubkey;
     use solana_client::rpc_config::RpcTransactionConfig;
-    use super::*;
 
     #[tokio::test]
     pub async fn test_get_events_from_logs() {

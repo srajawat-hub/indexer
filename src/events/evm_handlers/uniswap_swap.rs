@@ -1,11 +1,23 @@
-use std::{str::FromStr, sync::Arc, time::SystemTime};
+use alloy::{
+    eips::BlockNumberOrTag,
+    providers::{Provider, RootProvider},
+    rpc::types::{BlockTransactionsKind, Log},
+    transports::http::Http,
+};
 use anyhow::Context;
-use log::{info, error};
-use alloy::{providers::RootProvider, rpc::types::Log, transports::http::Http};
+use log::{error, info, warn};
 use rust_decimal::{prelude::FromPrimitive, Decimal};
+use std::{str::FromStr, sync::Arc, time::SystemTime};
 use tokio_postgres::{Client, GenericClient};
 
-use crate::{events::event_processor::check_vault_initiated_transaction, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::{get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token, get_wrapped_native_token_address, unix_to_system_time}};
+use crate::{
+    events::event_processor::check_vault_initiated_transaction,
+    solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self},
+    utils::{
+        get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token,
+        get_wrapped_native_token_address, unix_to_system_time,
+    },
+};
 
 pub async fn handle_uniswap_swap_event(
     log: Log,
@@ -27,26 +39,26 @@ pub async fn handle_uniswap_swap_event(
     info!(target: log_target, "UniswapV3PoolLib::Swap from {sender} to {recipient}");
 
     let pool_address = log.address().to_string();
+    let raw_transaction_hash = log.transaction_hash.unwrap();
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let block_number = log.block_number.unwrap() as i64;
-    let timestamp = match log.block_timestamp {
-        Some(ts) => unix_to_system_time(ts),
-        None => {
-            error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
-            SystemTime::now() // Fallback to current time if timestamp is missing
-        }
-    };
     let sqrt_price = sqrtPriceX96.to_string();
     let liquidity_i64 = liquidity as i64;
     let tick_i32 = tick.as_i32();
     let initiator_user_address = sender.to_string();
 
     // get user address from received message on vault
-    let user_query = "SELECT sender_address FROM received_message_on_vault WHERE LOWER(transaction_hash) = LOWER($1)";
-    let sender_address = match client.query_one(user_query, &[&transaction_hash]).await {
-        Ok(row) => row.get::<_, String>("sender_address"),
-        Err(e) => {
-            error!(target: log_target, "Failed to fetch initiator user address for transaction hash {}: {:?}", transaction_hash, e);
+    let (is_vault_initiated, initiator_address) = check_vault_initiated_transaction(
+        chain_provider.clone(),
+        &client,
+        raw_transaction_hash.clone(),
+    )
+    .await;
+
+    let sender_address = match initiator_address {
+        Some(sender) => sender,
+        None => {
+            error!(target: log_target, "Failed to fetch initiator user address for transaction hash {}", transaction_hash);
             initiator_user_address.clone() // Fallback to sender address if query fails
         }
     };
@@ -86,21 +98,66 @@ pub async fn handle_uniswap_swap_event(
     };
 
     // Calculate USD values for amounts
+
+    let mut timestamp = match log.block_timestamp {
+        Some(ts) => unix_to_system_time(ts),
+        None => {
+            error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+            SystemTime::now() // Fallback to current time if timestamp is missing
+        }
+    };
+
     let (amount_in_usd, amount_out_usd, price) = 'calc: {
         let mut amount_in_usd_value: f64 = 0.0;
         let mut amount_out_usd_value: f64 = 0.0;
+        let block_timestamp_of_trade = match chain_provider
+            .get_block_by_number(
+                BlockNumberOrTag::Number(block_number as u64),
+                BlockTransactionsKind::Hashes,
+            )
+            .await
+        {
+            Ok(block_res) => match block_res {
+                Some(block) => block.header.timestamp,
+                None => {
+                    error!(target: log_target, "Block timestamp not found for block number {}", block_number);
+                    0_u64 // Fallback to 0 if block not found
+                }
+            },
+            Err(e) => {
+                error!(target: log_target, "Failed to fetch block by number {}: {:?}", block_number, e);
+                0_u64 // Fallback to 0 if fetching block fails
+            }
+        };
 
-        let base_token_usd_price = get_usd_value_of_token(Some(&base_token), &chain_id.to_string()).await;
+        info!("Block timestamp of the trade {block_timestamp_of_trade}");
+        let base_token_usd_price = if block_timestamp_of_trade != 0 {
+            timestamp = unix_to_system_time(block_timestamp_of_trade);
+            get_usd_value_of_token(
+                Some(&base_token),
+                &chain_id.to_string(),
+                Some(block_timestamp_of_trade),
+            )
+            .await
+        } else {
+            get_usd_value_of_token(Some(&base_token), &chain_id.to_string(), None).await
+        };
+
+        info!("base token usd price {base_token_usd_price}");
+
         let base_token_decimals = get_token_decimals(&base_token, &chain_id.to_string()).await;
 
         let token_in_decimals = get_token_decimals(&token_in, &chain_id.to_string()).await;
         let token_out_decimals = get_token_decimals(&token_out, &chain_id.to_string()).await;
 
-        let formatted_amount_in = amount_in.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_in_decimals as f64);
-        let formatted_amount_out = amount_out.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_out_decimals as f64);
+        let formatted_amount_in =
+            amount_in.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_in_decimals as f64);
+        let formatted_amount_out =
+            amount_out.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_out_decimals as f64);
 
         if formatted_amount_in == 0.0 {
-            break 'calc ("0".to_string(), "0".to_string(), None)
+            warn!("Formatted amount in is 0, returning usd amounts as 0");
+            break 'calc ("0".to_string(), "0".to_string(), None);
         }
 
         let trade_price = formatted_amount_out / formatted_amount_in;
@@ -118,15 +175,25 @@ pub async fn handle_uniswap_swap_event(
             amount_out_usd_value = formatted_amount_out * base_token_usd_price;
 
             // launchpad token
-            let amount_in_usd_price = (1.0/trade_price) * base_token_usd_price;
+            let amount_in_usd_price = (1.0 / trade_price) * base_token_usd_price;
             amount_in_usd_value = formatted_amount_in * amount_in_usd_price;
         };
-        
+
         info!(target: log_target, "Calculated USD values: amount_in_usd: {}, amount_out_usd: {}", amount_in_usd_value, amount_out_usd_value);
-        (amount_in_usd_value.to_string(), amount_out_usd_value.to_string(), Some(trade_price))
+        (
+            amount_in_usd_value.to_string(),
+            amount_out_usd_value.to_string(),
+            Some(trade_price),
+        )
     };
 
-    let is_vault_initiated = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await.0;
+    let is_vault_initiated = check_vault_initiated_transaction(
+        chain_provider.clone(),
+        &client,
+        log.transaction_hash.unwrap().clone(),
+    )
+    .await
+    .0;
 
     let query = r#"
         INSERT INTO ammswap

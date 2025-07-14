@@ -1,11 +1,22 @@
-use std::{str::FromStr, sync::Arc, time::SystemTime};
+use alloy::{
+    providers::{Provider, RootProvider},
+    rpc::types::Log,
+    transports::http::Http,
+};
 use anyhow::bail;
-use log::{info, error, warn};
-use alloy::{providers::{Provider, RootProvider}, rpc::types::Log, transports::http::Http};
+use log::{error, info, warn};
 use rust_decimal::Decimal;
+use std::{str::FromStr, sync::Arc, time::SystemTime};
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::{check_vault_initiated_transaction, get_liquidity_provider_address_evm, insert_liquidity_event}, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::unix_to_system_time};
+use crate::{
+    events::event_processor::{
+        check_vault_initiated_transaction, get_liquidity_provider_address_evm,
+        insert_liquidity_event,
+    },
+    solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self},
+    utils::unix_to_system_time,
+};
 
 pub async fn handle_uniswap_burn_event(
     log: Log,
@@ -38,13 +49,25 @@ pub async fn handle_uniswap_burn_event(
         }
     };
 
-    let transaction_receipt = chain_provider.get_transaction_receipt(raw_transaction_hash).await;
+    let transaction_receipt = chain_provider
+        .get_transaction_receipt(raw_transaction_hash)
+        .await;
     let user_address: String;
-    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(transaction_receipt, &client, periphery_contract_address).await;
+    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(
+        transaction_receipt,
+        &client,
+        periphery_contract_address,
+    )
+    .await;
 
     let token_id = liquidity_decoded_user_data.liquidity_token_id;
 
-    let (is_vault_initiated, initiator_address) = check_vault_initiated_transaction(chain_provider.clone(), &client, log.transaction_hash.unwrap().clone()).await;
+    let (is_vault_initiated, initiator_address) = check_vault_initiated_transaction(
+        chain_provider.clone(),
+        &client,
+        log.transaction_hash.unwrap().clone(),
+    )
+    .await;
     if initiator_address.is_some() {
         user_address = initiator_address.unwrap();
     } else {
@@ -61,7 +84,7 @@ pub async fn handle_uniswap_burn_event(
                         let address: String = row.get("user_address");
                         info!(target: log_target, "Found user address for token_id {}: {}", token_id_value, address);
                         address
-                    },
+                    }
                     Err(e) => {
                         error!(target: log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
                         String::new()
@@ -86,10 +109,14 @@ pub async fn handle_uniswap_burn_event(
         Ok(row) => {
             let pm_address: String = row.get("project_manager");
             pm_address.to_lowercase() == user_address.to_lowercase()
-        },
+        }
         Err(e) => {
             error!(target: log_target, "Failed to fetch project manager for pool {}: {:?}", pool_address, e);
-            bail!("Failed to fetch project manager for pool {}: {:?}", pool_address, e);
+            bail!(
+                "Failed to fetch project manager for pool {}: {:?}",
+                pool_address,
+                e
+            );
             false
         }
     };
@@ -112,7 +139,7 @@ pub async fn handle_uniswap_burn_event(
         chain_id,
         Some(is_vault_initiated), // is_vault = false
         log_target,
-        token_id
+        token_id,
     )
     .await?;
 

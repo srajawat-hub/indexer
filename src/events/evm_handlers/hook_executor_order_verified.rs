@@ -1,10 +1,12 @@
-use std::{str::FromStr, sync::Arc, time::SystemTime};
-use anyhow::{bail, Context};
-use log::{info, error};
+use crate::{
+    enums::OrderStatus, solidity_structs::hook_executor::HookExecutor, utils::unix_to_system_time,
+};
 use alloy::{providers::RootProvider, rpc::types::Log, transports::http::Http};
+use anyhow::{bail, Context};
+use log::{error, info};
 use rust_decimal::{prelude::FromPrimitive, Decimal};
+use std::{str::FromStr, sync::Arc, time::SystemTime};
 use tokio_postgres::{Client, GenericClient};
-use crate::{enums::OrderStatus, solidity_structs::hook_executor::HookExecutor, utils::unix_to_system_time};
 
 pub async fn handle_hook_executor_order_verified_event(
     log: Log,
@@ -26,7 +28,10 @@ pub async fn handle_hook_executor_order_verified_event(
         log.block_timestamp.unwrap()
     } else {
         // If block_timestamp is not available, use the current system time
-        SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
     };
     let timestamp = unix_to_system_time(timestamp_value);
 

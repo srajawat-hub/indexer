@@ -1,9 +1,18 @@
+use alloy::{
+    providers::{Provider, RootProvider},
+    pubsub::PubSubFrontend,
+    rpc::types::Log,
+    sol_types::SolEvent,
+    transports::http::Http,
+};
+use log::{error, info};
 use std::sync::Arc;
-use log::{info, error};
-use alloy::{providers::{Provider, RootProvider}, pubsub::PubSubFrontend, rpc::types::Log, sol_types::SolEvent, transports::http::Http};
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::DepositStatus, solidity_structs::{intent_processor::IntentProcessorV2, ProcessId}};
+use crate::{
+    events::event_processor::DepositStatus,
+    solidity_structs::{intent_processor::IntentProcessorV2, ProcessId},
+};
 
 pub async fn handle_deposit_received_event(
     log: Log,
@@ -87,7 +96,8 @@ pub async fn handle_deposit_received_event(
         }
         None => {
             // if not, we will have to add this into history
-            let query = "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
+            let query =
+                "INSERT INTO deposit_received VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)";
             let response = client
                 .execute(
                     query,

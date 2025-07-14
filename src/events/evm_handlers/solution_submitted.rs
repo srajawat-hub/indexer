@@ -1,14 +1,15 @@
-use std::sync::Arc;
-use log::info;
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http};
-use tokio_postgres::Client;
 use crate::{
     events::event_processor::{
-        fetch_intent_initiator, 
-        update_intent_state, 
-        IntentStage, 
-        IntentVersions
-    }, solidity_structs::intent_lib_v2::IntentLibV2};
+        fetch_intent_initiator, update_intent_state, IntentStage, IntentVersions,
+    },
+    solidity_structs::intent_lib_v2::IntentLibV2,
+};
+use alloy::{
+    providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log, transports::http::Http,
+};
+use log::info;
+use std::sync::Arc;
+use tokio_postgres::Client;
 
 pub async fn handle_solution_submitted_event(
     log: Log,
@@ -16,8 +17,7 @@ pub async fn handle_solution_submitted_event(
     chain_id: i64,
     chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
-    let IntentLibV2::SolutionSubmitted { intentId, solver } =
-        log.log_decode().unwrap().inner.data;
+    let IntentLibV2::SolutionSubmitted { intentId, solver } = log.log_decode().unwrap().inner.data;
 
     let log_target = "SolutionSubmitted";
     info!(target: log_target, "IntentLibV2::SolutionSubmitted from {solver} with intentId {intentId}");

@@ -6,13 +6,13 @@ mod enums;
 mod events;
 mod indexers;
 pub mod solidity_structs;
-mod utils;
 mod structs;
+mod utils;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use anchor_lang::pubkey;
 use dotenv::dotenv;
-use indexers::{backfill, BlockchainIndexer, EvmIndexer, SolanaIndexer};
+use indexers::{BlockchainIndexer, EvmIndexer, SolanaIndexer};
 use log::{debug, error, info};
 use openssl::ssl::{SslConnector, SslMethod};
 use postgres_openssl::MakeTlsConnector;

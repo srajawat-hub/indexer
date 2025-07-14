@@ -1,24 +1,24 @@
-use std::sync::Arc;
-use alloy::dyn_abi::SolType;
-use alloy::transports::http::Http;
-use anyhow::bail;
-use log::{info, error};
-use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
-use tokio_postgres::Client;
-use crate::events::event_processor::{fetch_intent_initiator, get_fees_data, update_intent_state, IntentStage, IntentVersions};
-use crate::solidity_structs::intent_lib_v2::IntentLibV2;
-use crate::solidity_structs::{
-    self, ReceiverUserAddressData, ReceiverVaultData, SolidityOrder
+use crate::events::event_processor::{
+    fetch_intent_initiator, get_fees_data, update_intent_state, IntentStage, IntentVersions,
 };
+use crate::solidity_structs::intent_lib_v2::IntentLibV2;
+use crate::solidity_structs::{self, ReceiverUserAddressData, ReceiverVaultData, SolidityOrder};
 use crate::structs::ResultCosts;
 use crate::utils::{get_token_decimals, get_usd_value_of_token};
+use alloy::dyn_abi::SolType;
+use alloy::transports::http::Http;
+use alloy::{providers::RootProvider, pubsub::PubSubFrontend, rpc::types::Log};
+use anyhow::bail;
+use log::{error, info};
+use std::sync::Arc;
+use tokio_postgres::Client;
 
 pub async fn handle_order_created_event(
     log: Log,
     client: &Arc<Client>,
     chain_id: i64,
     chain_provider: RootProvider<Http<reqwest::Client>>,
-    solana_chain_id: &str
+    solana_chain_id: &str,
 ) -> anyhow::Result<()> {
     let IntentLibV2::OrderCreated {
         intentId,
@@ -55,21 +55,28 @@ pub async fn handle_order_created_event(
             ReceiverUserAddressData::abi_decode(&receiver_data, true).unwrap();
         receiver_address = receiver_address_struct.userAddress.to_string();
     } else {
-        let receiver_address_struct =
-            ReceiverVaultData::abi_decode(&receiver_data, true).unwrap();
+        let receiver_address_struct = ReceiverVaultData::abi_decode(&receiver_data, true).unwrap();
         receiver_address = receiver_address_struct.vaultUser.to_string();
     }
 
     let current_timestamp = std::time::SystemTime::now();
     let timestamp = current_timestamp;
 
-    let token_in_usd_price = get_usd_value_of_token(Some(&token_in), &destination_chain_id).await;
+    let token_in_usd_price =
+        get_usd_value_of_token(Some(&token_in), &destination_chain_id, None).await;
     let token_in_decimals = get_token_decimals(&token_in, &source_chain_id).await;
-    let amount_in_usd = ((amount_in.parse::<f64>().unwrap_or(0.0) / 10.0_f64.powf(token_in_decimals)) * token_in_usd_price).to_string();
+    let amount_in_usd = ((amount_in.parse::<f64>().unwrap_or(0.0)
+        / 10.0_f64.powf(token_in_decimals))
+        * token_in_usd_price)
+        .to_string();
 
-    let token_out_usd_price = get_usd_value_of_token(Some(&token_out), &destination_chain_id).await;
+    let token_out_usd_price =
+        get_usd_value_of_token(Some(&token_out), &destination_chain_id, None).await;
     let token_out_decimals = get_token_decimals(&token_out, &destination_chain_id).await;
-    let amount_out_usd = ((amount_out.parse::<f64>().unwrap_or(0.0) / 10.0_f64.powf(token_out_decimals)) * token_out_usd_price).to_string();
+    let amount_out_usd = ((amount_out.parse::<f64>().unwrap_or(0.0)
+        / 10.0_f64.powf(token_out_decimals))
+        * token_out_usd_price)
+        .to_string();
 
     let query: &str =
         "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (transaction_hash) DO NOTHING";
@@ -127,11 +134,16 @@ pub async fn handle_order_created_event(
     )
     .await;
 
-    let inclusive_layer_fee_usd = (
-        (intent_fees.inclusive_layer_fee.value
-            .clone()
-            .unwrap_or(String::from("0.0")
-        ).parse::<f64>().unwrap_or(0.0) / 10.0_f64.powf(token_in_decimals)) * token_in_usd_price).to_string();
+    let inclusive_layer_fee_usd = ((intent_fees
+        .inclusive_layer_fee
+        .value
+        .clone()
+        .unwrap_or(String::from("0.0"))
+        .parse::<f64>()
+        .unwrap_or(0.0)
+        / 10.0_f64.powf(token_in_decimals))
+        * token_in_usd_price)
+        .to_string();
 
     let mut fee_data_json = match serde_json::to_value(&intent_fees) {
         Ok(value) => value,
@@ -154,7 +166,8 @@ pub async fn handle_order_created_event(
         );
     }
 
-    let intent_fee_add_query = "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2) ON CONFLICT (intent_id) DO NOTHING";
+    let intent_fee_add_query =
+        "INSERT INTO intent_fees VALUES(DEFAULT, $1, $2) ON CONFLICT (intent_id) DO NOTHING";
     match client
         .execute(intent_fee_add_query, &[&intent_id, &fee_data_json])
         .await

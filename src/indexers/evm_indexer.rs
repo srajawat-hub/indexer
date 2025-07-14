@@ -3,15 +3,19 @@ use std::sync::Arc;
 use super::BlockchainIndexer;
 use crate::{constants::BACKFILL_BATCH_SIZE, events::event_processor};
 use alloy::{
-    eips::BlockNumberOrTag, hex::FromHex, primitives::Address, providers::{Provider, ProviderBuilder, RootProvider, WsConnect}, rpc::types::Filter, transports::http::Http
+    eips::BlockNumberOrTag,
+    hex::FromHex,
+    primitives::Address,
+    providers::{Provider, ProviderBuilder, RootProvider, WsConnect},
+    rpc::types::Filter,
+    transports::http::Http,
 };
 use async_trait::async_trait;
+use futures_util::stream;
 use log::{error, info};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, Duration};
 use tokio_postgres::{row, Client};
-use futures_util::stream;
-
 
 pub struct EvmIndexer {
     http_rpc_url: String,
@@ -66,7 +70,7 @@ impl EvmIndexer {
         &self,
         client: &Arc<Client>,
         chain_id: i64,
-        http_provider: &RootProvider<Http<reqwest::Client>>
+        http_provider: &RootProvider<Http<reqwest::Client>>,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         let query = "SELECT latest_block FROM chain_metadata WHERE chain_id = $1";
         let row = client.query_one(query, &[&chain_id.to_string()]).await;
@@ -75,7 +79,7 @@ impl EvmIndexer {
             Ok(latest_block)
         } else {
             // If no record found, fetch from last recorded block number for vault
-            let query = "SELECT * FROM received_message_on_vault WHERE chain_id = $1 ORDER BY id DESC LIMIT 1";                    
+            let query = "SELECT * FROM received_message_on_vault WHERE chain_id = $1 ORDER BY id DESC LIMIT 1";
             let block_number: i64 = match client.query(query, &[&chain_id]).await {
                 Ok(row) => {
                     if row.len() > 0 {
@@ -105,7 +109,9 @@ impl EvmIndexer {
             ON CONFLICT (chain_id)
             DO UPDATE SET latest_block = EXCLUDED.latest_block
         "#;
-        client.execute(query, &[&chain_id.to_string(), &block_number]).await?;
+        client
+            .execute(query, &[&chain_id.to_string(), &block_number])
+            .await?;
         Ok(())
     }
 }
@@ -119,7 +125,8 @@ impl BlockchainIndexer for EvmIndexer {
         let client_clone = Arc::clone(&client);
 
         let http_rpc_url = self.http_rpc_url.parse().unwrap();
-        let provider: RootProvider<Http<reqwest::Client>> = ProviderBuilder::new().on_http(http_rpc_url);
+        let provider: RootProvider<Http<reqwest::Client>> =
+            ProviderBuilder::new().on_http(http_rpc_url);
 
         let latest_block_number = provider.get_block_number().await? as i64;
         info!("Latest block number: {}", latest_block_number);
@@ -134,11 +141,13 @@ impl BlockchainIndexer for EvmIndexer {
             create_new_pool_check_task = true;
         }
 
-        let mut start_block_number = self.load_last_recorded_block_number(&client_clone, chain_id, &provider).await?;
+        let mut start_block_number = self
+            .load_last_recorded_block_number(&client_clone, chain_id, &provider)
+            .await?;
 
         let mut end_block_number = std::cmp::min(
-            start_block_number + BACKFILL_BATCH_SIZE as i64 - 1, 
-            latest_block_number
+            start_block_number + BACKFILL_BATCH_SIZE as i64 - 1,
+            latest_block_number,
         );
         info!(
             "Starting event listener from block {} to block {}",
@@ -149,8 +158,7 @@ impl BlockchainIndexer for EvmIndexer {
         let pool_addresses = self.load_pool_addresses(&client, chain_id).await?;
 
         // Build the list of subscribed contracts
-        let vaults_contract_addr =
-            Address::from_hex(self.vaults_contract_address.clone()).unwrap();
+        let vaults_contract_addr = Address::from_hex(self.vaults_contract_address.clone()).unwrap();
         let mut contract_addrs = vec![vaults_contract_addr];
 
         let mut additional_contracts_num = 0;
@@ -163,14 +171,14 @@ impl BlockchainIndexer for EvmIndexer {
         }
 
         if let Some(hook_executor_address) = &self.hook_executor_contract_address {
-            let hook_executor_contract_addr = Address::from_hex(hook_executor_address.clone()).unwrap();
+            let hook_executor_contract_addr =
+                Address::from_hex(hook_executor_address.clone()).unwrap();
             contract_addrs.push(hook_executor_contract_addr);
         }
 
         let mut initial_contracts_num = contract_addrs.len(); // contract count before adding pools
         contract_addrs.extend(pool_addresses);
         let mut current_pool_count = contract_addrs.len(); // count after adding the pools
-        
 
         loop {
             sleep(Duration::from_secs(1)).await;
@@ -180,8 +188,8 @@ impl BlockchainIndexer for EvmIndexer {
                 sleep(Duration::from_secs(5)).await;
                 let latest_block_number = provider.get_block_number().await? as i64;
                 end_block_number = std::cmp::min(
-                    start_block_number + BACKFILL_BATCH_SIZE as i64 - 1, 
-                    latest_block_number
+                    start_block_number + BACKFILL_BATCH_SIZE as i64 - 1,
+                    latest_block_number,
                 );
                 info!(
                     "Resuming event listener for chain_id {} from block {} to block {}",
@@ -192,7 +200,8 @@ impl BlockchainIndexer for EvmIndexer {
 
             info!(
                 "Subscribing to {} contracts total for chain_id {}",
-                contract_addrs.len(), chain_id
+                contract_addrs.len(),
+                chain_id
             );
 
             let filter = Filter::new()
@@ -200,10 +209,7 @@ impl BlockchainIndexer for EvmIndexer {
                 .from_block(BlockNumberOrTag::Number(start_block_number as u64))
                 .to_block(BlockNumberOrTag::Number(end_block_number as u64));
 
-            let logs = provider
-            .get_logs(&filter)
-            .await
-            .unwrap_or_else(|e| {
+            let logs = provider.get_logs(&filter).await.unwrap_or_else(|e| {
                 error!("Failed to fetch historical logs: {e}");
                 vec![]
             });
@@ -219,16 +225,16 @@ impl BlockchainIndexer for EvmIndexer {
                 chain_id,
                 &provider,
                 &solana_chain_id,
-            ).await;
-            info!("Event processing completed for chain-id {} for block range {}-{}", chain_id, start_block_number, end_block_number);
+            )
+            .await;
+            info!(
+                "Event processing completed for chain-id {} for block range {}-{}",
+                chain_id, start_block_number, end_block_number
+            );
 
             // Update the last recorded block number in the database
-            self.update_last_recorded_block_number(
-                &client_clone,
-                chain_id,
-                end_block_number,
-            )
-            .await?;
+            self.update_last_recorded_block_number(&client_clone, chain_id, end_block_number)
+                .await?;
             info!(
                 "Updated last recorded block number to {} for chain_id {}",
                 end_block_number, chain_id
@@ -248,23 +254,27 @@ impl BlockchainIndexer for EvmIndexer {
                                     new_pool_count,
                                     current_pool_count - initial_contracts_num
                                 );
-                                let pool_addresses = self.load_pool_addresses(&client, chain_id)
-                                .await
-                                .unwrap_or_else(|e| {
-                                    error!("Failed to load pool addresses: {e}");
-                                    Vec::new()
-                                });
-    
+                                let pool_addresses = self
+                                    .load_pool_addresses(&client, chain_id)
+                                    .await
+                                    .unwrap_or_else(|e| {
+                                        error!("Failed to load pool addresses: {e}");
+                                        Vec::new()
+                                    });
+
                                 contract_addrs.clear();
-                                contract_addrs = vec![
-                                    Address::from_hex(self.vaults_contract_address.clone()).unwrap(),
-                                ];
+                                contract_addrs =
+                                    vec![Address::from_hex(self.vaults_contract_address.clone())
+                                        .unwrap()];
                                 if let Some(amm_contract) = &self.amm_contract_address {
                                     contract_addrs.push(Address::from_hex(amm_contract).unwrap());
                                 }
                                 initial_contracts_num = contract_addrs.len();
                                 contract_addrs.extend(pool_addresses);
-                                info!("Updated contract addresses to monitor: {:?}", contract_addrs);
+                                info!(
+                                    "Updated contract addresses to monitor: {:?}",
+                                    contract_addrs
+                                );
                                 current_pool_count = contract_addrs.len(); // update the count after adding new pools
                             } else {
                                 // continue with the next batch
@@ -276,7 +286,10 @@ impl BlockchainIndexer for EvmIndexer {
                             }
                         }
                         Err(e) => {
-                            error!("Failed to check for new pools for chain id {}: {:?}", chain_id, e);
+                            error!(
+                                "Failed to check for new pools for chain id {}: {:?}",
+                                chain_id, e
+                            );
                             // continue with the next batch
                             start_block_number = end_block_number + 1;
                             end_block_number = std::cmp::min(

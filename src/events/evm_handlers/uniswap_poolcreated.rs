@@ -1,18 +1,22 @@
-use std::{sync::Arc, time::SystemTime};
+use alloy::{
+    providers::{Provider, RootProvider},
+    rpc::types::Log,
+    transports::http::Http,
+};
 use anyhow::bail;
-use log::{info, error};
-use alloy::{providers::{Provider, RootProvider}, rpc::types::Log, transports::http::Http};
+use log::{error, info};
 use rust_decimal::Decimal;
+use std::{sync::Arc, time::SystemTime};
 use tokio_postgres::Client;
 
 use crate::{
     solidity_structs::{
-        token, 
-        uniswap_v3_factory_lib::UniswapV3FactoryLib::{self}, 
-        uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance
-    }, 
-    structs::{PoolType, TokenLaunchType}, 
-    utils::{chain_id_to_chain_name, unix_to_system_time, get_token_data}
+        token,
+        uniswap_v3_factory_lib::UniswapV3FactoryLib::{self},
+        uniswap_v3_pool_lib::UniswapV3PoolLib::UniswapV3PoolLibInstance,
+    },
+    structs::{PoolType, TokenLaunchType},
+    utils::{chain_id_to_chain_name, get_token_data, unix_to_system_time},
 };
 
 pub async fn handle_uniswap_pool_created_event(
@@ -41,7 +45,7 @@ pub async fn handle_uniswap_pool_created_event(
         Ok(slot) => {
             info!("slot {:?}", slot);
             slot
-        },
+        }
         Err(e) => {
             error!(target: log_target, "Error fetching slot0 for pool {}: {:?}", pool, e);
             bail!("Error fetching slot0 for pool {}: {:?}", pool, e);
@@ -58,7 +62,9 @@ pub async fn handle_uniswap_pool_created_event(
     let metadata_json = serde_json::Value::Null;
     let etp_start_time = unix_to_system_time(launchParams.exclusiveTradingPeriodStart.to());
     let etp_end_time = unix_to_system_time(launchParams.exclusiveTradingPeriodEnd.to());
-    let extended_liquidity_lock_duration = unix_to_system_time((launchParams.extendedLiquidityLockDuration + launchParams.exclusiveTradingPeriodEnd).to());
+    let extended_liquidity_lock_duration = unix_to_system_time(
+        (launchParams.extendedLiquidityLockDuration + launchParams.exclusiveTradingPeriodEnd).to(),
+    );
     let launch_type = if launchParams.tokenLaunchType == 0 {
         TokenLaunchType::FAIR
     } else {
@@ -116,12 +122,17 @@ pub async fn handle_uniswap_pool_created_event(
                 &extended_liquidity_lock_duration,
             ],
         )
-        .await {
+        .await
+    {
         Ok(rows) => rows,
         Err(e) => {
             error!(target: log_target, "Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}", e);
-            bail!("Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}", e);
-        }};
+            bail!(
+                "Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}",
+                e
+            );
+        }
+    };
     info!(
         target: log_target, "UniswapV3FactoryLib::PoolCreated inserted a fallback response {:?}",
         rows
@@ -137,7 +148,8 @@ pub async fn handle_uniswap_pool_created_event(
     let network = chain_id_to_chain_name(chain_id);
     let address_bytes32 = format!("{:0>64}", hex::encode(token1));
 
-    let (decimals, ticker, full_name) = get_token_data(token1.clone(), chain_provider.clone()).await;
+    let (decimals, ticker, full_name) =
+        get_token_data(token1.clone(), chain_provider.clone()).await;
     let is_stable = false;
     let is_tradable = false;
     let price_usd = Decimal::from(0_i64);
@@ -155,30 +167,39 @@ pub async fn handle_uniswap_pool_created_event(
                 &token1_addr,
                 &decimals,
                 &network,
-                &address_bytes32
+                &address_bytes32,
             ],
         )
         .await
     {
         Ok(rows) => {
             info!(target: log_target, "Inserted token data into token_chains table: {:?}", rows);
-            match client.execute(tokens_query, &[
-                &ticker,
-                &full_name,
-                &is_stable,
-                &is_tradable,
-                &price_usd,
-                &description,
-                &launch_date,
-                &website,
-                &cmc_id
-            ]).await {
+            match client
+                .execute(
+                    tokens_query,
+                    &[
+                        &ticker,
+                        &full_name,
+                        &is_stable,
+                        &is_tradable,
+                        &price_usd,
+                        &description,
+                        &launch_date,
+                        &website,
+                        &cmc_id,
+                    ],
+                )
+                .await
+            {
                 Ok(rows) => {
                     info!(target: log_target, "Inserted token data into tokens table: {:?}", rows);
                 }
                 Err(e) => {
                     error!(target: log_target, "Error inserting token chain data into token_chains table: {:?}", e);
-                    bail!("Error inserting token chain data into token_chains table: {:?}", e);
+                    bail!(
+                        "Error inserting token chain data into token_chains table: {:?}",
+                        e
+                    );
                 }
             }
         }
@@ -187,6 +208,6 @@ pub async fn handle_uniswap_pool_created_event(
             bail!("Error inserting token data into tokens table: {:?}", e);
         }
     };
-    
+
     Ok(())
 }

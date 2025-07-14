@@ -1,4 +1,3 @@
-pub mod backfill;
 pub mod evm_indexer;
 pub(crate) mod raydium_events;
 pub mod solana_indexer;

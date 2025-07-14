@@ -50,4 +50,4 @@ impl TryFrom<i32> for OrderStatus {
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         OrderStatus::from_i32(value).ok_or_else(|| format!("Invalid order status: {}", value))
     }
-} 
+}

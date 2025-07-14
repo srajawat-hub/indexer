@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use log::info;
 use alloy::rpc::types::Log;
+use log::info;
+use std::sync::Arc;
 use tokio_postgres::Client;
 
 use crate::solidity_structs;
@@ -20,8 +20,7 @@ pub async fn handle_debridge_order_created_event(
 
     let debridge_order_id = hex::encode(debridgeOrderId);
 
-    let query =
-        "UPDATE received_message_on_vault SET dln_order_id = $1 WHERE order_id = $2";
+    let query = "UPDATE received_message_on_vault SET dln_order_id = $1 WHERE order_id = $2";
     let response = client
         .execute(query, &[&debridge_order_id, &order_id])
         .await

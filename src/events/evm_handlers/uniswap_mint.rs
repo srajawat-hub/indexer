@@ -1,10 +1,21 @@
-use std::{str::FromStr, sync::Arc, time::SystemTime};
+use alloy::{
+    providers::{Provider, RootProvider},
+    rpc::types::Log,
+    transports::http::Http,
+};
 use log::{error, info, warn};
-use alloy::{providers::{Provider, RootProvider}, rpc::types::Log, transports::http::Http};
 use rust_decimal::Decimal;
+use std::{str::FromStr, sync::Arc, time::SystemTime};
 use tokio_postgres::Client;
 
-use crate::{events::event_processor::{check_vault_initiated_transaction, get_liquidity_provider_address_evm, insert_liquidity_event}, solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self}, utils::unix_to_system_time};
+use crate::{
+    events::event_processor::{
+        check_vault_initiated_transaction, get_liquidity_provider_address_evm,
+        insert_liquidity_event,
+    },
+    solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self},
+    utils::unix_to_system_time,
+};
 
 pub async fn handle_uniswap_mint_event(
     log: Log,
@@ -38,10 +49,22 @@ pub async fn handle_uniswap_mint_event(
         }
     };
 
-    let transaction_receipt = chain_provider.get_transaction_receipt(raw_transaction_hash).await;
-    let (is_vault_initiated, initiator_address) = check_vault_initiated_transaction(chain_provider.clone(), &client, raw_transaction_hash.clone()).await;
+    let transaction_receipt = chain_provider
+        .get_transaction_receipt(raw_transaction_hash)
+        .await;
+    let (is_vault_initiated, initiator_address) = check_vault_initiated_transaction(
+        chain_provider.clone(),
+        &client,
+        raw_transaction_hash.clone(),
+    )
+    .await;
 
-    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(transaction_receipt, &client, periphery_contract_address).await;
+    let liquidity_decoded_user_data = get_liquidity_provider_address_evm(
+        transaction_receipt,
+        &client,
+        periphery_contract_address,
+    )
+    .await;
     let token_id = liquidity_decoded_user_data.liquidity_token_id;
 
     let user_address: String;
@@ -58,7 +81,7 @@ pub async fn handle_uniswap_mint_event(
                     Ok(row) => {
                         let address: String = row.get("user_address");
                         address
-                    },
+                    }
                     Err(e) => {
                         error!(target: log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
                         String::new()
@@ -94,7 +117,7 @@ pub async fn handle_uniswap_mint_event(
         chain_id,
         Some(is_vault_initiated),
         log_target,
-        token_id
+        token_id,
     )
     .await?;
 
