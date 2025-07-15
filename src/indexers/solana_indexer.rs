@@ -1168,6 +1168,11 @@ impl SolanaIndexer {
                 let initial_tick_i32 = tick;
                 let reserve_token_mint =
                     pool_state.get_reserve_token_mint(&token_mint_0, &token_mint_1);
+                let launchpad_token = if pool_state.reserve_token_mint_index == 0 {
+                    &token_mint_0
+                } else {
+                    &token_mint_1
+                };
                 let reserve_token_supply =
                     self.rpc_client.get_token_supply(reserve_token_mint).await?;
                 let token_supply_i64 = reserve_token_supply.amount.to_string();
@@ -1204,7 +1209,7 @@ impl SolanaIndexer {
                             &initial_sqrt,
                             &initial_tick_i32,
                             &token_supply_i64,
-                            &reserve_token_mint.to_string(),
+                            &launchpad_token.to_string(),
                             &liquidity_lock_end_time,
                         ],
                     )
