@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    enums::OrderStatus,
     events::event_processor::{DepositStatus, IntentStage, IntentVersions},
     skip_fail,
     solidity_structs::{
@@ -39,6 +40,7 @@ use solana_client::{
     client_error::reqwest, nonblocking::rpc_client::RpcClient,
     rpc_client::GetConfirmedSignaturesForAddress2Config,
 };
+use solana_sdk::clock::UnixTimestamp;
 use solana_sdk::{pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction};
 use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
 use std::fmt::{Debug, Display};
@@ -53,6 +55,7 @@ pub struct SolanaIndexer {
     chain_id: i64,
     vaults_program_id: Pubkey,
     amm_program_id: Pubkey,
+    hook_executor_program_id: Pubkey,
     rpc_client: RpcClient,
 }
 
@@ -88,6 +91,7 @@ struct Quote {
 enum ProgramName {
     Vault,
     Raydium,
+    HookExecutor,
 }
 
 impl Display for ProgramName {
@@ -95,6 +99,7 @@ impl Display for ProgramName {
         match self {
             ProgramName::Vault => write!(f, "Vault"),
             ProgramName::Raydium => write!(f, "Raydium"),
+            ProgramName::HookExecutor => write!(f, "HookExecutor"),
         }
     }
 }
@@ -224,6 +229,7 @@ impl SolanaIndexer {
         chain_id: i64,
         vaults_program_id: String,
         amm_program_id: String,
+        hook_executor_program_id: String,
     ) -> Self {
         let rpc_client = RpcClient::new(rpc_url.clone());
         Self {
@@ -232,6 +238,7 @@ impl SolanaIndexer {
             chain_id,
             vaults_program_id: Pubkey::from_str(&vaults_program_id).unwrap(),
             amm_program_id: Pubkey::from_str(&amm_program_id).unwrap(),
+            hook_executor_program_id: Pubkey::from_str(&hook_executor_program_id).unwrap(),
             rpc_client,
         }
     }
@@ -248,11 +255,12 @@ impl SolanaIndexer {
             previously_fetched_slot
         );
 
-        // Process vault and raydium programs separately in parallel
+        // Process vault, raydium, and hook executor programs separately in parallel
         let vault_task = {
             let database_client = database_client.clone();
             let vault_program_id = self.vaults_program_id;
             let amm_program_id = self.amm_program_id;
+            let hook_executor_program_id = self.hook_executor_program_id;
             let rpc_url = self.rpc_url.clone();
             let chain_id = self.chain_id;
             tokio::spawn(async move {
@@ -261,7 +269,9 @@ impl SolanaIndexer {
                         database_client.clone(),
                         rpc_url.clone(),
                         vault_program_id,
+                        vault_program_id,
                         amm_program_id,
+                        hook_executor_program_id,
                         ProgramName::Vault,
                         previously_fetched_slot,
                         chain_id,
@@ -278,6 +288,7 @@ impl SolanaIndexer {
             let database_client = database_client.clone();
             let amm_program_id = self.amm_program_id;
             let vault_program_id = self.vaults_program_id;
+            let hook_executor_program_id = self.hook_executor_program_id;
             let rpc_url = self.rpc_url.clone();
             let chain_id = self.chain_id;
             tokio::spawn(async move {
@@ -287,6 +298,8 @@ impl SolanaIndexer {
                         rpc_url.clone(),
                         amm_program_id,
                         vault_program_id,
+                        amm_program_id,
+                        hook_executor_program_id,
                         ProgramName::Raydium,
                         previously_fetched_slot,
                         chain_id,
@@ -299,8 +312,36 @@ impl SolanaIndexer {
             })
         };
 
-        // Wait for both tasks to complete
-        let _ = tokio::try_join!(vault_task, raydium_task)?;
+        let hook_executor_task = {
+            let database_client = database_client.clone();
+            let hook_executor_program_id = self.hook_executor_program_id;
+            let vault_program_id = self.vaults_program_id;
+            let amm_program_id = self.amm_program_id;
+            let rpc_url = self.rpc_url.clone();
+            let chain_id = self.chain_id;
+            tokio::spawn(async move {
+                loop {
+                    let result = Self::process_program_transactions(
+                        database_client.clone(),
+                        rpc_url.clone(),
+                        hook_executor_program_id,
+                        vault_program_id,
+                        amm_program_id,
+                        hook_executor_program_id,
+                        ProgramName::HookExecutor,
+                        previously_fetched_slot,
+                        chain_id,
+                    )
+                    .await;
+                    if let Err(e) = result {
+                        error!("Error processing hook executor transactions: {:?}", e);
+                    }
+                }
+            })
+        };
+
+        // Wait for all tasks to complete
+        let _ = tokio::try_join!(vault_task, raydium_task, hook_executor_task)?;
 
         Ok(())
     }
@@ -310,7 +351,9 @@ impl SolanaIndexer {
         database_client: Arc<Client>,
         rpc_url: String,
         program_id: Pubkey,
-        other_program_id: Pubkey, // needed for parsing events
+        vault_program_id: Pubkey,
+        amm_program_id: Pubkey,
+        hook_executor_program_id: Pubkey,
         program_name: ProgramName,
         previously_fetched_slot: u64,
         chain_id: i64,
@@ -426,7 +469,9 @@ impl SolanaIndexer {
                     &database_client,
                     &rpc_client,
                     &program_id,
-                    &other_program_id,
+                    &vault_program_id,
+                    &amm_program_id,
+                    &hook_executor_program_id,
                     program_name,
                     all_historical_sigs.clone(),
                     chain_id,
@@ -530,7 +575,9 @@ impl SolanaIndexer {
                 &database_client,
                 &rpc_client,
                 &program_id,
-                &other_program_id,
+                &vault_program_id,
+                &amm_program_id,
+                &hook_executor_program_id,
                 program_name,
                 sigs.clone(),
                 chain_id,
@@ -574,7 +621,9 @@ impl SolanaIndexer {
         database_client: &Arc<Client>,
         rpc_client: &RpcClient,
         program_id: &Pubkey,
-        other_program_id: &Pubkey,
+        vault_program_id: &Pubkey,
+        amm_program_id: &Pubkey,
+        hook_executor_program_id: &Pubkey,
         program_name: ProgramName,
         sigs: Vec<RpcConfirmedTransactionStatusWithSignature>,
         chain_id: i64,
@@ -727,14 +776,20 @@ impl SolanaIndexer {
                 rpc_url: rpc_client.url().to_string(),
                 // _ws_url: "".to_string(),
                 chain_id,
-                vaults_program_id: *other_program_id,
-                amm_program_id: *program_id,
+                vaults_program_id: *vault_program_id,
+                amm_program_id: *amm_program_id,
+                hook_executor_program_id: *hook_executor_program_id,
                 rpc_client: RpcClient::new(rpc_client.url().to_string()),
             };
 
-            // Use the unified parse_solana_events method for both vault and raydium events
+            // Use the unified parse_solana_events method for vault, raydium, and hook executor events
             let all_events = temp_indexer
-                .parse_solana_events(&logs, program_id, other_program_id)
+                .parse_solana_events(
+                    &logs,
+                    amm_program_id,
+                    vault_program_id,
+                    hook_executor_program_id,
+                )
                 .await?;
 
             // Process events based on their type
@@ -772,7 +827,25 @@ impl SolanaIndexer {
                             )
                             .await;
                     }
-                    Events::Vaults(_) | Events::Raydium(_) => (),
+                    Events::HookExecutor(hook_executor_events)
+                        if program_name == ProgramName::HookExecutor =>
+                    {
+                        temp_indexer
+                            .process_hook_executor_events(
+                                database_client,
+                                &mut sigs.clone(),
+                                index,
+                                &tx_cost,
+                                &compute_units_used,
+                                system_time,
+                                block_height,
+                                transaction_hash.clone(),
+                                block_number,
+                                hook_executor_events,
+                            )
+                            .await;
+                    }
+                    Events::Vaults(_) | Events::Raydium(_) | Events::HookExecutor(_) => (),
                 }
             }
 
@@ -1100,6 +1173,260 @@ impl SolanaIndexer {
                 .await
             {
                 error!(target: "solana_indexer", "Error in process_raydium_event: {:?}", e);
+            }
+        }
+    }
+
+    async fn process_hook_executor_events(
+        &self,
+        database_client: &Arc<Client>,
+        _sigs: &mut Vec<RpcConfirmedTransactionStatusWithSignature>,
+        _index: usize,
+        _tx_cost: &String,
+        _compute_units_used: &i64,
+        system_time: SystemTime,
+        _block_height: i64,
+        transaction_hash: String,
+        block_number: i64,
+        events: Vec<HookExecutorEvent>,
+    ) {
+        for event in events {
+            match event {
+                HookExecutorEvent::OrderPending {
+                    protocol_id,
+                    order_hash,
+                    order_id,
+                    recipient,
+                    token,
+                    amount,
+                    timeout_timestamp,
+                    destination_chain_id,
+                    reason,
+                } => {
+                    let log_target = "solana_hook_executor_order_pending";
+                    info!(target: log_target, "HookExecutor::OrderPending orderId={}, orderHash={:?}, recipient={}", order_id, order_hash, recipient);
+
+                    let query = r#"
+                        INSERT INTO hook_executor_orders
+                        (protocol_id, order_hash, order_id, recipient, token, amount, timeout_timestamp,
+                         reason, transaction_hash, block_number, timestamp, status,
+                         destination_chain_id, additional_data)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        ON CONFLICT (order_hash) DO UPDATE SET
+                            status = EXCLUDED.status,
+                            reason = EXCLUDED.reason,
+                            timestamp = EXCLUDED.timestamp,
+                            transaction_hash = EXCLUDED.transaction_hash,
+                            destination_chain_id = EXCLUDED.destination_chain_id,
+                            additional_data = EXCLUDED.additional_data
+                    "#;
+
+                    let order_hash_hex = format!("0x{}", hex::encode(order_hash));
+                    let amount_decimal = Decimal::from_u64(amount).unwrap_or_default();
+
+                    match database_client
+                        .execute(
+                            query,
+                            &[
+                                &(protocol_id as i32),
+                                &order_hash_hex,
+                                &(order_id as i64),
+                                &recipient.to_string(),
+                                &token.to_string(),
+                                &amount_decimal,
+                                &timeout_timestamp,
+                                &reason,
+                                &transaction_hash,
+                                &block_number,
+                                &system_time,
+                                &OrderStatus::Pending.to_i32(),
+                                &(destination_chain_id as i64),
+                                &None::<String>, // additional_data
+                            ],
+                        )
+                        .await
+                    {
+                        Ok(rows) => {
+                            info!(target: log_target, "OrderPending inserted/updated: {:?} rows", rows);
+                        }
+                        Err(e) => {
+                            error!(target: log_target, "Failed to insert OrderPending: {:?}", e);
+                        }
+                    }
+                }
+                HookExecutorEvent::OrderVerified { order_hash, .. } => {
+                    let log_target = "solana_hook_executor_order_verified";
+                    info!(target: log_target, "HookExecutor::OrderVerified orderHash={:?}", order_hash);
+
+                    let order_hash_hex = format!("0x{}", hex::encode(order_hash));
+                    let query = r#"
+                        UPDATE hook_executor_orders
+                        SET status = $1, transaction_hash = $2, timestamp = $3
+                        WHERE order_hash = $4
+                    "#;
+
+                    match database_client
+                        .execute(
+                            query,
+                            &[
+                                &OrderStatus::Verified.to_i32(),
+                                &transaction_hash,
+                                &system_time,
+                                &order_hash_hex,
+                            ],
+                        )
+                        .await
+                    {
+                        Ok(rows) => {
+                            if rows > 0 {
+                                info!(target: log_target, "OrderVerified updated: {:?} rows", rows);
+                            } else {
+                                info!(target: log_target, "OrderVerified received before OrderPending - no action taken");
+                            }
+                        }
+                        Err(e) => {
+                            error!(target: log_target, "Failed to update OrderVerified: {:?}", e);
+                        }
+                    }
+                }
+                HookExecutorEvent::OrderFailed {
+                    order_hash,
+                    order_id,
+                    reason,
+                    ..
+                } => {
+                    let log_target = "solana_hook_executor_order_failed";
+                    info!(target: log_target, "HookExecutor::OrderFailed orderId={}, orderHash={:?}", order_id, order_hash);
+
+                    let order_hash_hex = format!("0x{}", hex::encode(order_hash));
+                    let query = r#"
+                        UPDATE hook_executor_orders
+                        SET status = $1, reason = $2, transaction_hash = $3, timestamp = $4
+                        WHERE order_hash = $5
+                    "#;
+
+                    match database_client
+                        .execute(
+                            query,
+                            &[
+                                &OrderStatus::Failed.to_i32(),
+                                &reason,
+                                &transaction_hash,
+                                &system_time,
+                                &order_hash_hex,
+                            ],
+                        )
+                        .await
+                    {
+                        Ok(rows) => {
+                            if rows > 0 {
+                                info!(target: log_target, "OrderFailed updated: {:?} rows", rows);
+                            } else {
+                                error!(target: log_target, "OrderFailed received before OrderPending - no action taken");
+                            }
+                        }
+                        Err(e) => {
+                            error!(target: log_target, "Failed to update OrderFailed: {:?}", e);
+                        }
+                    }
+                }
+                HookExecutorEvent::OrderTimedOut {
+                    order_hash,
+                    order_id,
+                    ..
+                } => {
+                    let log_target = "solana_hook_executor_order_timedout";
+                    info!(target: log_target, "HookExecutor::OrderTimedOut orderId={}, orderHash={:?}", order_id, order_hash);
+
+                    let order_hash_hex = format!("0x{}", hex::encode(order_hash));
+                    let query = r#"
+                        UPDATE hook_executor_orders
+                        SET status = $1, transaction_hash = $2, timestamp = $3
+                        WHERE order_hash = $4
+                    "#;
+
+                    match database_client
+                        .execute(
+                            query,
+                            &[
+                                &OrderStatus::TimedOut.to_i32(),
+                                &transaction_hash,
+                                &system_time,
+                                &order_hash_hex,
+                            ],
+                        )
+                        .await
+                    {
+                        Ok(rows) => {
+                            if rows > 0 {
+                                info!(target: log_target, "OrderTimedOut updated: {:?} rows", rows);
+                            } else {
+                                info!(target: log_target, "OrderTimedOut received before OrderPending - no action taken");
+                            }
+                        }
+                        Err(e) => {
+                            error!(target: log_target, "Failed to update OrderTimedOut: {:?}", e);
+                        }
+                    }
+                }
+                HookExecutorEvent::HyperlaneMessageReceived {
+                    origin,
+                    sender,
+                    message,
+                    timestamp: _,
+                } => {
+                    let log_target = "solana_hook_executor_hyperlane_message_received";
+                    info!(target: log_target, "HookExecutor::HyperlaneMessageReceived from origin={}, sender={:?}, orderId={}", origin, sender, message.order_id);
+
+                    let query = r#"
+                        INSERT INTO hook_executor_orders
+                        (protocol_id, order_hash, order_id, recipient, token, amount, timeout_timestamp,
+                         reason, transaction_hash, block_number, timestamp, status,
+                         destination_chain_id, additional_data)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        ON CONFLICT (order_hash) DO UPDATE SET
+                            status = EXCLUDED.status,
+                            reason = EXCLUDED.reason,
+                            timestamp = EXCLUDED.timestamp,
+                            transaction_hash = EXCLUDED.transaction_hash,
+                            destination_chain_id = EXCLUDED.destination_chain_id,
+                            additional_data = EXCLUDED.additional_data
+                    "#;
+
+                    let order_hash_hex = format!("0x{}", hex::encode(message.order_hash));
+                    let amount_decimal = Decimal::from_u64(message.amount).unwrap_or_default();
+                    let reason = format!("Hyperlane message received from origin {}", origin);
+
+                    match database_client
+                        .execute(
+                            query,
+                            &[
+                                &(message.protocol_id as i32),
+                                &order_hash_hex,
+                                &(message.order_id as i64),
+                                &message.recipient.to_string(),
+                                &message.token.to_string(),
+                                &amount_decimal,
+                                &message.timeout_timestamp,
+                                &reason,
+                                &transaction_hash,
+                                &block_number,
+                                &system_time,
+                                &OrderStatus::Pending.to_i32(),
+                                &(message.destination_chain_id as i64),
+                                &Some(format!("{{\"origin\":{},\"sender\":\"{}\",\"additional_data\":\"{}\"}}", origin, hex::encode(sender), hex::encode(&message.additional_data))),
+                            ],
+                        )
+                        .await
+                    {
+                        Ok(rows) => {
+                            info!(target: log_target, "HyperlaneMessageReceived inserted/updated: {:?} rows", rows);
+                        }
+                        Err(e) => {
+                            error!(target: log_target, "Failed to insert HyperlaneMessageReceived: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1689,6 +2016,7 @@ impl BlockchainIndexer for SolanaIndexer {
 enum Events {
     Raydium(Vec<RaydiumEvent>),
     Vaults(Vec<VaultsEvent>),
+    HookExecutor(Vec<HookExecutorEvent>),
 }
 
 impl SolanaIndexer {
@@ -1708,6 +2036,34 @@ impl SolanaIndexer {
             &mut &self.rpc_client.get_account_data(&amm_config_pubkey).await?[..],
         )?;
         Ok(amm_config)
+    }
+
+    async fn parse_hook_executor_events(
+        &self,
+        logs: &[&str],
+    ) -> anyhow::Result<Vec<HookExecutorEvent>> {
+        let serialized_events: Vec<&str> = logs
+            .iter()
+            .filter_map(|log| log.strip_prefix("Program data: "))
+            .collect();
+        let mut events = vec![];
+        for event in serialized_events {
+            let decoded_event = base64::prelude::BASE64_STANDARD.decode(event);
+            match decoded_event {
+                Ok(decoded_event) => {
+                    let decoded_event: Result<HookExecutorEvent, String> =
+                        BorshDeserialize::try_from_slice(&decoded_event).map_err(|e| e.to_string());
+                    if let Ok(decoded_event) = decoded_event {
+                        events.push(decoded_event);
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "solana_indexer", "Failed to decode hook executor event data: {:?}", e);
+                    continue;
+                }
+            }
+        }
+        Ok(events)
     }
 
     async fn parse_raydium_events(&self, logs: &[&str]) -> anyhow::Result<Vec<RaydiumEvent>> {
@@ -1795,6 +2151,7 @@ impl SolanaIndexer {
     /// * `logs` – A slice of log lines (`Vec<String>`) from a confirmed transaction.
     /// * `raydium_program_id` – The public key of the Raydium program whose events we track.
     /// * `vault_program_id` – The public key of the Vaults program whose events we track.
+    /// * `hook_executor_program_id` – The public key of the HookExecutor program whose events we track.
     ///
     /// # Returns
     ///
@@ -1804,6 +2161,7 @@ impl SolanaIndexer {
         logs: &[&str],
         raydium_program_id: &Pubkey,
         vaults_program_id: &Pubkey,
+        hook_executor_program_id: &Pubkey,
     ) -> anyhow::Result<Vec<Events>> {
         let mut events = Vec::new();
         let mut current_program = None;
@@ -1833,6 +2191,10 @@ impl SolanaIndexer {
                             let evs = self.parse_raydium_events(&event_logs).await?;
                             if !evs.is_empty() {
                                 events.push(Events::Raydium(evs));
+                            }
+                            let evs = self.parse_hook_executor_events(&event_logs).await?;
+                            if !evs.is_empty() {
+                                events.push(Events::HookExecutor(evs));
                             }
 
                             current_program = None;
@@ -2006,6 +2368,70 @@ pub enum LocalInteropProvider {
     Hyperlane,
 }
 
+/// Unified order processing data (mirroring the Solidity struct)
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+#[borsh(crate = "::borsh")]
+pub struct LocalOrderProcessingData {
+    pub protocol_id: u8,
+    pub order_hash: [u8; 32],
+    pub order_id: u64,
+    pub recipient: Pubkey,
+    pub token: Pubkey,
+    pub amount: u64,
+    pub timeout_timestamp: UnixTimestamp,
+    pub destination_chain_id: u32,
+    pub additional_data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
+pub enum HookExecutorEvent {
+    HyperlaneMessageReceived {
+        origin: u32,
+        sender: [u8; 32],
+        message: LocalOrderProcessingData,
+        timestamp: i64,
+    },
+    OrderPending {
+        protocol_id: u8,
+        order_hash: [u8; 32],
+        order_id: u64,
+        recipient: Pubkey,
+        token: Pubkey,
+        amount: u64,
+        timeout_timestamp: i64,
+        destination_chain_id: u32,
+        reason: String,
+    },
+    OrderVerified {
+        protocol_id: u8,
+        order_hash: [u8; 32],
+        order_id: u64,
+        recipient: Pubkey,
+        token: Pubkey,
+        amount: u64,
+        fulfiller: Option<Pubkey>,
+    },
+    OrderFailed {
+        protocol_id: u8,
+        order_hash: [u8; 32],
+        order_id: u64,
+        recipient: Pubkey,
+        token: Pubkey,
+        amount: u64,
+        reason: String,
+    },
+    OrderTimedOut {
+        protocol_id: u8,
+        order_hash: [u8; 32],
+        order_id: u64,
+        recipient: Pubkey,
+        token: Pubkey,
+        amount: u64,
+        timeout_timestamp: i64,
+    },
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Payload {
     jsonrpc: String,
@@ -2046,12 +2472,14 @@ mod tests {
         let url = "https://api.mainnet-beta.solana.com".to_string();
         let program_id = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
         let amm_program_id = pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
+        let hook_executor_program_id = pubkey!("8TVrvygc7cJiTuzA56x8hUWvonhqonYSFfmuDotdjzSM");
         let indexer = SolanaIndexer::new(
             url.clone(),
             // String::new(),
             0,
             program_id.to_string(),
             amm_program_id.to_string(),
+            hook_executor_program_id.to_string(),
         );
         let rpc_client = RpcClient::new(url);
         let tx_hash = Signature::from_str(
@@ -2075,6 +2503,7 @@ mod tests {
                 &logs,
                 &pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"),
                 &program_id,
+                &hook_executor_program_id,
             )
             .await
             .unwrap();
@@ -2114,6 +2543,7 @@ mod tests {
         let url = "https://api.mainnet-beta.solana.com".to_string();
         let program_id = pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz");
         let amm_program_id = pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
+        let hook_executor_program_id = pubkey!("8TVrvygc7cJiTuzA56x8hUWvonhqonYSFfmuDotdjzSM");
 
         let indexer = SolanaIndexer::new(
             url.clone(),
@@ -2121,6 +2551,7 @@ mod tests {
             0,
             program_id.to_string(),
             amm_program_id.to_string(),
+            hook_executor_program_id.to_string(),
         );
         let rpc_client = RpcClient::new(url);
         let tx_hash = Signature::from_str(
@@ -2151,6 +2582,7 @@ mod tests {
                 &logs,
                 &pubkey!("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"),
                 &pubkey!("CQTC16KM4XqjVJ8ASMPLxjv3siGAQLVcMauPGu1jMGNz"),
+                &hook_executor_program_id,
             )
             .await
             .unwrap();
@@ -2185,6 +2617,7 @@ mod tests {
         let url = "https://api.mainnet-beta.solana.com".to_string();
         let program_id = pubkey!("2RBS3DPck8CoF9b31nQDRE3j9xsx5io1STAk2irhgoBC");
         let amm_program_id = pubkey!("3eap9FEhnPAjd9aatu4Bw2osw6XPZ8cZJHjQAv2DjWnH");
+        let hook_executor_program_id = pubkey!("8TVrvygc7cJiTuzA56x8hUWvonhqonYSFfmuDotdjzSM");
 
         let indexer = SolanaIndexer::new(
             url.clone(),
@@ -2192,6 +2625,7 @@ mod tests {
             0,
             program_id.to_string(),
             amm_program_id.to_string(),
+            hook_executor_program_id.to_string(),
         );
         let rpc_client = RpcClient::new(url);
         let tx_hash = Signature::from_str(
@@ -2222,6 +2656,7 @@ mod tests {
                 &logs,
                 &pubkey!("3eap9FEhnPAjd9aatu4Bw2osw6XPZ8cZJHjQAv2DjWnH"),
                 &pubkey!("2RBS3DPck8CoF9b31nQDRE3j9xsx5io1STAk2irhgoBC"),
+                &hook_executor_program_id,
             )
             .await
             .unwrap();

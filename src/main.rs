@@ -77,6 +77,7 @@ fn create_solana_indexer(
     url: &str,
     vaults_program_id: &str,
     amm_program_id: &str,
+    hook_executor_program_id: &str,
     chain_id: &i64,
 ) -> Box<dyn BlockchainIndexer + Send + Sync> {
     Box::new(SolanaIndexer::new(
@@ -85,6 +86,7 @@ fn create_solana_indexer(
         *chain_id,
         vaults_program_id.to_string(),
         amm_program_id.to_string(),
+        hook_executor_program_id.to_string(),
     ))
 }
 
@@ -171,10 +173,16 @@ async fn main() {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("AMM contract not set for Solana chain"))
                 .unwrap();
+            let hook_executor_program_id = conf
+                .hook_executor_contract
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("HookExecutor contract not set for Solana chain"))
+                .unwrap();
             indexers.push(create_solana_indexer(
                 &conf.url,
                 &conf.contract,
                 amm_program_id,
+                hook_executor_program_id,
                 &conf.chain_id,
             ));
         } else {
