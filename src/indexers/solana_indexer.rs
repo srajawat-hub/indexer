@@ -1427,6 +1427,7 @@ impl SolanaIndexer {
                         }
                     }
                 }
+                _ => {}
             }
         }
     }
@@ -2167,6 +2168,14 @@ impl SolanaIndexer {
         let mut current_program = None;
         let mut event_logs: Vec<&str> = Vec::new();
 
+        // let vault_events = get_events_from_logs(&logs);
+        // let hook_executor_events = self.parse_hook_executor_events(&logs).await?;
+        // let raydium_events = self.parse_raydium_events(&logs).await?;
+
+        // events.push(Events::Vaults(vault_events));
+        // events.push(Events::HookExecutor(hook_executor_events));
+        // events.push(Events::Raydium(raydium_events));
+
         for line in logs {
             // Track callstack for each program to maintain a proper scope for the events
             if let Some(id_str) = line
@@ -2386,12 +2395,39 @@ pub struct LocalOrderProcessingData {
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 #[borsh(crate = "::borsh")]
 pub enum HookExecutorEvent {
+    /// Emitted when the Hook Executor is initialized
+    HookExecutorInitialized {
+        authority: Pubkey,
+        hyperlane_mailbox: Pubkey,
+        vault: Pubkey,
+    },
+
+    /// Emitted when a Hyperlane message is received
     HyperlaneMessageReceived {
         origin: u32,
         sender: [u8; 32],
         message: LocalOrderProcessingData,
         timestamp: i64,
     },
+
+    /// Emitted when an order is verified and completed
+    OrderVerified {
+        protocol_id: u8,
+        order_hash: [u8; 32],
+        order_id: u64,
+        recipient: Pubkey,
+        token: Pubkey,
+        amount: u64,
+        fulfiller: Option<Pubkey>,
+    },
+
+    /// Emitted when an order retry is requested
+    OrderRetryRequested {
+        order_hash: [u8; 32],
+        requester: Pubkey,
+    },
+
+    /// Emitted when an order is pending
     OrderPending {
         protocol_id: u8,
         order_hash: [u8; 32],
@@ -2403,15 +2439,8 @@ pub enum HookExecutorEvent {
         destination_chain_id: u32,
         reason: String,
     },
-    OrderVerified {
-        protocol_id: u8,
-        order_hash: [u8; 32],
-        order_id: u64,
-        recipient: Pubkey,
-        token: Pubkey,
-        amount: u64,
-        fulfiller: Option<Pubkey>,
-    },
+
+    /// Emitted when an order fails
     OrderFailed {
         protocol_id: u8,
         order_hash: [u8; 32],
@@ -2421,6 +2450,8 @@ pub enum HookExecutorEvent {
         amount: u64,
         reason: String,
     },
+
+    /// Emitted when an order times out
     OrderTimedOut {
         protocol_id: u8,
         order_hash: [u8; 32],
@@ -2429,6 +2460,56 @@ pub enum HookExecutorEvent {
         token: Pubkey,
         amount: u64,
         timeout_timestamp: i64,
+    },
+
+    /// Emitted when vault is updated
+    VaultUpdated {
+        old_vault: Pubkey,
+        new_vault: Pubkey,
+    },
+
+    /// Emitted when Hyperlane mailbox is updated
+    HyperlaneMailboxUpdated {
+        old_mailbox: Pubkey,
+        new_mailbox: Pubkey,
+    },
+
+    /// Emitted when ISM is updated
+    InterchainSecurityModuleUpdated { interchain_security_module: Pubkey },
+
+    /// Emitted when new authority is proposed
+    NewAuthorityProposed {
+        current_authority: Pubkey,
+        proposed_authority: Pubkey,
+        timestamp: i64,
+    },
+
+    /// Emitted when authority is updated
+    AuthorityUpdated {
+        old_authority: Pubkey,
+        new_authority: Pubkey,
+    },
+
+    /// Emitted when emergency withdrawal occurs
+    EmergencyWithdraw {
+        authority: Pubkey,
+        token: Option<Pubkey>,
+        amount: u64,
+        destination: Pubkey,
+    },
+
+    /// Emitted when acknowledgment is sent
+    AcknowledgmentSent {
+        order_id: u64,
+        success: bool,
+        error_message: Option<String>,
+        vault: Pubkey,
+    },
+
+    /// Protocol contract was updated
+    ProtocolContractUpdated {
+        protocol_id: u8,
+        contract_address: Pubkey,
     },
 }
 
