@@ -160,22 +160,30 @@ pub async fn handle_uniswap_swap_event(
             break 'calc ("0".to_string(), "0".to_string(), None);
         }
 
-        let trade_price = formatted_amount_out / formatted_amount_in;
-        info!(target: log_target, "Trade price calculated: {}", trade_price);
+        // Normalize price to always represent "tokens per USDC"
+        let normalized_price = if token_in.to_lowercase() == base_token.to_lowercase() {
+            // USDC -> Token swap: price = tokens_out / usdc_in
+            formatted_amount_out / formatted_amount_in
+        } else {
+            // Token -> USDC swap: price = tokens_in / usdc_out (inverse)
+            formatted_amount_in / formatted_amount_out
+        };
+
+        info!(target: log_target, "Normalized price calculated: {}", normalized_price);
 
         if token_in.to_lowercase() == base_token.to_lowercase() {
             // If token_in is the base token, calculate amount_in_usd based on base token price
             amount_in_usd_value = formatted_amount_in * base_token_usd_price;
 
             // launchpad token
-            let amount_out_usd_price = trade_price * base_token_usd_price;
+            let amount_out_usd_price = normalized_price * base_token_usd_price;
             amount_out_usd_value = formatted_amount_out * amount_out_usd_price;
         } else {
             // If token_out is the base token, calculate amount_out_usd based on base token price
             amount_out_usd_value = formatted_amount_out * base_token_usd_price;
 
             // launchpad token
-            let amount_in_usd_price = (1.0 / trade_price) * base_token_usd_price;
+            let amount_in_usd_price = (1.0 / normalized_price) * base_token_usd_price;
             amount_in_usd_value = formatted_amount_in * amount_in_usd_price;
         };
 
@@ -183,7 +191,7 @@ pub async fn handle_uniswap_swap_event(
         (
             amount_in_usd_value.to_string(),
             amount_out_usd_value.to_string(),
-            Some(trade_price),
+            Some(normalized_price),
         )
     };
 

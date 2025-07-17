@@ -1271,12 +1271,19 @@ impl SolanaIndexer {
                     )
                 };
 
-                // Calculate price if amounts are valid
+                // Calculate normalized price - always represent "tokens per USDC"
+                let usdc_address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
                 let price = if let (Ok(amt_in), Ok(amt_out)) =
                     (amount_in.parse::<f64>(), amount_out.parse::<f64>())
                 {
                     if amt_in > 0.0 {
-                        Some(amt_out / amt_in)
+                        if token_in == usdc_address {
+                            // USDC -> Token swap: price = tokens_out / usdc_in
+                            Some(amt_out / amt_in)
+                        } else {
+                            // Token -> USDC swap: price = tokens_in / usdc_out
+                            Some(amt_in / amt_out)
+                        }
                     } else {
                         None
                     }
