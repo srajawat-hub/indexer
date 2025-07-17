@@ -2,7 +2,9 @@ use crate::events::event_processor::{
     fetch_intent_initiator, get_fees_data, update_intent_state, IntentStage, IntentVersions,
 };
 use crate::solidity_structs::intent_lib_v2::IntentLibV2;
-use crate::solidity_structs::{self, ReceiverUserAddressData, ReceiverVaultData, SolidityOrder};
+use crate::solidity_structs::{
+    self, ReceiverUserAddressData, ReceiverVaultData, SolidityOrder, SolutionTypeCrossChainData,
+};
 use crate::structs::ResultCosts;
 use crate::utils::{get_token_decimals, get_usd_value_of_token};
 use alloy::dyn_abi::SolType;
@@ -48,6 +50,18 @@ pub async fn handle_order_created_event(
     let solution_type = order_struct.solution.enumVariant as i32;
     let receiver_type: i32 = order_struct.receiver.enumVariant as i32;
 
+    let solution_type_cross_chain_variant = if order_struct.solution.enumVariant as i32 == 2 {
+        // cross chain transaction
+        match SolutionTypeCrossChainData::abi_decode(&order_struct.solution.data, true) {
+            Ok(cross_chain_solution) => {
+                Some(cross_chain_solution.liquidityNetwork.enumVariant as i32)
+            }
+            Err(e) => None,
+        }
+    } else {
+        None
+    };
+
     let receiver_data = order_struct.receiver.data;
     let receiver_address: String;
     if receiver_type == 0 {
@@ -79,7 +93,7 @@ pub async fn handle_order_created_event(
         .to_string();
 
     let query: &str =
-        "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (transaction_hash) DO NOTHING";
+        "INSERT INTO order_created VALUES(DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) ON CONFLICT (transaction_hash) DO NOTHING";
     let response = client
         .execute(
             query,
@@ -103,6 +117,7 @@ pub async fn handle_order_created_event(
                 &receiver_address,
                 &amount_in_usd,
                 &amount_out_usd,
+                &solution_type_cross_chain_variant,
             ],
         )
         .await

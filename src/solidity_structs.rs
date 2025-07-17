@@ -533,7 +533,9 @@ sol! {
     #[derive(Debug)]
     enum LiquidityNetworkEnum {
         DLN,
-        MockedLN
+        MockedLN,
+        Mayan,
+        OneInch
     }
 
     #[derive(Debug)]
