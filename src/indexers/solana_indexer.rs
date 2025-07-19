@@ -24,7 +24,7 @@ use crate::indexers::raydium_events::{
     CreatePersonalPositionEvent, DecreaseLiquidityEvent, IncreaseLiquidityEvent, PoolCreatedEvent,
     PoolCreatedEventWithState, PoolState, SwapEvent, AMM_CONFIG_SEED,
 };
-use crate::utils::unix_to_system_time;
+use crate::utils::{get_token_decimals, unix_to_system_time};
 use alloy::dyn_abi::SolType;
 use anchor_lang::{AccountDeserialize, Discriminator};
 use async_trait::async_trait;
@@ -1599,20 +1599,41 @@ impl SolanaIndexer {
                     )
                 };
 
+                // Get token decimals for proper formatting
+                let token_in_decimals =
+                    get_token_decimals(&token_in, &self.chain_id.to_string()).await;
+                let token_out_decimals =
+                    get_token_decimals(&token_out, &self.chain_id.to_string()).await;
+
+                // Format amounts based on decimals
+                let formatted_amt_in = if let Ok(amt) = amount_in.parse::<f64>() {
+                    amt / 10_f64.powf(token_in_decimals)
+                } else {
+                    0.0
+                };
+
+                let formatted_amt_out = if let Ok(amt) = amount_out.parse::<f64>() {
+                    amt / 10_f64.powf(token_out_decimals)
+                } else {
+                    0.0
+                };
+
                 // Calculate normalized price - always represent "tokens per USDC"
                 let usdc_address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-                let price = if let (Ok(amt_in), Ok(amt_out)) =
-                    (amount_in.parse::<f64>(), amount_out.parse::<f64>())
-                {
-                    if amt_in > 0.0 {
-                        if token_in == usdc_address {
-                            // USDC -> Token swap: price = tokens_out / usdc_in
-                            Some(amt_out / amt_in)
-                        } else {
-                            // Token -> USDC swap: price = tokens_in / usdc_out
-                            Some(amt_in / amt_out)
-                        }
+                let price = if formatted_amt_in > 0.0 && formatted_amt_out > 0.0 {
+                    let calculated_price = if token_in == usdc_address {
+                        // USDC -> Token swap: price = tokens_out / usdc_in
+                        formatted_amt_out / formatted_amt_in
                     } else {
+                        // Token -> USDC swap: price = tokens_in / usdc_out
+                        formatted_amt_in / formatted_amt_out
+                    };
+
+                    // Check if price is finite (not NaN or infinity)
+                    if calculated_price.is_finite() {
+                        Some(calculated_price)
+                    } else {
+                        warn!(target: "solana_indexer", "Calculated price is not finite (NaN or Inf), skipping price calculation");
                         None
                     }
                 } else {
