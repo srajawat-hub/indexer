@@ -1618,15 +1618,15 @@ impl SolanaIndexer {
                     0.0
                 };
 
-                // Calculate normalized price - always represent "tokens per USDC"
+                // Calculate normalized price - always represent "USDC per token"
                 let usdc_address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
                 let price = if formatted_amt_in > 0.0 && formatted_amt_out > 0.0 {
                     let calculated_price = if token_in == usdc_address {
-                        // USDC -> Token swap: price = tokens_out / usdc_in
-                        formatted_amt_out / formatted_amt_in
-                    } else {
-                        // Token -> USDC swap: price = tokens_in / usdc_out
+                        // USDC -> Token swap: price = usdc_in / tokens_out
                         formatted_amt_in / formatted_amt_out
+                    } else {
+                        // Token -> USDC swap: price = usdc_out / tokens_in
+                        formatted_amt_out / formatted_amt_in
                     };
 
                     // Check if price is finite (not NaN or infinity)

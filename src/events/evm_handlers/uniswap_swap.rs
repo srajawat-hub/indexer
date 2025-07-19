@@ -160,13 +160,13 @@ pub async fn handle_uniswap_swap_event(
             break 'calc ("0".to_string(), "0".to_string(), None);
         }
 
-        // Normalize price to always represent "tokens per USDC"
+        // Normalize price to always represent "USDC per token"
         let normalized_price = if token_in.to_lowercase() == base_token.to_lowercase() {
-            // USDC -> Token swap: price = tokens_out / usdc_in
-            formatted_amount_out / formatted_amount_in
-        } else {
-            // Token -> USDC swap: price = tokens_in / usdc_out (inverse)
+            // USDC -> Token swap: price = usdc_in / tokens_out
             formatted_amount_in / formatted_amount_out
+        } else {
+            // Token -> USDC swap: price = usdc_out / tokens_in
+            formatted_amount_out / formatted_amount_in
         };
 
         info!(target: log_target, "Normalized price calculated: {}", normalized_price);
