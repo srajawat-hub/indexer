@@ -516,7 +516,8 @@ sol! {
     #[derive(Debug)]
     enum AggregatorEnum {
         Jupiter,
-        OneInch
+        OneInch,
+        Hashflow
     }
 
     #[derive(Debug)]

@@ -4,6 +4,7 @@ use crate::events::event_processor::{
 use crate::solidity_structs::intent_lib_v2::IntentLibV2;
 use crate::solidity_structs::{
     self, ReceiverUserAddressData, ReceiverVaultData, SolidityOrder, SolutionTypeCrossChainData,
+    SolutionTypeLocalSwapData,
 };
 use crate::structs::ResultCosts;
 use crate::utils::{get_token_decimals, get_usd_value_of_token};
@@ -50,16 +51,33 @@ pub async fn handle_order_created_event(
     let solution_type = order_struct.solution.enumVariant as i32;
     let receiver_type: i32 = order_struct.receiver.enumVariant as i32;
 
-    let solution_type_cross_chain_variant = if order_struct.solution.enumVariant as i32 == 2 {
-        // cross chain transaction
-        match SolutionTypeCrossChainData::abi_decode(&order_struct.solution.data, true) {
-            Ok(cross_chain_solution) => {
-                Some(cross_chain_solution.liquidityNetwork.enumVariant as i32)
+    let provider_for_solution_type_variant = match order_struct.solution.enumVariant as i32 {
+        1 => {
+            // local swap
+            match SolutionTypeLocalSwapData::abi_decode(&order_struct.solution.data, true) {
+                Ok(same_chain_solution) => Some(same_chain_solution.aggregator.enumVariant as i32),
+                Err(e) => {
+                    error!("Error in decoding aggregator for local swap {:?}", e);
+                    None
+                }
             }
-            Err(e) => None,
         }
-    } else {
-        None
+        2 => {
+            // cross chain transaction
+            match SolutionTypeCrossChainData::abi_decode(&order_struct.solution.data, true) {
+                Ok(cross_chain_solution) => {
+                    Some(cross_chain_solution.liquidityNetwork.enumVariant as i32)
+                }
+                Err(e) => {
+                    error!(
+                        "Error in decoding liquidity network provider for cross chain swap {:?}",
+                        e
+                    );
+                    None
+                }
+            }
+        }
+        _ => None,
     };
 
     let receiver_data = order_struct.receiver.data;
@@ -117,7 +135,7 @@ pub async fn handle_order_created_event(
                 &receiver_address,
                 &amount_in_usd,
                 &amount_out_usd,
-                &solution_type_cross_chain_variant,
+                &provider_for_solution_type_variant,
             ],
         )
         .await
