@@ -75,9 +75,9 @@ pub async fn handle_uniswap_swap_event(
     let launchpad_token: String = pool_row.get("launchpad_token");
 
     let base_token = if launchpad_token.to_lowercase() == token0_address.to_lowercase() {
-        token0_address.clone()
-    } else {
         token1_address.clone()
+    } else {
+        token0_address.clone()
     };
 
     // Determine token flow based on amount signs
