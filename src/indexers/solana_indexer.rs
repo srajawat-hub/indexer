@@ -1497,9 +1497,9 @@ impl SolanaIndexer {
                 let reserve_token_mint =
                     pool_state.get_reserve_token_mint(&token_mint_0, &token_mint_1);
                 let launchpad_token = if pool_state.reserve_token_mint_index == 0 {
-                    &token_mint_0
-                } else {
                     &token_mint_1
+                } else {
+                    &token_mint_0
                 };
                 let reserve_token_supply =
                     self.rpc_client.get_token_supply(reserve_token_mint).await?;
