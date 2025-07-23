@@ -192,8 +192,20 @@ pub async fn get_token_decimals(token_address: &str, chain_id: &str) -> f64 {
         info!(target: "get_token_decimals", "Fetching decimals for token address: {}", token_address);
         let formatted_token_address = hex_to_base58(token_address);
         info!(target: "get_token_decimals", "Formatted token address: {}", formatted_token_address);
-        let mint_pubkey = formatted_token_address.parse::<Pubkey>().unwrap();
-        let account_data = solana_client.get_account_data(&mint_pubkey).await.unwrap();
+        let mint_pubkey = match formatted_token_address.parse::<Pubkey>() {
+            Ok(pubkey) => pubkey,
+            Err(e) => {
+                error!(target: "get_token_decimals", "Error parsing token address {}: {:?}", token_address, e);
+                return 9.0; // Default to 9 if parsing fails
+            }
+        };
+        let account_data = match solana_client.get_account_data(&mint_pubkey).await {
+            Ok(data) => data,
+            Err(e) => {
+                error!(target: "get_token_decimals", "Error fetching account data for token {}: {:?}", token_address, e);
+                return 9.0; // Default to 9 if fetching fails
+            }
+        };
         let mint = match Mint::unpack(&account_data) {
             Ok(mint) => mint,
             Err(e) => {
