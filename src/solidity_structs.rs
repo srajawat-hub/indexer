@@ -335,6 +335,13 @@ sol! {
         bytes32 receiver;
     }
 
+    #[derive(Debug)]
+    struct AcknowledgementMetadataTransactFailed {
+        bytes32 tokenAddress;
+        // amount of tokens that were credited during the swap
+        uint256 amountCredited;
+    }
+
     // create one for launchpad swap
     #[derive(Debug)]
     struct AcknowledgementMetadataLaunchpadSwap {
