@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     openssl \
     pkg-config \
     libssl-dev \
+    libpq-dev \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
