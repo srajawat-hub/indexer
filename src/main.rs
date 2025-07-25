@@ -198,14 +198,18 @@ async fn main() {
         let client_clone = Arc::clone(&db_client);
         let mut shutdown_rx = shutdown_tx.subscribe();
         let handle = tokio::spawn(async move {
-            tokio::select! {
-                _ = async {
-                    if let Err(err) = indexer.listen_for_events(client_clone).await {
-                        error!("Error listening to events: {}", err);
+            loop {
+                tokio::select! {
+                    _ = async {
+                        if let Err(err) = indexer.listen_for_events(client_clone.clone()).await {
+                            error!("Error listening to events: {}", err);
+                            sleep(Duration::from_secs(5)); // Retry after 5 seconds
+                        }
+                    } => {},
+                    _ = shutdown_rx.recv() => {
+                        info!("Indexer received shutdown signal.");
+                        break;
                     }
-                } => {},
-                _ = shutdown_rx.recv() => {
-                    info!("Indexer received shutdown signal.");
                 }
             }
         });

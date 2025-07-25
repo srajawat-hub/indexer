@@ -128,10 +128,14 @@ impl BlockchainIndexer for EvmIndexer {
         let provider: RootProvider<Http<reqwest::Client>> =
             ProviderBuilder::new().on_http(http_rpc_url);
 
-        let latest_block_number = provider.get_block_number().await? as i64;
-        info!("Latest block number: {}", latest_block_number);
-
         let chain_id = provider.get_chain_id().await? as i64;
+        let log_target = format!("evm_indexer:{}", chain_id);
+
+        info!(target: &log_target, "Connecting to EVM provider at {}", self.http_rpc_url);
+
+        let latest_block_number = provider.get_block_number().await? as i64;
+        info!(target: &log_target, "Latest block number: {}", latest_block_number);
+
         let mut create_new_pool_check_task = false;
         let l3_chain_id = std::env::var("L3_CHAIN_ID")
             .expect("L3_CHAIN_ID environment variable not set")
@@ -149,7 +153,7 @@ impl BlockchainIndexer for EvmIndexer {
             start_block_number + BACKFILL_BATCH_SIZE as i64 - 1,
             latest_block_number,
         );
-        info!(
+        info!(target: &log_target,
             "Starting event listener from block {} to block {}",
             start_block_number, end_block_number
         );
@@ -184,21 +188,21 @@ impl BlockchainIndexer for EvmIndexer {
             sleep(Duration::from_secs(1)).await;
             if start_block_number > end_block_number {
                 // If we reached the end block, wait for new blocks
-                info!("Waiting for new blocks on chain id {}...", chain_id);
+                info!(target: &log_target, "Waiting for new blocks on chain id {}...", chain_id);
                 sleep(Duration::from_secs(5)).await;
                 let latest_block_number = provider.get_block_number().await? as i64;
                 end_block_number = std::cmp::min(
                     start_block_number + BACKFILL_BATCH_SIZE as i64 - 1,
                     latest_block_number,
                 );
-                info!(
+                info!(target: &log_target,
                     "Resuming event listener for chain_id {} from block {} to block {}",
                     chain_id, start_block_number, end_block_number
                 );
                 continue;
             }
 
-            info!(
+            info!(target: &log_target,
                 "Subscribing to {} contracts total for chain_id {}",
                 contract_addrs.len(),
                 chain_id
@@ -216,7 +220,7 @@ impl BlockchainIndexer for EvmIndexer {
             let logs_stream = stream::iter(logs.clone());
 
             let task_id = tokio::task::id();
-            info!("Starting event processor {task_id}");
+            info!(target: &log_target, "Starting event processor {task_id}");
 
             let solana_chain_id = self.solana_chain_id.to_string();
             event_processor::process_evm_events(
@@ -227,7 +231,7 @@ impl BlockchainIndexer for EvmIndexer {
                 &solana_chain_id,
             )
             .await;
-            info!(
+            info!(target: &log_target,
                 "Event processing completed for chain-id {} for block range {}-{}",
                 chain_id, start_block_number, end_block_number
             );
@@ -235,7 +239,7 @@ impl BlockchainIndexer for EvmIndexer {
             // Update the last recorded block number in the database
             self.update_last_recorded_block_number(&client_clone, chain_id, end_block_number)
                 .await?;
-            info!(
+            info!(target: &log_target,
                 "Updated last recorded block number to {} for chain_id {}",
                 end_block_number, chain_id
             );
@@ -249,7 +253,7 @@ impl BlockchainIndexer for EvmIndexer {
                             let new_pool_count: i64 = row.get("pool_count");
                             if new_pool_count as usize + initial_contracts_num != current_pool_count
                             {
-                                info!(
+                                info!(target: &log_target,
                                     "Detected new pools! Current count: {}, Previous count: {}",
                                     new_pool_count,
                                     current_pool_count - initial_contracts_num
@@ -258,7 +262,7 @@ impl BlockchainIndexer for EvmIndexer {
                                     .load_pool_addresses(&client, chain_id)
                                     .await
                                     .unwrap_or_else(|e| {
-                                        error!("Failed to load pool addresses: {e}");
+                                        error!(target: &log_target, "Failed to load pool addresses: {e}");
                                         Vec::new()
                                     });
 
@@ -271,7 +275,7 @@ impl BlockchainIndexer for EvmIndexer {
                                 }
                                 initial_contracts_num = contract_addrs.len();
                                 contract_addrs.extend(pool_addresses);
-                                info!(
+                                info!(target: &log_target,
                                     "Updated contract addresses to monitor: {:?}",
                                     contract_addrs
                                 );
@@ -286,7 +290,7 @@ impl BlockchainIndexer for EvmIndexer {
                             }
                         }
                         Err(e) => {
-                            error!(
+                            error!(target: &log_target,
                                 "Failed to check for new pools for chain id {}: {:?}",
                                 chain_id, e
                             );
@@ -300,7 +304,7 @@ impl BlockchainIndexer for EvmIndexer {
                     }
                 } else {
                     // No logs found, continue to the next batch
-                    info!(
+                    info!(target: &log_target,
                         "No logs found chain-id {} for block range {} to {}, continuing to next batch",
                         chain_id, start_block_number, end_block_number
                     );
@@ -312,7 +316,7 @@ impl BlockchainIndexer for EvmIndexer {
                 }
             } else {
                 // No new pools to check, continue with the next batch
-                info!(
+                info!(target: &log_target,
                     "No new pools to check for chain-id {} for block range {} to {}, continuing to next batch",
                     chain_id, start_block_number, end_block_number
                 );
