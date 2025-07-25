@@ -13,42 +13,7 @@ CREATE TABLE public.hook_executor_orders (
     "timestamp" timestamp without time zone NOT NULL,
     status integer DEFAULT 0 NOT NULL,
     destination_chain_id bigint NOT NULL,
-    additional_data text
+    additional_data text,
+    CONSTRAINT hook_executor_orders_pkey PRIMARY KEY (id),
+    CONSTRAINT hook_executor_orders_order_hash_key UNIQUE (order_hash)
 );
-
---
--- Name: hook_executor_orders hook_executor_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.hook_executor_orders
-    ADD CONSTRAINT hook_executor_orders_pkey PRIMARY KEY (id);
-
---
--- Name: hook_executor_orders hook_executor_orders_order_hash_address_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.hook_executor_orders
-    ADD CONSTRAINT hook_executor_orders_order_hash_key UNIQUE (order_hash);
-
---
--- Name: hook_executor_orders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.hook_executor_orders_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
---
--- Name: hook_executor_orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.hook_executor_orders_id_seq OWNED BY public.hook_executor_orders.id;
-
---
--- Name: hook_executor_orders id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.hook_executor_orders ALTER COLUMN id SET DEFAULT nextval('public.hook_executor_orders_id_seq'::regclass);

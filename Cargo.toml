@@ -31,6 +31,8 @@ borsh_0_10 = { version = "0.10.4", package = "borsh", default-features = false }
 reqwest = "0.12.12"
 postgres-openssl = "0.5"
 openssl = { version = "0.10", features = ["vendored"] }
-diesel = { version = "2.2.0", features = ["postgres"] }
+diesel = { version = "2.2.0", features = ["postgres", "chrono"] }
 anyhow = "1.0.95"
 rust_decimal = { version = "1.37.1", features = ["db-postgres"] }
+wormhole-raw-vaas = { git = "https://github.com/wormhole-foundation/wormhole-sdk-rs.git", rev = "6a8c070" }
+sha2 = "0.10"

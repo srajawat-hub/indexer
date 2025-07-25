@@ -118,6 +118,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    intent_quotes (id) {
+        id -> Int8,
+        intent_id -> Int8,
+        quotes -> Jsonb,
+        timestamp -> Timestamp,
+    }
+}
+
+diesel::table! {
     intent_state (id) {
         id -> Int8,
         intent_id -> Int8,
@@ -150,9 +159,24 @@ diesel::table! {
         timestamp -> Timestamp,
         transaction_hash -> Text,
         is_manager -> Bool,
-        liquidity -> Int8,
+        #[sql_name = "liquidity"]
+        liquidity_amount -> Int8,
         is_vault -> Bool,
         token_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    mayan_vaas (id) {
+        id -> Int8,
+        sequence -> Int8,
+        order_hash -> Text,
+        vaa_action -> Int2,
+        timestamp -> Timestamp,
+        vaa_data -> Nullable<Text>,
+        chain_id -> Int2,
+        solana_order_hash -> Nullable<Text>,
+        created_at -> Timestamp,
     }
 }
 
@@ -216,6 +240,7 @@ diesel::table! {
         receiver_address -> Nullable<Text>,
         amount_in_usd -> Nullable<Text>,
         amount_out_usd -> Nullable<Text>,
+        liquidity_network -> Nullable<Int4>,
     }
 }
 
@@ -323,8 +348,10 @@ diesel::allow_tables_to_appear_in_same_query!(
     hook_executor_orders,
     intent,
     intent_fees,
+    intent_quotes,
     intent_state,
     liquidity,
+    mayan_vaas,
     message_dispatched_from_vault,
     ohlc_price_tables,
     order_created,

@@ -1,4 +1,5 @@
 use crate::utils::deserialize_number;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio_postgres::types::{IsNull, ToSql, Type};
@@ -220,4 +221,47 @@ pub struct SwaggerHistoricalPriceData {
 pub struct SwaggerHistoricalPriceRes {
     pub success: bool,
     pub data: SwaggerHistoricalPriceData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WormholeExplorerResponse {
+    pub data: Vec<WormholeVaaData>,
+    pub pagination: WormholePagination,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WormholeVaaData {
+    pub sequence: u64,
+    pub id: String,
+    pub version: u8,
+    #[serde(rename = "emitterChain")]
+    pub emitter_chain: u16,
+    #[serde(rename = "emitterAddr")]
+    pub emitter_addr: String,
+    #[serde(rename = "emitterNativeAddr")]
+    pub emitter_native_addr: Option<String>,
+    #[serde(rename = "guardianSetIndex")]
+    pub guardian_set_index: u32,
+    pub vaa: String, // base64 encoded VAA
+    pub timestamp: DateTime<Utc>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
+    #[serde(rename = "indexedAt")]
+    pub indexed_at: DateTime<Utc>,
+    #[serde(rename = "txHash")]
+    pub tx_hash: Option<String>,
+    pub digest: Option<String>,
+    #[serde(rename = "isDuplicated")]
+    pub is_duplicated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WormholePagination {
+    pub next: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WormholeSingleVaaResponse {
+    pub data: WormholeVaaData,
+    pub pagination: WormholePagination,
 }

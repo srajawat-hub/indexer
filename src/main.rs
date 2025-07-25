@@ -5,9 +5,12 @@ mod constants;
 mod enums;
 mod events;
 mod indexers;
+mod mayan;
+pub mod schema;
 pub mod solidity_structs;
 mod structs;
 mod utils;
+mod vaa_processor;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use anchor_lang::pubkey;
@@ -228,6 +231,11 @@ async fn main() {
         fetch_solana_debridge_orders(db_client.clone(), &solana_config.clone()).await
     });
     handles.push(handle);
+
+    let vaa_db_client = Arc::clone(&db_client_clone);
+    let vaa_handle =
+        tokio::spawn(async move { vaa_processor::start_vaa_processor(vaa_db_client).await });
+    handles.push(vaa_handle);
 
     info!("All tasks started. Press Ctrl+C to exit.");
     info!("total threads {:?}", handles.len());
