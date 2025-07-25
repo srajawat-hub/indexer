@@ -49,7 +49,7 @@ pub async fn handle_acknowledgement_received_event(
     let ack_metadata: String = metadata.to_string();
 
     // fetching intent id
-    let intent_id_query = "SELECT intent_id, token_out, destination_chain_id, timestamp FROM order_created WHERE order_id = $1";
+    let intent_id_query = "SELECT intent_id, token_out, source_chain_id, destination_chain_id, timestamp FROM order_created WHERE order_id = $1";
     let intent_id_response = match client.query_one(intent_id_query, &[&order_id]).await {
         Ok(row) => row,
         Err(e) => {
@@ -63,6 +63,7 @@ pub async fn handle_acknowledgement_received_event(
     };
     let intent_id: i64 = intent_id_response.get("intent_id");
     let token_out: String = intent_id_response.get("token_out");
+    let source_chain_id: String = intent_id_response.get("source_chain_id");
     let destination_chain_id: String = intent_id_response.get("destination_chain_id");
     let order_timestamp: SystemTime = intent_id_response.get("timestamp");
     let _time = order_timestamp
@@ -208,6 +209,11 @@ pub async fn handle_acknowledgement_received_event(
             / 10.0_f64.powf(token_out_decimals))
             * token_out_usd_price)
             .to_string();
+
+        if source_chain_id != destination_chain_id && metadata_variant == 0 {
+            // Not for cross-chain intents — skip update
+            return Ok(());
+        }
 
         let order_rows_updated = client
             .execute(
