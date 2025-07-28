@@ -15,7 +15,7 @@ use alloy::{
     transports::http::Http,
 };
 use anyhow::bail;
-use log::{error, info};
+use log::{error, info, warn};
 use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -116,117 +116,123 @@ pub async fn handle_acknowledgement_received_event(
     )
     .await;
 
-    let decoded_ack_metadata =
-        SolidityAcknowledgementMetadata::abi_decode(metadata.as_ref(), true).unwrap();
+    info!("ack metadata to decode: {:?}", metadata);
+    match SolidityAcknowledgementMetadata::abi_decode(metadata.as_ref(), true) {
+        Ok(decoded_ack_metadata) => {
+            if decoded_ack_metadata.data.len() > 0 {
+                let metadata_variant = decoded_ack_metadata.enumVariant as u8;
 
-    if decoded_ack_metadata.data.len() > 0 {
-        let metadata_variant = decoded_ack_metadata.enumVariant as u8;
+                let actual_amount: String = if metadata_variant == 1 {
+                    // stake
+                    AcknowledgementMetadataStake::abi_decode(
+                        decoded_ack_metadata.data.as_ref(),
+                        true
+                    )
+                        .map(|data| data.amountCredited.to_string())
+                        .map_err(|e| {
+                            error!(target: log_target, "Failed to decode AcknowledgementMetadataStake: {:?}", e);
+                            e
+                        })
+                        .unwrap_or_else(|_| "0".to_string())
+                } else if metadata_variant == 2 {
+                    AcknowledgementMetadataLaunchpadSwap::abi_decode(
+                        decoded_ack_metadata.data.as_ref(),
+                        true,
+                    )
+                    .map(|data| data.receivedAmount.to_string())
+                    .map_err(|e| {
+                        error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadSwap: {:?}", e);
+                        e
+                    })
+                    .unwrap_or_else(|_| "0".to_string())
+                } else if metadata_variant == 3 {
+                    AcknowledgementMetadataLaunchpadAddLiquidity::abi_decode(
+                        decoded_ack_metadata.data.as_ref(),
+                        true,
+                    )
+                    .map(|data| data.amount1.to_string())
+                    .map_err(|e| {
+                        error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadAddLiquidity: {:?}", e);
+                        e
+                    })
+                    .unwrap_or_else(|_| "0".to_string())
+                } else if metadata_variant == 4 {
+                    AcknowledgementMetadataLaunchpadRemoveLiquidity::abi_decode(
+                        decoded_ack_metadata.data.as_ref(),
+                        true,
+                    )
+                    .map(|data| data.amount1.to_string())
+                    .map_err(|e| {
+                        error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadRemoveLiquidity: {:?}", e);
+                        e
+                    })
+                    .unwrap_or_else(|_| "0".to_string())
+                } else {
+                    // transact
+                    if !result {
+                        AcknowledgementMetadataTransactFailed::abi_decode(
+                            &decoded_ack_metadata.data,
+                            true,
+                        )
+                        .map(|data| data.amountCredited.to_string())
+                        .map_err(|e| {
+                            error!(target: log_target, "Failed to decode AcknowledgementMetadataTransactFailed: {:?}", e);
+                            e
+                        })
+                        .unwrap_or_else(|_| "0".to_string())
+                    } else {
+                        AcknowledgementMetadataTransact::abi_decode(
+                            decoded_ack_metadata.data.as_ref(),
+                            true,
+                        )
+                        .map(|data| data.amount.to_string())
+                        .map_err(|e| {
+                            error!(target: log_target, "Failed to decode AcknowledgementMetadataTransact: {:?}", e);
+                            e
+                        })
+                        .unwrap_or_else(|_| "0".to_string())
+                    }
+                };
 
-        let actual_amount: String = if metadata_variant == 1 {
-            // stake
-            AcknowledgementMetadataStake::abi_decode(
-                decoded_ack_metadata.data.as_ref(),
-                true
-            )
-                .map(|data| data.amountCredited.to_string())
-                .map_err(|e| {
-                    error!(target: log_target, "Failed to decode AcknowledgementMetadataStake: {:?}", e);
-                    e
-                })
-                .unwrap_or_else(|_| "0".to_string())
-        } else if metadata_variant == 2 {
-            AcknowledgementMetadataLaunchpadSwap::abi_decode(
-                decoded_ack_metadata.data.as_ref(),
-                true,
-            )
-            .map(|data| data.receivedAmount.to_string())
-            .map_err(|e| {
-                error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadSwap: {:?}", e);
-                e
-            })
-            .unwrap_or_else(|_| "0".to_string())
-        } else if metadata_variant == 3 {
-            AcknowledgementMetadataLaunchpadAddLiquidity::abi_decode(
-                decoded_ack_metadata.data.as_ref(),
-                true,
-            )
-            .map(|data| data.amount1.to_string())
-            .map_err(|e| {
-                error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadAddLiquidity: {:?}", e);
-                e
-            })
-            .unwrap_or_else(|_| "0".to_string())
-        } else if metadata_variant == 4 {
-            AcknowledgementMetadataLaunchpadRemoveLiquidity::abi_decode(
-                decoded_ack_metadata.data.as_ref(),
-                true,
-            )
-            .map(|data| data.amount1.to_string())
-            .map_err(|e| {
-                error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadRemoveLiquidity: {:?}", e);
-                e
-            })
-            .unwrap_or_else(|_| "0".to_string())
-        } else {
-            // transact
-            if !result {
-                AcknowledgementMetadataTransactFailed::abi_decode(
-                    &decoded_ack_metadata.data,
-                    true,
-                )
-                .map(|data| data.amountCredited.to_string())
-                .map_err(|e| {
-                    error!(target: log_target, "Failed to decode AcknowledgementMetadataTransactFailed: {:?}", e);
-                    e
-                })
-                .unwrap_or_else(|_| "0".to_string())
-            } else {
-                AcknowledgementMetadataTransact::abi_decode(
-                    decoded_ack_metadata.data.as_ref(),
-                    true,
-                )
-                .map(|data| data.amount.to_string())
-                .map_err(|e| {
-                    error!(target: log_target, "Failed to decode AcknowledgementMetadataTransact: {:?}", e);
-                    e
-                })
-                .unwrap_or_else(|_| "0".to_string())
+                let update_order_query = "
+                    UPDATE order_created
+                    SET amount_out = $1, amount_out_usd = $2
+                    WHERE order_id = $3
+                    AND (SELECT COUNT(*) FROM order_created WHERE order_id = $3) = 1
+                    ";
+
+                // update amount_out_usd here as well in order_created
+                let token_out_usd_price =
+                    get_usd_value_of_token(Some(&token_out), &destination_chain_id, None).await;
+                let token_out_decimals =
+                    get_token_decimals(&token_out, &destination_chain_id).await;
+                let amount_out_usd = ((actual_amount.parse::<f64>().unwrap_or(0.0)
+                    / 10.0_f64.powf(token_out_decimals))
+                    * token_out_usd_price)
+                    .to_string();
+
+                if source_chain_id != destination_chain_id && metadata_variant == 0 {
+                    // Not for cross-chain intents — skip update
+                    return Ok(());
+                }
+
+                let order_rows_updated = client
+                    .execute(
+                        update_order_query,
+                        &[&actual_amount, &amount_out_usd, &order_id],
+                    )
+                    .await
+                    .unwrap_or(0);
+                info!(target: log_target,
+                    "updated actual amount for order, updated rows count {:?}",
+                    order_rows_updated
+                );
             }
-        };
-
-        let update_order_query = "
-            UPDATE order_created
-            SET amount_out = $1, amount_out_usd = $2
-            WHERE order_id = $3
-            AND (SELECT COUNT(*) FROM order_created WHERE order_id = $3) = 1
-            ";
-
-        // update amount_out_usd here as well in order_created
-        let token_out_usd_price =
-            get_usd_value_of_token(Some(&token_out), &destination_chain_id, None).await;
-        let token_out_decimals = get_token_decimals(&token_out, &destination_chain_id).await;
-        let amount_out_usd = ((actual_amount.parse::<f64>().unwrap_or(0.0)
-            / 10.0_f64.powf(token_out_decimals))
-            * token_out_usd_price)
-            .to_string();
-
-        if source_chain_id != destination_chain_id && metadata_variant == 0 {
-            // Not for cross-chain intents — skip update
-            return Ok(());
         }
-
-        let order_rows_updated = client
-            .execute(
-                update_order_query,
-                &[&actual_amount, &amount_out_usd, &order_id],
-            )
-            .await
-            .unwrap();
-        info!(target: log_target,
-            "updated actual amount for order, updated rows count {:?}",
-            order_rows_updated
-        );
-    }
+        Err(e) => {
+            error!(target: log_target, "Failed to decode SolidityAcknowledgementMetadata: {:?}", e);
+        }
+    };
 
     Ok(())
 }
