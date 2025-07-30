@@ -7,6 +7,7 @@ use alloy::{
 };
 use chrono::DateTime;
 use log::{error, info};
+use reqwest::Url;
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{bs58, program_pack::Pack, pubkey::Pubkey};
@@ -74,6 +75,7 @@ pub fn get_rpc_url(chain_id: &str) -> String {
         "8453" => String::from("https://light-quaint-sound.base-mainnet.quiknode.pro/1be86f76089a93cdec8402a55cf83d30d1091cef"),
         "137" => String::from("https://prettiest-few-pine.matic.quiknode.pro/cb499925dd6d5b0649febdd489afce406924d074"),
         SOLANA_CHAIN_ID => String::from("https://mainnet.helius-rpc.com/?api-key=d4d3c545-bd81-405c-9e51-3f600e9c25ad"),
+        "999" => String::from("https://multi-greatest-owl.hype-mainnet.quiknode.pro/f0a77e61ddfaa5dbc039a82858c0713195479580/evm"),
         &_ => String::new()
     }
 }
@@ -216,9 +218,22 @@ pub async fn get_token_decimals(token_address: &str, chain_id: &str) -> f64 {
         let decimals = mint.decimals;
         decimals as f64
     } else {
-        let provider = ProviderBuilder::new().on_http(rpc_url.parse().unwrap());
+        let url = match rpc_url.parse::<Url>() {
+            Ok(url) => url,
+            Err(e) => {
+                error!(target: "get_token_decimals", "Error parsing RPC URL {}: {:?}", rpc_url, e);
+                return 18.0; // Default to 18 if parsing fails
+            }
+        };
+        let provider = ProviderBuilder::new().on_http(url);
         let formatted_address = bytes32_to_address_str(token_address);
-        let token = Address::from_str(&formatted_address).unwrap();
+        let token = match Address::from_str(&formatted_address) {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!(target: "get_token_decimals", "Error parsing token address {}: {:?}", token_address, e);
+                return 18.0; // Default to 18 if parsing fails
+            }
+        };
         let erc20 = token::Token::new(token, provider);
 
         // Call the decimals function
