@@ -36,3 +36,4 @@ anyhow = "1.0.95"
 rust_decimal = { version = "1.37.1", features = ["db-postgres"] }
 wormhole-raw-vaas = { git = "https://github.com/wormhole-foundation/wormhole-sdk-rs.git", rev = "6a8c070" }
 sha2 = "0.10"
+derive_more = { version = "2.0.1",features = ["as_ref", "deref"] }

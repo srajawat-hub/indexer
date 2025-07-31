@@ -32,6 +32,7 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine as Base64Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Local;
+use derive_more::{AsRef, Deref};
 use log::{debug, error, info, warn, LevelFilter};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
@@ -1140,6 +1141,7 @@ impl SolanaIndexer {
                     );
                     log::info!(target: "solana_indexer", "IntentLib::DepositedFunds inserted response {:?}", response);
                 }
+                VaultsEvent::MessageProcessed(_ev) => (), // the event is parsed separately and used in RaydiumEvent struture
                 _ => unimplemented!(),
             }
         }
@@ -1502,7 +1504,7 @@ impl SolanaIndexer {
                     liquidity,
                     tick,
                     via_vault,
-                } = event;
+                } = event.inner;
                 info!(target: "solana_indexer", "RaydiumEvent::SwapEvent received from {sender:?} on {pool_state_pk}");
                 let pool_address = pool_state_pk.to_string();
                 let transaction_hash = sigs[index].signature.clone();
@@ -1512,6 +1514,18 @@ impl SolanaIndexer {
                 let liquidity_i64 = liquidity as i64;
                 let initiator_user_address = sender.to_string();
                 let chain_id_i64 = self.chain_id;
+
+                let initiator_user_address = match event.extra {
+                    Some(msg) => {
+                        format!("0x{}", hex::encode(&msg.initiator))
+                    }
+                    None => {
+                        warn!(
+                            "Order initiator wasn't found, using the default one: {initiator_user_address}"
+                        );
+                        initiator_user_address
+                    }
+                };
 
                 // Query pool to get token addresses
                 let pool_query =
@@ -1742,7 +1756,7 @@ impl SolanaIndexer {
                     amount_1,
                     amount_0_transfer_fee,
                     amount_1_transfer_fee,
-                } = event;
+                } = event.inner;
 
                 info!(target: "solana_indexer", "RaydiumEvent::IncreaseLiquidityEvent for position {position_nft_mint}");
 
@@ -1750,6 +1764,18 @@ impl SolanaIndexer {
                 let (is_vault, is_manager, pool_address, user_address) = self
                     .get_position_flags(&database_client, &position_nft_str)
                     .await?;
+
+                let user_address = match event.extra {
+                    Some(msg) => {
+                        format!("0x{}", hex::encode(&msg.initiator))
+                    }
+                    None => {
+                        warn!(
+                            "Order initiator wasn't found, using the default one: {user_address}"
+                        );
+                        user_address
+                    }
+                };
 
                 let transaction_hash = sigs[index].signature.clone();
                 let position_id = position_nft_mint.to_string();
@@ -1787,7 +1813,7 @@ impl SolanaIndexer {
                     reward_amounts: _,
                     transfer_fee_0,
                     transfer_fee_1,
-                } = event;
+                } = event.inner;
 
                 info!(target: "solana_indexer", "RaydiumEvent::DecreaseLiquidityEvent for position {position_nft_mint}");
 
@@ -1795,6 +1821,18 @@ impl SolanaIndexer {
                 let (is_vault, is_manager, pool_address, user_address) = self
                     .get_position_flags(&database_client, &position_nft_str)
                     .await?;
+
+                let user_address = match event.extra {
+                    Some(msg) => {
+                        format!("0x{}", hex::encode(&msg.initiator))
+                    }
+                    None => {
+                        warn!(
+                            "Order initiator wasn't found, using the default one: {user_address}"
+                        );
+                        user_address
+                    }
+                };
 
                 let transaction_hash = sigs[index].signature.clone();
                 let position_id = position_nft_mint.to_string();
@@ -2049,20 +2087,25 @@ impl SolanaIndexer {
                     let discriminator = decoded_event;
                     let result = match discriminator.as_ref() {
                         IncreaseLiquidityEvent::DISCRIMINATOR => {
-                            <IncreaseLiquidityEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                            let ev = <IncreaseLiquidityEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
                                 &data,
-                            )
-                            .map(RaydiumEvent::IncreaseLiquidityEvent)
+                            )?;
+                            let ev_extra = EventWithExtra::new(ev, None);
+                            Ok(RaydiumEvent::IncreaseLiquidityEvent(ev_extra))
                         }
                         DecreaseLiquidityEvent::DISCRIMINATOR => {
-                            <DecreaseLiquidityEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                            let ev = <DecreaseLiquidityEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
                                 &data,
-                            )
-                            .map(RaydiumEvent::DecreaseLiquidityEvent)
+                            )?;
+                            let ev_extra = EventWithExtra::new(ev, None);
+                            Ok(RaydiumEvent::DecreaseLiquidityEvent(ev_extra))
                         }
                         SwapEvent::DISCRIMINATOR => {
-                            <SwapEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
-                                .map(RaydiumEvent::SwapEvent)
+                            let ev = <SwapEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                                &data,
+                            )?;
+                            let ev_extra = EventWithExtra::new(ev, None);
+                            Ok(RaydiumEvent::SwapEvent(ev_extra))
                         }
                         ConfigChangeEvent::DISCRIMINATOR => {
                             <ConfigChangeEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
@@ -2158,11 +2201,29 @@ impl SolanaIndexer {
                     if let Some(top) = &current_program {
                         if top.to_string() == id_str {
                             let evs = get_events_from_logs(&event_logs);
+                            let maybe_msg_processed = evs.iter().find_map(|x| {
+                                if let VaultsEvent::MessageProcessed(msg) = x {
+                                    Some(msg.clone())
+                                } else {
+                                    None
+                                }
+                            });
                             if !evs.is_empty() {
                                 events.push(Events::Vaults(evs));
                             }
-                            let evs = self.parse_raydium_events(&event_logs).await?;
+                            let mut evs = self.parse_raydium_events(&event_logs).await?;
                             if !evs.is_empty() {
+                                if let Some(msg) = maybe_msg_processed {
+                                    evs.iter_mut().for_each(|ev| match ev {
+                                        RaydiumEvent::DecreaseLiquidityEvent(ev) => {
+                                            ev.extra = Some(msg.clone());
+                                        }
+                                        RaydiumEvent::IncreaseLiquidityEvent(ev) => {
+                                            ev.extra = Some(msg.clone());
+                                        }
+                                        _ => (),
+                                    });
+                                }
                                 events.push(Events::Raydium(evs));
                             }
                             let evs = self.parse_hook_executor_events(&event_logs).await?;
@@ -2273,17 +2334,45 @@ pub fn get_events_from_logs(logs: &[&str]) -> Vec<VaultsEvent> {
     events
 }
 
+#[derive(Clone, Debug, AsRef, Deref)]
+pub struct EventWithExtra<T, E> {
+    #[as_ref]
+    #[deref]
+    inner: T,
+    extra: E,
+}
+
+impl<T, E> EventWithExtra<T, E> {
+    pub fn new(inner: T, extra: E) -> Self {
+        Self { inner, extra }
+    }
+}
+
+type IncreaseLiquidityEventExtra =
+    EventWithExtra<IncreaseLiquidityEvent, Option<MessageProcessedEvent>>;
+type DecreaseLiquidityEventExtra =
+    EventWithExtra<DecreaseLiquidityEvent, Option<MessageProcessedEvent>>;
+type SwapEventExtra = EventWithExtra<SwapEvent, Option<MessageProcessedEvent>>;
+
 /// A unified enum of all Raydium events we care about.
 #[derive(Clone, Debug)]
 pub enum RaydiumEvent {
-    IncreaseLiquidityEvent(IncreaseLiquidityEvent),
-    DecreaseLiquidityEvent(DecreaseLiquidityEvent),
+    IncreaseLiquidityEvent(IncreaseLiquidityEventExtra),
+    DecreaseLiquidityEvent(DecreaseLiquidityEventExtra),
     CollectPersonalFeeEvent(CollectPersonalFeeEvent),
     CollectProtocolFeeEvent(CollectProtocolFeeEvent),
     PoolCreatedEvent(PoolCreatedEventWithState),
     ConfigChangeEvent(ConfigChangeEvent),
-    SwapEvent(SwapEvent),
+    SwapEvent(SwapEventExtra),
     CreatePersonalPositionEvent(CreatePersonalPositionEvent),
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(crate = "::borsh")]
+pub struct MessageProcessedEvent {
+    pub order_id: u64,
+    pub intent_id: u64,
+    pub initiator: Vec<u8>,
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
@@ -2293,6 +2382,7 @@ pub enum VaultsEvent {
     DepositContractCreated(DepositContractCreatedEvent),
     MessageDispatchedFromVault(MessageDispatchedFromVaultEvent),
     ReceivedMessageOnVault(ReceivedMessageOnVaultEvent),
+    MessageProcessed(MessageProcessedEvent),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -2653,7 +2743,7 @@ mod tests {
             transfer_fee_0: 0,
             transfer_fee_1: 0,
         };
-        assert_eq!(deposit_event, expected_event);
+        assert_eq!(deposit_event.inner, expected_event);
     }
 
     #[tokio::test]
@@ -2732,6 +2822,6 @@ mod tests {
         //     tick: -160934,
         //     via_vault: true,
         // };
-        // assert_eq!(swap_event, expected_event);
+        // assert_eq!(*swap_event, expected_event);
     }
 }
