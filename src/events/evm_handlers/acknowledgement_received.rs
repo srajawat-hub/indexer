@@ -211,11 +211,6 @@ pub async fn handle_acknowledgement_received_event(
                     * token_out_usd_price)
                     .to_string();
 
-                if source_chain_id != destination_chain_id && metadata_variant == 0 {
-                    // Not for cross-chain intents — skip update
-                    return Ok(());
-                }
-
                 let order_rows_updated = client
                     .execute(
                         update_order_query,
