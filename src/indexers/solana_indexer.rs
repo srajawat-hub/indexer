@@ -666,11 +666,11 @@ impl SolanaIndexer {
 
         for (batch_idx, chunk) in body.chunks(BATCH_SIZE).enumerate() {
             let batch_num = batch_idx + 1;
-            info!(
-                "batch: {}, {}",
-                rpc_client.url(),
-                serde_json::to_string_pretty(&chunk).unwrap()
-            );
+            // info!(
+            //     "batch: {}, {}",
+            //     rpc_client.url(),
+            //     serde_json::to_string_pretty(&chunk).unwrap()
+            // );
             info!(
                 "[{}] Processing batch {}/{} ({} transactions)",
                 program_name,
@@ -2764,7 +2764,7 @@ mod tests {
         );
         let rpc_client = RpcClient::new(url);
         let tx_hash = Signature::from_str(
-            "2hmATgWjvC9LFgnNNbw6quYCzvN5mfQTPFPoyGGyUnwp3MsM1FQNEqzqsjaXVTMVoXP8tvf2Mv59DwaAWiRe9BnT",
+            "5wqXEcoHEneKzAEnNYBYSmhWzK1dVJVgovjNknHkECZFTH1hHda1wLTdNmiApF5rc6GL6NuskunBab6sZ2qws4KQ",
         )
             .unwrap();
         let logs = rpc_client
@@ -2795,6 +2795,7 @@ mod tests {
             )
             .await
             .unwrap();
+        println!("{}", events.len());
         println!("{:?}", events);
         // let events = match events.pop().unwrap() {
         //     Events::Raydium(events) => events,
