@@ -59,7 +59,7 @@ pub async fn handle_hook_executor_hyp_msg_received(
             query,
             &[
                 &(order_data.protocolId as i32),
-                &format!("{:?}", order_data.orderHash.to_string()),
+                &order_data.orderHash.to_string(),
                 &(order_data.orderId as i64),
                 &order_data.recipient.to_string(),
                 &order_data.token.to_string(),
