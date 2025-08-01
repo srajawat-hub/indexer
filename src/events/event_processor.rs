@@ -23,6 +23,7 @@ use crate::enums::OrderStatus;
 use crate::events::evm_handlers::acknowledgement_received::handle_acknowledgement_received_event;
 use crate::events::evm_handlers::debridge_order_created::handle_debridge_order_created_event;
 use crate::events::evm_handlers::deposit_received::handle_deposit_received_event;
+use crate::events::evm_handlers::hook_executor_hyperlane_message_received::handle_hook_executor_hyp_msg_received;
 use crate::events::evm_handlers::hook_executor_order_failed::handle_hook_executor_order_failed_event;
 use crate::events::evm_handlers::hook_executor_order_pending::handle_hook_executor_order_pending_event;
 use crate::events::evm_handlers::hook_executor_order_timedout::handle_hook_executor_order_timeout_event;
@@ -432,6 +433,9 @@ async fn try_parse_evm_event(
         Some(&HookExecutor::OrderTimedOut::SIGNATURE_HASH) => {
             handle_hook_executor_order_timeout_event(log, &client, chain_id, chain_provider)
                 .await?;
+        }
+        Some(&HookExecutor::HyperlaneMessageReceived::SIGNATURE_HASH) => {
+            handle_hook_executor_hyp_msg_received(log, &client, chain_id, chain_provider).await?;
         }
         _ => {
             warn!("\ndidn't match any event, {:?}", log);

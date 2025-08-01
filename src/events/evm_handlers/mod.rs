@@ -1,6 +1,7 @@
 pub mod acknowledgement_received;
 pub mod debridge_order_created;
 pub mod deposit_received;
+pub mod hook_executor_hyperlane_message_received;
 pub mod hook_executor_order_failed;
 pub mod hook_executor_order_pending;
 pub mod hook_executor_order_timedout;

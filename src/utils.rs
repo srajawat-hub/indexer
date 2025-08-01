@@ -1,8 +1,10 @@
 use std::{str::FromStr, time::SystemTime};
 
 use alloy::{
+    eips::BlockNumberOrTag,
     primitives::{Address, B256},
-    providers::{ProviderBuilder, RootProvider},
+    providers::{Provider, ProviderBuilder, RootProvider},
+    rpc::types::BlockTransactionsKind,
     transports::http::Http,
 };
 use chrono::DateTime;
@@ -305,6 +307,33 @@ fn hex_to_base58(hex: &str) -> String {
         hex.to_string()
     };
     res
+}
+
+pub async fn get_evm_block_timestamp(
+    chain_provider: &RootProvider<Http<reqwest::Client>>,
+    block_number: u64,
+) -> u64 {
+    let log_target = "get_evm_block_timestamp";
+    let block_timestamp_of_trade = match chain_provider
+        .get_block_by_number(
+            BlockNumberOrTag::Number(block_number as u64),
+            BlockTransactionsKind::Hashes,
+        )
+        .await
+    {
+        Ok(block_res) => match block_res {
+            Some(block) => block.header.timestamp,
+            None => {
+                error!(target: log_target, "Block timestamp not found for block number {}", block_number);
+                0_u64 // Fallback to 0 if block not found
+            }
+        },
+        Err(e) => {
+            error!(target: log_target, "Failed to fetch block by number {}: {:?}", block_number, e);
+            0_u64 // Fallback to 0 if fetching block fails
+        }
+    };
+    block_timestamp_of_trade
 }
 
 /// Displays the error if present, waits for few seconds and
