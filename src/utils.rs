@@ -163,11 +163,17 @@ async fn fetch_usd_value_at_timestamp(
         Ok(price_data) => {
             let price_result = match price_data.json::<SwaggerHistoricalPriceRes>().await {
                 Ok(price_data) => price_data.data.price.parse::<f64>().unwrap_or(0.0),
-                Err(_e) => 0.0,
+                Err(_e) => {
+                    error!("Error parsing price data for usd price {:?}", _e);
+                    0.0
+                }
             };
             price_result
         }
-        Err(_e) => 0.0,
+        Err(_e) => {
+            error!("Error in sending request to fetch usd price {:?}", _e);
+            0.0
+        }
     };
     price_response
 }
@@ -353,4 +359,32 @@ macro_rules! skip_fail {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn init_env() {
+        let _ = dotenv::dotenv();
+    }
+
+    fn init_logger() {
+        let _ = env_logger::builder()
+            .is_test(true) // ensures logs show up in tests
+            .filter_level(log::LevelFilter::Info) // sets minimum level to info
+            .try_init();
+    }
+
+    #[tokio::test]
+    async fn test_get_usd_value_of_token() {
+        init_env();
+        init_logger();
+        let token_address = "0x4200000000000000000000000000000000000006";
+        let chain_id = "8453";
+        let timestamp = Some(1753962749);
+        let usd_value = get_usd_value_of_token(Some(token_address), chain_id, timestamp).await;
+        println!("usd value {:?}", usd_value);
+        assert!(usd_value > 0.0);
+    }
 }

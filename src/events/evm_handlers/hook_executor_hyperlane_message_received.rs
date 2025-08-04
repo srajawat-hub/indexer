@@ -53,7 +53,6 @@ pub async fn handle_hook_executor_hyp_msg_received(
     "#;
 
     let reason = format!("Hyperlane message received from origin {}", origin);
-
     match client
         .execute(
             query,
