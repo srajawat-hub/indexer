@@ -8,7 +8,7 @@ use alloy::{
     transports::http::Http,
 };
 use chrono::DateTime;
-use log::{error, info};
+use log::{error, info, warn};
 use reqwest::Url;
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -164,15 +164,31 @@ async fn fetch_usd_value_at_timestamp(
             let price_result = match price_data.json::<SwaggerHistoricalPriceRes>().await {
                 Ok(price_data) => price_data.data.price.parse::<f64>().unwrap_or(0.0),
                 Err(_e) => {
-                    error!("Error parsing price data for usd price {:?}", _e);
-                    0.0
+                    error!(
+                        "Error parsing price data for usd price with valid block timestamp {:?}",
+                        _e
+                    );
+                    warn!(
+                        "Falling back to real-time price fetch for token id: {}",
+                        token_id
+                    );
+                    let price_data = fetch_usd_value(caishen_swagger_api_url, token_id).await;
+                    price_data
                 }
             };
             price_result
         }
         Err(_e) => {
-            error!("Error in sending request to fetch usd price {:?}", _e);
-            0.0
+            error!(
+                "Error in sending request to fetch usd price with valid block timestamp {:?}",
+                _e
+            );
+            warn!(
+                "Falling back to real-time price fetch for token id: {}",
+                token_id
+            );
+            let price_data = fetch_usd_value(caishen_swagger_api_url, token_id).await;
+            price_data
         }
     };
     price_response

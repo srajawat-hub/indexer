@@ -297,4 +297,41 @@ mod tests {
         // assert!(amount_out_usd > 0.0);
         // assert!(normalized_price > 0.0);
     }
+
+    #[tokio::test]
+    async fn test_get_usd_value_of_token_at_timestamp_fallback() {
+        init_env();
+        init_logger();
+        let base_token = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+        let token_in = "0x2017624785ff7889118336F927B86878A7c59B73";
+        let token_out = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+        let amount_in = "7532800008145831435294";
+        let amount_out = "2204914";
+        let chain_id = "8453";
+
+        // future timestamp
+        let block_timestamp_of_trade = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 1000000; // 1 million seconds in the future
+        let (amount_in_usd, amount_out_usd, normalized_price) =
+            get_usd_value_of_token_at_timestamp(
+                &base_token,
+                &token_in,
+                &token_out,
+                &amount_in,
+                &amount_out,
+                &chain_id,
+                block_timestamp_of_trade,
+            )
+            .await;
+
+        println!("amount_in_usd: {}", amount_in_usd);
+        println!("amount_out_usd: {}", amount_out_usd);
+        println!("normalized_price: {:?}", normalized_price);
+        // assert!(amount_in_usd > 0.0);
+        // assert!(amount_out_usd > 0.0);
+        // assert!(normalized_price > 0.0);
+    }
 }
