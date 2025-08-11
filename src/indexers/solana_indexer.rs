@@ -1716,18 +1716,30 @@ impl SolanaIndexer {
                     deposit_amount_1_transfer_fee,
                     is_deposited_by_project,
                     is_deposited_by_vault,
-                } = event;
+                } = event.inner;
 
                 info!(target: "solana_indexer", "RaydiumEvent::CreatePersonalPositionEvent from {minter:?} for {nft_owner:?} on {pool_state}");
 
                 let pool_address = pool_state.to_string();
-                let user_address = nft_owner.to_string();
                 let transaction_hash = sigs[index].signature.clone();
 
                 let temp_position_id = nft_mint.to_string();
                 let amount_token0 = deposit_amount_0 as i64;
                 let amount_token1 = deposit_amount_1 as i64;
                 let liquidity_amount = liquidity as i64;
+
+                let user_address = match event.extra {
+                    Some(msg) => {
+                        format!("0x{}", hex::encode(&msg.initiator))
+                    }
+                    None => {
+                        let default_user_address = format!("0x{}", hex::encode(&nft_owner));
+                        warn!(
+                            "Order initiator wasn't found, using the default one: {default_user_address}"
+                        );
+                        default_user_address
+                    }
+                };
 
                 self.insert_liquidity_event(
                     &database_client,
@@ -2101,28 +2113,37 @@ impl SolanaIndexer {
                             Ok(RaydiumEvent::DecreaseLiquidityEvent(ev_extra))
                         }
                         SwapEvent::DISCRIMINATOR => {
-                            let ev = <SwapEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
-                                &data,
-                            )?;
+                            let ev =
+                                <SwapEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)?;
                             let ev_extra = EventWithExtra::new(ev, None);
                             Ok(RaydiumEvent::SwapEvent(ev_extra))
                         }
                         ConfigChangeEvent::DISCRIMINATOR => {
-                            <ConfigChangeEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
-                                .map(RaydiumEvent::ConfigChangeEvent)
+                            <ConfigChangeEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                                &data,
+                            )
+                            .map(RaydiumEvent::ConfigChangeEvent)
                         }
                         CreatePersonalPositionEvent::DISCRIMINATOR => {
-                            <CreatePersonalPositionEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)
-                                .map(RaydiumEvent::CreatePersonalPositionEvent)
+                            let ev = <CreatePersonalPositionEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                                &data,
+                            )?;
+                            let ev_extra = EventWithExtra::new(ev, None);
+                            Ok(RaydiumEvent::CreatePersonalPositionEvent(ev_extra))
                         }
                         PoolCreatedEvent::DISCRIMINATOR => {
-                            let event = <PoolCreatedEvent as borsh_0_10::BorshDeserialize>::try_from_slice(&data)?;
-                            let pool_state = PoolState::try_deserialize(&mut &self.rpc_client.get_account_data(&event.pool_state).await?[..])?;
+                            let event =
+                                <PoolCreatedEvent as borsh_0_10::BorshDeserialize>::try_from_slice(
+                                    &data,
+                                )?;
+                            let pool_state = PoolState::try_deserialize(
+                                &mut &self.rpc_client.get_account_data(&event.pool_state).await?[..],
+                            )?;
                             let amm_config = self.get_amm_config(None).await?;
                             Ok(RaydiumEvent::PoolCreatedEvent(PoolCreatedEventWithState {
                                 inner: event,
                                 pool_state,
-                                amm_config
+                                amm_config,
                             }))
                         }
                         d => {
@@ -2219,6 +2240,9 @@ impl SolanaIndexer {
                                             ev.extra = Some(msg.clone());
                                         }
                                         RaydiumEvent::IncreaseLiquidityEvent(ev) => {
+                                            ev.extra = Some(msg.clone());
+                                        }
+                                        RaydiumEvent::CreatePersonalPositionEvent(ev) => {
                                             ev.extra = Some(msg.clone());
                                         }
                                         _ => (),
@@ -2353,6 +2377,8 @@ type IncreaseLiquidityEventExtra =
 type DecreaseLiquidityEventExtra =
     EventWithExtra<DecreaseLiquidityEvent, Option<MessageProcessedEvent>>;
 type SwapEventExtra = EventWithExtra<SwapEvent, Option<MessageProcessedEvent>>;
+type CreatePersonalPositionEventExtra =
+    EventWithExtra<CreatePersonalPositionEvent, Option<MessageProcessedEvent>>;
 
 /// A unified enum of all Raydium events we care about.
 #[derive(Clone, Debug)]
@@ -2364,7 +2390,7 @@ pub enum RaydiumEvent {
     PoolCreatedEvent(PoolCreatedEventWithState),
     ConfigChangeEvent(ConfigChangeEvent),
     SwapEvent(SwapEventExtra),
-    CreatePersonalPositionEvent(CreatePersonalPositionEvent),
+    CreatePersonalPositionEvent(CreatePersonalPositionEventExtra),
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
@@ -2764,7 +2790,7 @@ mod tests {
         );
         let rpc_client = RpcClient::new(url);
         let tx_hash = Signature::from_str(
-            "5wqXEcoHEneKzAEnNYBYSmhWzK1dVJVgovjNknHkECZFTH1hHda1wLTdNmiApF5rc6GL6NuskunBab6sZ2qws4KQ",
+            "4APrVfvRg8Kn2wzc1iuv91RyFoMAtPoS3TdiM7pNV1JKApBvVh61iHBGhvGubaYPJ8vkUUipgDk14YyyaavLAm2f",
         )
             .unwrap();
         let logs = rpc_client
