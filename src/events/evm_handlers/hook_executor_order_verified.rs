@@ -20,8 +20,8 @@ pub async fn handle_hook_executor_order_verified_event(
         fulfiller,
     } = log.log_decode()?.inner.data;
 
-    let log_target = "HookExecutor_OrderVerified";
-    info!(target: log_target, "HookExecutor::OrderVerified orderHash={orderHash:?}");
+    let log_target = format!("{}: HookExecutor_OrderVerified", chain_id);
+    info!(target: &log_target, "HookExecutor::OrderVerified orderHash={orderHash:?}");
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let timestamp_value = if log.block_timestamp.is_some() {
@@ -56,13 +56,13 @@ pub async fn handle_hook_executor_order_verified_event(
     {
         Ok(rows) => {
             if rows > 0 {
-                info!(target: log_target, "OrderVerified updated: {:?} rows", rows);
+                info!(target: &log_target, "OrderVerified updated: {:?} rows", rows);
             } else {
-                info!(target: log_target, "OrderVerified received before OrderPending - no action taken");
+                info!(target: &log_target, "OrderVerified received before OrderPending - no action taken");
             }
         }
         Err(e) => {
-            error!(target: log_target, "Failed to update OrderVerified: {:?}", e);
+            error!(target: &log_target, "Failed to update OrderVerified: {:?}", e);
             bail!("Failed to update OrderVerified: {:?}", e);
         }
     }

@@ -7,14 +7,15 @@ use crate::solidity_structs;
 
 pub async fn handle_debridge_order_created_event(
     log: Log,
+    chain_id: i64,
     client: &Arc<Client>,
 ) -> anyhow::Result<()> {
-    let log_target = "EVM DebridgeOrderCreated";
+    let log_target = format!("{}: EVM DebridgeOrderCreated", chain_id);
     let solidity_structs::DebridgeOrderCreated {
         orderId,
         debridgeOrderId,
     } = log.log_decode().unwrap().inner.data;
-    info!(target: log_target, "solidity_structs::DebridgeOrderCreated from {orderId} with debridgeOrderId {debridgeOrderId}");
+    info!(target: &log_target, "solidity_structs::DebridgeOrderCreated from {orderId} with debridgeOrderId {debridgeOrderId}");
 
     let order_id = orderId as i64;
 
@@ -25,7 +26,7 @@ pub async fn handle_debridge_order_created_event(
         .execute(query, &[&debridge_order_id, &order_id])
         .await
         .unwrap();
-    info!(target: log_target,
+    info!(target: &log_target,
         "solidity_structs::DebridgeOrderCreated updated response {:?}",
         response
     );

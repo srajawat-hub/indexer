@@ -17,6 +17,7 @@ use crate::{
 pub async fn handle_deposit_received_event(
     log: Log,
     client: &Arc<Client>,
+    chain_id: i64,
     chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
     let IntentProcessorV2::DepositReceived {
@@ -26,8 +27,8 @@ pub async fn handle_deposit_received_event(
         amount,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "DepositReceived";
-    info!(target: log_target, "IntentProcessorV2::DepositReceived from user {userAddress}");
+    let log_target = format!("{}: DepositReceived", chain_id);
+    info!(target: &log_target, "IntentProcessorV2::DepositReceived from user {userAddress}");
     let chain_id = chainId.to_string();
     let amount = amount.to_string();
     let user_address = userAddress.to_string();
@@ -87,10 +88,10 @@ pub async fn handle_deposit_received_event(
                 .await
             {
                 Ok(_row) => {
-                    info!(target: log_target, "Successfully updated deposit status with message_id {:?}", message_id);
+                    info!(target: &log_target, "Successfully updated deposit status with message_id {:?}", message_id);
                 }
                 Err(_e) => {
-                    error!(target: log_target, "Error updating deposit status with message_id {:?} with error {:?}", message_id, _e);
+                    error!(target: &log_target, "Error updating deposit status with message_id {:?} with error {:?}", message_id, _e);
                 }
             };
         }
@@ -114,7 +115,7 @@ pub async fn handle_deposit_received_event(
                 .await
                 .unwrap();
             info!(
-                target: log_target, "IntentProcessorV2::DepositReceived inserted a fallback response {:?}",
+                target: &log_target, "IntentProcessorV2::DepositReceived inserted a fallback response {:?}",
                 response
             );
         }

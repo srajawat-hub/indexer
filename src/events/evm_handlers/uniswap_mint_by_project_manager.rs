@@ -32,8 +32,8 @@ pub async fn handle_uniswap_mint_by_pm_event(
         amount1,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "MintByProjectManager";
-    info!(target: log_target, "UniswapV3PoolLib::MintByProjectManager by {sender} for owner {owner}");
+    let log_target = format!("{}: MintByProjectManager", chain_id);
+    info!(target: &log_target, "UniswapV3PoolLib::MintByProjectManager by {sender} for owner {owner}");
 
     let pool_address = log.address().to_string();
     let user_address = owner.to_string();
@@ -44,7 +44,7 @@ pub async fn handle_uniswap_mint_by_pm_event(
     let timestamp = match log.block_timestamp {
         Some(ts) => unix_to_system_time(ts),
         None => {
-            error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+            error!(target: &log_target, "Block timestamp is missing for log: {:?}", log);
             SystemTime::now() // Fallback to current time if timestamp is missing
         }
     };
@@ -66,9 +66,9 @@ pub async fn handle_uniswap_mint_by_pm_event(
     if let Some(pm_address) = liquidity_decoded_user_data.liquidity_user_address {
         project_manager_address = pm_address;
     } else {
-        warn!(target: log_target, "Failed to get project manager address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+        warn!(target: &log_target, "Failed to get project manager address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
         project_manager_address =
-            fallback_fetch_pm_address(&client, &pool_address, log_target).await;
+            fallback_fetch_pm_address(&client, &pool_address, &log_target).await;
     };
 
     let token_id = liquidity_decoded_user_data.liquidity_token_id;
@@ -96,7 +96,7 @@ pub async fn handle_uniswap_mint_by_pm_event(
         timestamp,
         chain_id,
         Some(false), // is_vault = false
-        log_target,
+        &log_target,
         token_id,
     )
     .await?;

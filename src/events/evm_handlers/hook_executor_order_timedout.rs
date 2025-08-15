@@ -18,8 +18,8 @@ pub async fn handle_hook_executor_order_timeout_event(
         orderHash, orderId, ..
     } = log.log_decode()?.inner.data;
 
-    let log_target = "HookExecutor_OrderTimedOut";
-    info!(target: log_target, "HookExecutor::OrderTimedOut orderId={orderId}, orderHash={orderHash:?}");
+    let log_target = format!("{}: HookExecutor_OrderTimedOut", chain_id);
+    info!(target: &log_target, "HookExecutor::OrderTimedOut orderId={orderId}, orderHash={orderHash:?}");
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let timestamp_value = if log.block_timestamp.is_some() {
@@ -53,13 +53,13 @@ pub async fn handle_hook_executor_order_timeout_event(
     {
         Ok(rows) => {
             if rows > 0 {
-                info!(target: log_target, "OrderTimedOut updated: {:?} rows", rows);
+                info!(target: &log_target, "OrderTimedOut updated: {:?} rows", rows);
             } else {
-                info!(target: log_target, "OrderTimedOut received before OrderPending - no action taken");
+                info!(target: &log_target, "OrderTimedOut received before OrderPending - no action taken");
             }
         }
         Err(e) => {
-            error!(target: log_target, "Failed to update OrderTimedOut: {:?}", e);
+            error!(target: &log_target, "Failed to update OrderTimedOut: {:?}", e);
             bail!("Failed to update OrderTimedOut: {:?}", e);
         }
     }

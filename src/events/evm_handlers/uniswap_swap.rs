@@ -36,8 +36,8 @@ pub async fn handle_uniswap_swap_event(
         tick,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "Swap";
-    info!(target: log_target, "UniswapV3PoolLib::Swap from {sender} to {recipient}");
+    let log_target = format!("{}: Swap", chain_id);
+    info!(target: &log_target, "UniswapV3PoolLib::Swap from {sender} to {recipient}");
 
     let pool_address = log.address().to_string();
     let raw_transaction_hash = log.transaction_hash.unwrap();
@@ -59,7 +59,7 @@ pub async fn handle_uniswap_swap_event(
     let sender_address = match initiator_address {
         Some(sender) => sender,
         None => {
-            error!(target: log_target, "Failed to fetch initiator user address for transaction hash {}", transaction_hash);
+            error!(target: &log_target, "Failed to fetch initiator user address for transaction hash {}", transaction_hash);
             initiator_user_address.clone() // Fallback to sender address if query fails
         }
     };
@@ -106,7 +106,7 @@ pub async fn handle_uniswap_swap_event(
     let timestamp = if block_timestamp_of_trade != 0 {
         unix_to_system_time(block_timestamp_of_trade)
     } else {
-        error!(target: log_target, "Block timestamp is 0 for block number {}", block_number);
+        error!(target: &log_target, "Block timestamp is 0 for block number {}", block_number);
         SystemTime::now() // Fallback to current time if timestamp is 0
     };
 
@@ -163,7 +163,7 @@ pub async fn handle_uniswap_swap_event(
         )
         .await
         .context("Failed to insert swap data")?;
-    info!(target: log_target, "UniswapV3PoolLib::Swap inserted: {:?} rows", rows);
+    info!(target: &log_target, "UniswapV3PoolLib::Swap inserted: {:?} rows", rows);
 
     Ok(())
 }
@@ -180,7 +180,7 @@ async fn get_usd_value_of_token_at_timestamp(
     let mut amount_in_usd_value: f64 = 0.0;
     let mut amount_out_usd_value: f64 = 0.0;
     let mut normalized_price: f64 = 0.0;
-    let log_target = "get_usd_value_of_token_at_timestamp";
+    let log_target = format!("{chain_id}: get_usd_value_of_token_at_timestamp");
 
     info!("Block timestamp of the trade {block_timestamp_of_trade}");
     let base_token_usd_price = if block_timestamp_of_trade != 0 {
@@ -206,8 +206,8 @@ async fn get_usd_value_of_token_at_timestamp(
     let formatted_amount_out =
         amount_out.parse::<f64>().unwrap_or(0.0) / 10_f64.powf(token_out_decimals as f64);
 
-    info!(target: log_target, "formatted_amount_in: {}", formatted_amount_in);
-    info!(target: log_target, "formatted_amount_out: {}", formatted_amount_out);
+    info!(target: &log_target, "formatted_amount_in: {}", formatted_amount_in);
+    info!(target: &log_target, "formatted_amount_out: {}", formatted_amount_out);
 
     if formatted_amount_in == 0.0 {
         warn!("Formatted amount in is 0, returning usd amounts as 0");
@@ -223,7 +223,7 @@ async fn get_usd_value_of_token_at_timestamp(
         formatted_amount_out / formatted_amount_in
     };
 
-    info!(target: log_target, "Normalized price calculated: {}", normalized_price);
+    info!(target: &log_target, "Normalized price calculated: {}", normalized_price);
 
     if token_in.to_lowercase() == base_token.to_lowercase() {
         // If token_in is the base token, calculate amount_in_usd based on base token price

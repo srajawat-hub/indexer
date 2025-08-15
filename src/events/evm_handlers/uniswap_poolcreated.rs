@@ -33,8 +33,8 @@ pub async fn handle_uniswap_pool_created_event(
         pool,
         launchParams,
     } = log.log_decode().unwrap().inner.data;
-    let log_target = "PoolCreated";
-    info!(target: log_target, "UniswapV3FactoryLib::PoolCreated: {pool}, {token0}, {token1}");
+    let log_target = format!("{}: PoolCreated", chain_id);
+    info!(target: &log_target, "UniswapV3FactoryLib::PoolCreated: {pool}, {token0}, {token1}");
 
     let timestamp = SystemTime::now();
     let block_number_i64 = log.block_number.unwrap() as i64;
@@ -47,7 +47,7 @@ pub async fn handle_uniswap_pool_created_event(
             slot
         }
         Err(e) => {
-            error!(target: log_target, "Error fetching slot0 for pool {}: {:?}", pool, e);
+            error!(target: &log_target, "Error fetching slot0 for pool {}: {:?}", pool, e);
             bail!("Error fetching slot0 for pool {}: {:?}", pool, e);
         }
     };
@@ -82,7 +82,7 @@ pub async fn handle_uniswap_pool_created_event(
         }
     };
 
-    info!(target: log_target, "UniswapV3FactoryLib::PoolCreated - pool_address: {}, chain_id: {}, token_0_address: {}, token_1_address: {}, fee: {}, tick_spacing: {}, pool_type: {:?}, project_manager: {}, block_number: {}, created_at: {:?}, metadata: {:?}, etp_start_time: {:?}, etp_end_time: {:?}, launch_type: {:?}, initial_sqrt_price: {}, initial_tick: {}, token_supply: {}",
+    info!(target: &log_target, "UniswapV3FactoryLib::PoolCreated - pool_address: {}, chain_id: {}, token_0_address: {}, token_1_address: {}, fee: {}, tick_spacing: {}, pool_type: {:?}, project_manager: {}, block_number: {}, created_at: {:?}, metadata: {:?}, etp_start_time: {:?}, etp_end_time: {:?}, launch_type: {:?}, initial_sqrt_price: {}, initial_tick: {}, token_supply: {}",
         pool_address, chain_id_i64, token0_addr, token1_addr, fee_decimal, tick_spacing_i64, pool_type, project_manager, block_number_i64, timestamp, metadata_json, etp_start_time, etp_end_time, launch_type, initial_sqrt, initial_tick_i32, token_supply_i64);
 
     // --- perform the INSERT ---
@@ -126,7 +126,7 @@ pub async fn handle_uniswap_pool_created_event(
     {
         Ok(rows) => rows,
         Err(e) => {
-            error!(target: log_target, "Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}", e);
+            error!(target: &log_target, "Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}", e);
             bail!(
                 "Error inserting UniswapV3FactoryLib::PoolCreated data: {:?}",
                 e
@@ -134,7 +134,7 @@ pub async fn handle_uniswap_pool_created_event(
         }
     };
     info!(
-        target: log_target, "UniswapV3FactoryLib::PoolCreated inserted a fallback response {:?}",
+        target: &log_target, "UniswapV3FactoryLib::PoolCreated inserted a fallback response {:?}",
         rows
     );
 
@@ -173,7 +173,7 @@ pub async fn handle_uniswap_pool_created_event(
         .await
     {
         Ok(rows) => {
-            info!(target: log_target, "Inserted token data into token_chains table: {:?}", rows);
+            info!(target: &log_target, "Inserted token data into token_chains table: {:?}", rows);
             match client
                 .execute(
                     tokens_query,
@@ -192,10 +192,10 @@ pub async fn handle_uniswap_pool_created_event(
                 .await
             {
                 Ok(rows) => {
-                    info!(target: log_target, "Inserted token data into tokens table: {:?}", rows);
+                    info!(target: &log_target, "Inserted token data into tokens table: {:?}", rows);
                 }
                 Err(e) => {
-                    error!(target: log_target, "Error inserting token chain data into token_chains table: {:?}", e);
+                    error!(target: &log_target, "Error inserting token chain data into token_chains table: {:?}", e);
                     bail!(
                         "Error inserting token chain data into token_chains table: {:?}",
                         e
@@ -204,7 +204,7 @@ pub async fn handle_uniswap_pool_created_event(
             }
         }
         Err(e) => {
-            error!(target: log_target, "Error inserting token data into tokens table: {:?}", e);
+            error!(target: &log_target, "Error inserting token data into tokens table: {:?}", e);
             bail!("Error inserting token data into tokens table: {:?}", e);
         }
     };
