@@ -27,8 +27,8 @@ pub async fn handle_hook_executor_order_pending_event(
         reason,
     } = log.log_decode()?.inner.data;
 
-    let log_target = "HookExecutor_OrderPending";
-    info!(target: log_target, "HookExecutor::OrderPending orderId={orderId}, orderHash={orderHash:?}, recipient={recipient}");
+    let log_target = format!("{}: HookExecutor_OrderPending", chain_id);
+    info!(target: &log_target, "HookExecutor::OrderPending orderId={orderId}, orderHash={orderHash:?}, recipient={recipient}");
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let block_number = log.block_number.unwrap() as i64;
@@ -85,10 +85,10 @@ pub async fn handle_hook_executor_order_pending_event(
         .await
     {
         Ok(rows) => {
-            info!(target: log_target, "OrderPending inserted/updated: {:?} rows", rows);
+            info!(target: &log_target, "OrderPending inserted/updated: {:?} rows", rows);
         }
         Err(e) => {
-            error!(target: log_target, "Failed to insert OrderPending: {:?}", e);
+            error!(target: &log_target, "Failed to insert OrderPending: {:?}", e);
             bail!("Failed to insert OrderPending: {:?}", e);
         }
     }

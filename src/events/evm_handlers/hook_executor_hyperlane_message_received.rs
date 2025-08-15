@@ -16,13 +16,13 @@ pub async fn handle_hook_executor_hyp_msg_received(
     chain_id: i64,
     chain_provider: RootProvider<Http<reqwest::Client>>,
 ) -> anyhow::Result<()> {
-    let log_target = "HookExecutor_HyperlaneMessageReceived";
-
     let HookExecutor::HyperlaneMessageReceived {
         origin,
         sender,
         messageData,
     } = log.log_decode()?.inner.data;
+
+    let log_target = format!("{}: HookExecutor_HyperlaneMessageReceived", chain_id);
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let block_number = log.block_number.unwrap();
@@ -32,10 +32,12 @@ pub async fn handle_hook_executor_hyp_msg_received(
     let order_data = match OrderProcessingData::abi_decode(&messageData, true) {
         Ok(order_data) => order_data,
         Err(e) => {
-            error!(target: log_target, "Failed to decode hookexecutor order data: {}", e);
+            error!(target: &log_target, "Failed to decode hookexecutor order data: {}", e);
             return Err(anyhow::anyhow!("Failed to decode order data: {}", e));
         }
     };
+
+    info!(target: &log_target, "Order hash received from hyperlane message {}", &order_data.orderHash.to_string());
 
     let query = r#"
         INSERT INTO hook_executor_orders
@@ -43,13 +45,7 @@ pub async fn handle_hook_executor_hyp_msg_received(
         reason, transaction_hash, block_number, timestamp, status,
         destination_chain_id, additional_data)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        ON CONFLICT (order_hash) DO UPDATE SET
-            status = EXCLUDED.status,
-            reason = EXCLUDED.reason,
-            timestamp = EXCLUDED.timestamp,
-            transaction_hash = EXCLUDED.transaction_hash,
-            destination_chain_id = EXCLUDED.destination_chain_id,
-            additional_data = EXCLUDED.additional_data
+        ON CONFLICT (order_hash) DO NOTHING
     "#;
 
     let reason = format!("Hyperlane message received from origin {}", origin);
@@ -81,10 +77,10 @@ pub async fn handle_hook_executor_hyp_msg_received(
         .await
     {
         Ok(rows) => {
-            info!(target: log_target, "HookExecutor_HyperlaneMessageReceived inserted/updated: {:?} rows", rows);
+            info!(target: &log_target, "HookExecutor_HyperlaneMessageReceived inserted/updated: {:?} rows", rows);
         }
         Err(e) => {
-            error!(target: log_target, "Failed to insert HookExecutor_HyperlaneMessageReceived: {:?}", e);
+            error!(target: &log_target, "Failed to insert HookExecutor_HyperlaneMessageReceived: {:?}", e);
             bail!(
                 "Failed to insert HookExecutor_HyperlaneMessageReceived: {:?}",
                 e

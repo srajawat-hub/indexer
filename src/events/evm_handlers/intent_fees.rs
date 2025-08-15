@@ -15,8 +15,8 @@ pub async fn handle_intent_fees_event(
         feeAmount,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "IntentFees";
-    info!(target: log_target, "IntentProcessorV2::IntentFees with intent_id {intentId} and feeAmount {feeAmount}");
+    let log_target = format!("{}: IntentFees", chain_id);
+    info!(target: &log_target, "IntentProcessorV2::IntentFees with intent_id {intentId} and feeAmount {feeAmount}");
 
     let fee_amount = feeAmount.to_string();
     let intent_id = intentId as i64;
@@ -25,11 +25,11 @@ pub async fn handle_intent_fees_event(
     let intent_rows_updated = match client.execute(query, &[&fee_amount, &intent_id]).await {
         Ok(res) => res,
         Err(e) => {
-            error!(target: log_target, "Failed to update intent feeAmount {:?}", e);
+            error!(target: &log_target, "Failed to update intent feeAmount {:?}", e);
             bail!("Failed to update intent feeAmount {:?}", e);
         }
     };
-    info!(target: log_target,
+    info!(target: &log_target,
         "updated actual amount for order, updated rows count {:?}",
         intent_rows_updated
     );

@@ -33,8 +33,8 @@ pub async fn handle_uniswap_mint_event(
         amount1,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "Mint";
-    info!(target: log_target, "UniswapV3PoolLib::Mint by {sender} for owner {owner}");
+    let log_target = format!("{}: Mint", chain_id);
+    info!(target: &log_target, "UniswapV3PoolLib::Mint by {sender} for owner {owner}");
 
     let pool_address = log.address().to_string();
     let periphery_contract_address = owner.to_string();
@@ -44,7 +44,7 @@ pub async fn handle_uniswap_mint_event(
     let timestamp = match log.block_timestamp {
         Some(ts) => unix_to_system_time(ts),
         None => {
-            error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+            error!(target: &log_target, "Block timestamp is missing for log: {:?}", log);
             SystemTime::now() // Fallback to current time if timestamp is missing
         }
     };
@@ -74,7 +74,7 @@ pub async fn handle_uniswap_mint_event(
         if let Some(user_addr) = liquidity_decoded_user_data.liquidity_user_address {
             user_address = user_addr;
         } else {
-            warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+            warn!(target: &log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
             if let Some(ref token_id_value) = token_id {
                 let query = "SELECT user_address FROM liquidity WHERE token_id = $1 AND is_add = true ORDER BY timestamp DESC LIMIT 1";
                 user_address = match client.query_one(query, &[&token_id_value]).await {
@@ -83,12 +83,12 @@ pub async fn handle_uniswap_mint_event(
                         address
                     }
                     Err(e) => {
-                        error!(target: log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
+                        error!(target: &log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
                         String::new()
                     }
                 };
             } else {
-                warn!(target: log_target, "No token_id found in liquidity decoded user data. Defaulting to empty user address.");
+                warn!(target: &log_target, "No token_id found in liquidity decoded user data. Defaulting to empty user address.");
                 user_address = String::new();
             }
         }
@@ -116,7 +116,7 @@ pub async fn handle_uniswap_mint_event(
         timestamp,
         chain_id,
         Some(is_vault_initiated),
-        log_target,
+        &log_target,
         token_id,
     )
     .await?;

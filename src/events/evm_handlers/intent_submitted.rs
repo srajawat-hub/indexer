@@ -23,8 +23,8 @@ pub async fn handle_intent_submitted_event(
         feeAmount,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "IntentSubmitted";
-    info!(target: log_target, "IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
+    let log_target = format!("{}: IntentSubmitted", chain_id);
+    info!(target: &log_target, "IntentLibV2::IntentSubmitted from {owner} with intentId {intentId}");
 
     let intent_transaction_hash = log.transaction_hash.unwrap();
     let intent_block_number = log.block_number.unwrap();
@@ -51,7 +51,7 @@ pub async fn handle_intent_submitted_event(
         )
         .await
         .unwrap();
-    info!(target: log_target,
+    info!(target: &log_target,
         "IntentLibV2::IntentSubmitted inserted response {:?}",
         response
     );

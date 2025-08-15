@@ -33,8 +33,8 @@ pub async fn handle_uniswap_burn_event(
         amount1,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "Burn";
-    info!(target: log_target, "UniswapV3PoolLib::Burn by owner {owner}");
+    let log_target = format!("{}: Burn", chain_id);
+    info!(target: &log_target, "UniswapV3PoolLib::Burn by owner {owner}");
 
     let pool_address = log.address().to_string();
     let periphery_contract_address = owner.to_string();
@@ -44,7 +44,7 @@ pub async fn handle_uniswap_burn_event(
     let timestamp = match log.block_timestamp {
         Some(ts) => unix_to_system_time(ts),
         None => {
-            error!(target: log_target, "Block timestamp is missing for log: {:?}", log);
+            error!(target: &log_target, "Block timestamp is missing for log: {:?}", log);
             SystemTime::now() // Fallback to current time if timestamp is missing
         }
     };
@@ -74,24 +74,24 @@ pub async fn handle_uniswap_burn_event(
         if let Some(user_addr) = liquidity_decoded_user_data.liquidity_user_address {
             user_address = user_addr;
         } else {
-            warn!(target: log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
+            warn!(target: &log_target, "Failed to get user address for transaction: {:?}. Reverting to fallback method", raw_transaction_hash);
             // get user address from liquidity add transaction with the same token id
             if let Some(ref token_id_value) = token_id {
-                info!(target: log_target, "Fetching user address for token_id: {}", token_id_value);
+                info!(target: &log_target, "Fetching user address for token_id: {}", token_id_value);
                 let query = "SELECT user_address FROM liquidity WHERE token_id = $1 AND is_add = true ORDER BY timestamp DESC LIMIT 1";
                 user_address = match client.query_one(query, &[&token_id_value]).await {
                     Ok(row) => {
                         let address: String = row.get("user_address");
-                        info!(target: log_target, "Found user address for token_id {}: {}", token_id_value, address);
+                        info!(target: &log_target, "Found user address for token_id {}: {}", token_id_value, address);
                         address
                     }
                     Err(e) => {
-                        error!(target: log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
+                        error!(target: &log_target, "Failed to fetch user address for token_id {}: {:?}", token_id_value, e);
                         String::new()
                     }
                 };
             } else {
-                warn!(target: log_target, "No token_id found in liquidity decoded user data. Defaulting to empty user address.");
+                warn!(target: &log_target, "No token_id found in liquidity decoded user data. Defaulting to empty user address.");
                 user_address = String::new();
             }
         }
@@ -111,7 +111,7 @@ pub async fn handle_uniswap_burn_event(
             pm_address.to_lowercase() == user_address.to_lowercase()
         }
         Err(e) => {
-            error!(target: log_target, "Failed to fetch project manager for pool {}: {:?}", pool_address, e);
+            error!(target: &log_target, "Failed to fetch project manager for pool {}: {:?}", pool_address, e);
             bail!(
                 "Failed to fetch project manager for pool {}: {:?}",
                 pool_address,
@@ -138,7 +138,7 @@ pub async fn handle_uniswap_burn_event(
         timestamp,
         chain_id,
         Some(is_vault_initiated), // is_vault = false
-        log_target,
+        &log_target,
         token_id,
     )
     .await?;

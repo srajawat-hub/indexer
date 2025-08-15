@@ -33,9 +33,10 @@ pub async fn handle_message_dispatched_from_vault_event(
         provider,
         message,
     } = log.log_decode().unwrap().inner.data;
-    debug!(target: "EVM Vault::MessageDispatchedFromVault", "\nMessageDispatchedFromVault log - {:?}", log);
+    let log_target = format!("{}: EVM Vault::MessageDispatchedFromVault", chain_id);
+    debug!(target: &log_target, "\nMessageDispatchedFromVault log - {:?}", log);
     // have to get intentId here.
-    info!(target: "EVM Vault::MessageDispatchedFromVault", "Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
+    info!(target: &log_target, "Vault::MessageDispatchedFromVault received from {sender} to destination {destinationDomain}");
 
     let decoded_message = match SolidityIntentProcessorBoundMessage::abi_decode(
         message.as_ref(),
@@ -43,7 +44,7 @@ pub async fn handle_message_dispatched_from_vault_event(
     ) {
         Ok(res) => res,
         Err(e) => {
-            error!(target: "EVM Vault::MessageDispatchedFromVault", "Failed to decode SolidityIntentProcessorBoundMessage in Vault::MessageDispatchedFromVault: {:?}", e);
+            error!(target: &log_target, "Failed to decode SolidityIntentProcessorBoundMessage in Vault::MessageDispatchedFromVault: {:?}", e);
             bail!("Failed to decode SolidityIntentProcessorBoundMessage in Vault::MessageDispatchedFromVault: {:?}", e);
         }
     };
@@ -52,7 +53,7 @@ pub async fn handle_message_dispatched_from_vault_event(
 
     match message_variant {
         2 => {
-            let log_target = "EVM Vault::MessageDispatchedFromVault Ack";
+            let log_target = format!("{}: EVM Vault::MessageDispatchedFromVault Ack", chain_id);
             // ack
             let decoded_message_data = IntentProcessorBoundMessageAcknowledgementData::abi_decode(
                 decoded_message.data.as_ref(),
@@ -61,7 +62,7 @@ pub async fn handle_message_dispatched_from_vault_event(
             let decoded_message_data = if let Ok(decoded_message_data) = decoded_message_data {
                 decoded_message_data
             } else {
-                error!(target: log_target, "Error decoding IntentProcessorBoundMessageAcknowledgement message data");
+                error!(target: &log_target, "Error decoding IntentProcessorBoundMessageAcknowledgement message data");
                 bail!("Error decoding IntentProcessorBoundMessageAcknowledgement message data");
             };
 
@@ -84,11 +85,11 @@ pub async fn handle_message_dispatched_from_vault_event(
                 Ok(row) => {
                     let intent_id: i64 = row.get("intent_id");
                     let sender_address: String = row.get("sender_address");
-                    info!(target: log_target, "Fetched intent_id {:?} for order_id {:?} from received_message_on_vault", intent_id, order_id);
+                    info!(target: &log_target, "Fetched intent_id {:?} for order_id {:?} from received_message_on_vault", intent_id, order_id);
                     (intent_id, sender_address)
                 }
                 Err(e) => {
-                    error!(target: log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, e);
+                    error!(target: &log_target, "Failed to fetch intent_id for event Vault::MessageDispatchedFromVault for order_id {:?}: {:?}", order_id, e);
                     // as a fallback try to get it from order_created table
                     let intent_id_query =
                         "SELECT intent_id, creator_address FROM order_created WHERE order_id = $1";
@@ -99,7 +100,7 @@ pub async fn handle_message_dispatched_from_vault_event(
                             (intent_id, creator_address)
                         }
                         Err(e) => {
-                            error!(target: log_target, "Failed to fetch intent_id from order_created for order_id {:?}: {:?}", order_id, e);
+                            error!(target: &log_target, "Failed to fetch intent_id from order_created for order_id {:?}: {:?}", order_id, e);
                             (0_i64, String::new()) // Fallback to 0 if not found
                         }
                     }
@@ -127,13 +128,13 @@ pub async fn handle_message_dispatched_from_vault_event(
             {
                 Ok(res) => {
                     info!(
-                        target: log_target,
+                        target: &log_target,
                         "Vault::MessageDispatchedFromVault inserted response {:?}",
                         res
                     );
                 }
                 Err(e) => {
-                    error!(target: log_target, "Failed to add data into data");
+                    error!(target: &log_target, "Failed to add data into data");
                 }
             };
 
@@ -151,7 +152,10 @@ pub async fn handle_message_dispatched_from_vault_event(
             .await;
         }
         3 => {
-            let log_target = "EVM Vault::MessageDispatchedFromVault Deposit";
+            let log_target = format!(
+                "{}: EVM Vault::MessageDispatchedFromVault Deposit",
+                chain_id
+            );
             let deposit_message_data =
                 IntentProcessorBoundMessageDepositData::abi_decode(&decoded_message.data, true)
                     .unwrap();
@@ -193,13 +197,13 @@ pub async fn handle_message_dispatched_from_vault_event(
                 Err(_e) => None,
             };
 
-            info!(target: log_target, "message_id from source {:?}", message_id);
-            info!(target: log_target, "user_address from source {:?}", user_address);
+            info!(target: &log_target, "message_id from source {:?}", message_id);
+            info!(target: &log_target, "user_address from source {:?}", user_address);
 
             let chain_id = match chain_provider.get_chain_id().await {
                 Ok(id) => id.to_string(),
                 Err(_e) => {
-                    error!(target: log_target, "Error fetching the chain id for deposit message source {:?}", _e);
+                    error!(target: &log_target, "Error fetching the chain id for deposit message source {:?}", _e);
                     String::new()
                 }
             };
@@ -226,13 +230,13 @@ pub async fn handle_message_dispatched_from_vault_event(
             {
                 Ok(res) => {
                     info!(
-                        target: log_target,
+                        target: &log_target,
                         "IntentLib::DepositedFunds inserted response {:?}",
                         res
                     );
                 }
                 Err(e) => {
-                    error!(target: log_target, "Failed to insert data for deposit with message_id: {:?}, error: {e}", &message_id);
+                    error!(target: &log_target, "Failed to insert data for deposit with message_id: {:?}, error: {e}", &message_id);
                 }
             };
         }

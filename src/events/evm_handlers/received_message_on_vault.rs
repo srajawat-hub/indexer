@@ -33,14 +33,14 @@ pub async fn handle_received_message_on_vault_event(
         provider,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "EVM Vault::ReceivedMessageOnVault";
-    info!(target: log_target, "Vault::ReceivedMessageOnVault from id {origin} by {sender}, message = {message}, using provider = {provider}");
+    let log_target = format!("{}: EVM Vault::ReceivedMessageOnVault", chain_id);
+    info!(target: &log_target, "Vault::ReceivedMessageOnVault from id {origin} by {sender}, message = {message}, using provider = {provider}");
 
     let message_slice = message.as_ref();
     let decoded_message = match SolidityVaultBoundMessage::abi_decode(message_slice, true) {
         Ok(res) => res,
         Err(e) => {
-            error!(target: log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
+            error!(target: &log_target, "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}", e);
             bail!(
                 "Failed to decode SolidityVaultBoundMessage in Vault::ReceivedMessageOnVault: {:?}",
                 e
@@ -54,7 +54,7 @@ pub async fn handle_received_message_on_vault_event(
     ) {
         Ok(data) => data,
         Err(e) => {
-            error!(target: log_target, "Failed to decode VaultBoundMessagePlaceOrderData in Vault::ReceivedMessageOnVault: {:?}", e);
+            error!(target: &log_target, "Failed to decode VaultBoundMessagePlaceOrderData in Vault::ReceivedMessageOnVault: {:?}", e);
             bail!("Failed to decode VaultBoundMessagePlaceOrderData in Vault::ReceivedMessageOnVault: {:?}", e);
         }
     };
@@ -124,13 +124,13 @@ pub async fn handle_received_message_on_vault_event(
     {
         Ok(res) => {
             info!(
-                target: log_target,
+                target: &log_target,
                 "Vault::ReceivedMessageOnVault inserted response {:?}",
                 res
             );
         }
         Err(e) => {
-            error!(target: log_target, "Failed to add data into data: {e}");
+            error!(target: &log_target, "Failed to add data into data: {e}");
         }
     };
 

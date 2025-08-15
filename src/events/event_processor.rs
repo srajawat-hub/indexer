@@ -392,7 +392,7 @@ async fn try_parse_evm_event(
             handle_acknowledgement_received_event(log, &client, chain_id, chain_provider).await?;
         }
         Some(&IntentProcessorV2::DepositReceived::SIGNATURE_HASH) => {
-            handle_deposit_received_event(log, &client, chain_provider).await?;
+            handle_deposit_received_event(log, &client, chain_id, chain_provider).await?;
         }
         Some(&Vault::ReceivedMessageOnVault::SIGNATURE_HASH) => {
             handle_received_message_on_vault_event(log, &client, chain_id, chain_provider).await?;
@@ -402,7 +402,7 @@ async fn try_parse_evm_event(
                 .await?;
         }
         Some(&solidity_structs::DebridgeOrderCreated::SIGNATURE_HASH) => {
-            handle_debridge_order_created_event(log, &client).await?;
+            handle_debridge_order_created_event(log, chain_id, &client).await?;
         }
         Some(&UniswapV3FactoryLib::PoolCreated::SIGNATURE_HASH) => {
             handle_uniswap_pool_created_event(log, &client, chain_id, chain_provider).await?;

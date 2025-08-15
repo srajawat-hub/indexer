@@ -36,8 +36,8 @@ pub async fn handle_acknowledgement_received_event(
         metadata,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "AcknowledgementReceived";
-    info!(target: log_target, "IntentProcessorV2::AcknowledgementReceived for orderId - {orderId} from {sender} with result {result}");
+    let log_target = format!("{}: AcknowledgementReceived", chain_id);
+    info!(target: &log_target, "IntentProcessorV2::AcknowledgementReceived for orderId - {orderId} from {sender} with result {result}");
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let block_number = log.block_number.unwrap() as i64;
@@ -53,7 +53,7 @@ pub async fn handle_acknowledgement_received_event(
     let intent_id_response = match client.query_one(intent_id_query, &[&order_id]).await {
         Ok(row) => row,
         Err(e) => {
-            error!(target: log_target, "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, e);
+            error!(target: &log_target, "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}", order_id, e);
             bail!(
                 "Error in IntentProcessorV2::AcknowledgementReceived for order_id {:?}: {:?}",
                 order_id,
@@ -91,7 +91,7 @@ pub async fn handle_acknowledgement_received_event(
         )
         .await
         .unwrap();
-    info!(target: log_target,
+    info!(target: &log_target,
         "IntentProcessorV2::AcknowledgementReceived inserted response {:?}",
         response
     );
@@ -130,7 +130,7 @@ pub async fn handle_acknowledgement_received_event(
                     )
                         .map(|data| data.amountCredited.to_string())
                         .map_err(|e| {
-                            error!(target: log_target, "Failed to decode AcknowledgementMetadataStake: {:?}", e);
+                            error!(target: &log_target, "Failed to decode AcknowledgementMetadataStake: {:?}", e);
                             e
                         })
                         .unwrap_or_else(|_| "0".to_string())
@@ -141,7 +141,7 @@ pub async fn handle_acknowledgement_received_event(
                     )
                     .map(|data| data.receivedAmount.to_string())
                     .map_err(|e| {
-                        error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadSwap: {:?}", e);
+                        error!(target: &log_target, "Failed to decode AcknowledgementMetadataLaunchpadSwap: {:?}", e);
                         e
                     })
                     .unwrap_or_else(|_| "0".to_string())
@@ -152,7 +152,7 @@ pub async fn handle_acknowledgement_received_event(
                     )
                     .map(|data| data.amount1.to_string())
                     .map_err(|e| {
-                        error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadAddLiquidity: {:?}", e);
+                        error!(target: &log_target, "Failed to decode AcknowledgementMetadataLaunchpadAddLiquidity: {:?}", e);
                         e
                     })
                     .unwrap_or_else(|_| "0".to_string())
@@ -163,7 +163,7 @@ pub async fn handle_acknowledgement_received_event(
                     )
                     .map(|data| data.amount1.to_string())
                     .map_err(|e| {
-                        error!(target: log_target, "Failed to decode AcknowledgementMetadataLaunchpadRemoveLiquidity: {:?}", e);
+                        error!(target: &log_target, "Failed to decode AcknowledgementMetadataLaunchpadRemoveLiquidity: {:?}", e);
                         e
                     })
                     .unwrap_or_else(|_| "0".to_string())
@@ -176,7 +176,7 @@ pub async fn handle_acknowledgement_received_event(
                         )
                         .map(|data| data.amountCredited.to_string())
                         .map_err(|e| {
-                            error!(target: log_target, "Failed to decode AcknowledgementMetadataTransactFailed: {:?}", e);
+                            error!(target: &log_target, "Failed to decode AcknowledgementMetadataTransactFailed: {:?}", e);
                             e
                         })
                         .unwrap_or_else(|_| "0".to_string())
@@ -187,7 +187,7 @@ pub async fn handle_acknowledgement_received_event(
                         )
                         .map(|data| data.amount.to_string())
                         .map_err(|e| {
-                            error!(target: log_target, "Failed to decode AcknowledgementMetadataTransact: {:?}", e);
+                            error!(target: &log_target, "Failed to decode AcknowledgementMetadataTransact: {:?}", e);
                             e
                         })
                         .unwrap_or_else(|_| "0".to_string())
@@ -218,14 +218,14 @@ pub async fn handle_acknowledgement_received_event(
                     )
                     .await
                     .unwrap_or(0);
-                info!(target: log_target,
+                info!(target: &log_target,
                     "updated actual amount for order, updated rows count {:?}",
                     order_rows_updated
                 );
             }
         }
         Err(e) => {
-            error!(target: log_target, "Failed to decode SolidityAcknowledgementMetadata: {:?}", e);
+            error!(target: &log_target, "Failed to decode SolidityAcknowledgementMetadata: {:?}", e);
         }
     };
 

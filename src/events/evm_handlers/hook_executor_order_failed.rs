@@ -21,8 +21,8 @@ pub async fn handle_hook_executor_order_failed_event(
         ..
     } = log.log_decode()?.inner.data;
 
-    let log_target = "HookExecutor_OrderFailed";
-    info!(target: log_target, "HookExecutor::OrderFailed orderId={orderId}, orderHash={orderHash:?}");
+    let log_target = format!("{}: HookExecutor_OrderFailed", chain_id);
+    info!(target: &log_target, "HookExecutor::OrderFailed orderId={orderId}, orderHash={orderHash:?}");
 
     let transaction_hash = log.transaction_hash.unwrap().to_string();
     let timestamp_value = if log.block_timestamp.is_some() {
@@ -57,13 +57,13 @@ pub async fn handle_hook_executor_order_failed_event(
     {
         Ok(rows) => {
             if rows > 0 {
-                info!(target: log_target, "OrderFailed updated: {:?} rows", rows);
+                info!(target: &log_target, "OrderFailed updated: {:?} rows", rows);
             } else {
-                warn!(target: log_target, "OrderFailed received before OrderPending - no action taken");
+                warn!(target: &log_target, "OrderFailed received before OrderPending - no action taken");
             }
         }
         Err(e) => {
-            error!(target: log_target, "Failed to update OrderFailed: {:?}", e);
+            error!(target: &log_target, "Failed to update OrderFailed: {:?}", e);
             bail!("Failed to update OrderFailed: {:?}", e);
         }
     }

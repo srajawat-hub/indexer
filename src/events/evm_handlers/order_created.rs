@@ -29,8 +29,8 @@ pub async fn handle_order_created_event(
         order,
     } = log.log_decode().unwrap().inner.data;
 
-    let log_target = "OrderCreated";
-    info!(target: log_target, "IntentLibV2::OrderCreated for {intentId}, with order Id {orderId}");
+    let log_target = format!("{}: OrderCreated", chain_id);
+    info!(target: &log_target, "IntentLibV2::OrderCreated for {intentId}, with order Id {orderId}");
 
     let order_slice = order.as_ref();
     let order_struct = SolidityOrder::abi_decode(order_slice, true).unwrap();
@@ -140,7 +140,7 @@ pub async fn handle_order_created_event(
         )
         .await
         .unwrap();
-    info!(target: log_target, "IntentLibV2::OrderCreated inserted response {:?}", response);
+    info!(target: &log_target, "IntentLibV2::OrderCreated inserted response {:?}", response);
 
     let initiator_address: String = fetch_intent_initiator(intent_id, &client).await;
 
@@ -181,7 +181,7 @@ pub async fn handle_order_created_event(
     let mut fee_data_json = match serde_json::to_value(&intent_fees) {
         Ok(value) => value,
         Err(e) => {
-            error!(target: log_target, "Error in getting fees data from quotation service: {:?}", e);
+            error!(target: &log_target, "Error in getting fees data from quotation service: {:?}", e);
             bail!("Error in getting fees data from quotation service {:?}", e);
         }
     };
@@ -206,10 +206,10 @@ pub async fn handle_order_created_event(
         .await
     {
         Ok(res) => {
-            info!(target: log_target, "intent_fee_add_res {:?}", res);
+            info!(target: &log_target, "intent_fee_add_res {:?}", res);
         }
         Err(e) => {
-            error!(target: log_target, "error in posting to intent_fees table {:?}", e);
+            error!(target: &log_target, "error in posting to intent_fees table {:?}", e);
             bail!("error in posting to intent_fees table {:?}", e);
         }
     };
