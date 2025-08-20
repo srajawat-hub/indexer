@@ -543,7 +543,8 @@ sol! {
         DLN,
         MockedLN,
         Mayan,
-        OneInch
+        OneInch,
+        Stargate
     }
 
     #[derive(Debug)]
