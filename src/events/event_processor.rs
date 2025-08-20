@@ -55,10 +55,7 @@ use crate::solidity_structs::{
 use crate::structs::{
     AmountTypes, LiquidityDecodedLogData, QuoteApiResponse, ResultCosts, ThirdPartyFeeResult,
 };
-use crate::utils::{
-    get_native_token_cmc_id, get_token_decimals, get_usd_value_of_token,
-    get_wrapped_native_token_address,
-};
+use crate::utils::{get_token_decimals, get_usd_value_of_token, get_wrapped_native_token_address};
 
 pub enum IntentVersions {
     IntentSubmitted,

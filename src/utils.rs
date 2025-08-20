@@ -48,6 +48,7 @@ pub fn chain_id_to_chain_name(chain_id: i64) -> String {
         42161 => "arbitrum".to_string(),
         8453 => "base".to_string(),
         1399811149 => "solana".to_string(),
+        3338 => "peaq".to_string(),
         _ => format!("Unknown Chain ID: {}", chain_id),
     }
 }
@@ -63,6 +64,7 @@ pub fn get_wrapped_native_token_address(chain_id: i64) -> String {
         18082 => "0x0000000000000000000000000000000000000000".to_string(), // Inclusive Layer
         999 => "0x5555555555555555555555555555555555555555".to_string(),   // Hyperevm - WHYPE
         1399811149 => "So11111111111111111111111111111111111111112".to_string(),
+        3338 => "0x3cD66d2e1fac1751B0A20BeBF6cA4c9699Bb12d7".to_string(), // PEAQ
         _ => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // Default to Ethereum WETH
     }
 }
@@ -78,17 +80,8 @@ pub fn get_rpc_url(chain_id: &str) -> String {
         "137" => String::from("https://prettiest-few-pine.matic.quiknode.pro/cb499925dd6d5b0649febdd489afce406924d074"),
         SOLANA_CHAIN_ID => String::from("https://mainnet.helius-rpc.com/?api-key=d4d3c545-bd81-405c-9e51-3f600e9c25ad"),
         "999" => String::from("https://multi-greatest-owl.hype-mainnet.quiknode.pro/f0a77e61ddfaa5dbc039a82858c0713195479580/evm"),
+        "3338" => String::from("https://wiser-maximum-pond.peaq-mainnet.quiknode.pro/b105cdb445da82ae03216f296c3dc1c0ba27eee2"),
         &_ => String::new()
-    }
-}
-
-pub fn get_native_token_cmc_id(chain_id: i64) -> (String, u32) {
-    match chain_id {
-        137 => (String::from("28321"), 18),      // pol
-        1399811149 => (String::from("5426"), 9), // sol
-        18082 => (String::from("3408"), 18),     // usdc
-        999 => (String::from("32196"), 18),      // hyperevm whype
-        _ => (String::from("1027"), 18),         // ETH
     }
 }
 

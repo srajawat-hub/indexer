@@ -15,8 +15,8 @@ use crate::{
     events::event_processor::check_vault_initiated_transaction,
     solidity_structs::uniswap_v3_pool_lib::UniswapV3PoolLib::{self},
     utils::{
-        get_evm_block_timestamp, get_native_token_cmc_id, get_token_decimals,
-        get_usd_value_of_token, get_wrapped_native_token_address, unix_to_system_time,
+        get_evm_block_timestamp, get_token_decimals, get_usd_value_of_token,
+        get_wrapped_native_token_address, unix_to_system_time,
     },
 };
 
