@@ -544,6 +544,7 @@ sol! {
         MockedLN,
         Mayan,
         OneInch,
+        Hashflow,
         Stargate
     }
 
