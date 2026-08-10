@@ -128,15 +128,18 @@ async fn main() {
     let connect_statement =
         std::env::var("DB_CONNECTION_STRING").expect("DB_CONNECTION_STRING must be set");
 
-    let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
-
-    builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
-
-    let connector = MakeTlsConnector::new(builder.build());
-
-    let (client, connection) = tokio_postgres::connect(&connect_statement, connector)
-        .await
-        .unwrap();
+    let (client, connection) = if connect_statement.contains("sslmode=disable") {
+        tokio_postgres::connect(&connect_statement, tokio_postgres::NoTls)
+            .await
+            .unwrap()
+    } else {
+        let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
+        builder.set_verify(openssl::ssl::SslVerifyMode::NONE);
+        let connector = MakeTlsConnector::new(builder.build());
+        tokio_postgres::connect(&connect_statement, connector)
+            .await
+            .unwrap()
+    };
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
