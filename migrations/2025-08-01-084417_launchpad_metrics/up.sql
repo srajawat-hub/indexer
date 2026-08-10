@@ -32,7 +32,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_increment_pool_count
 AFTER INSERT ON pools
 FOR EACH ROW
-EXECUTE FUNCTION increment_pool_count();
+EXECUTE PROCEDURE increment_pool_count();
 
 -- Step 5: Create trigger function for ammswap table
 CREATE OR REPLACE FUNCTION update_volume_and_traders()
@@ -65,4 +65,4 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_update_volume_and_traders
 AFTER INSERT ON ammswap
 FOR EACH ROW
-EXECUTE FUNCTION update_volume_and_traders();
+EXECUTE PROCEDURE update_volume_and_traders();
